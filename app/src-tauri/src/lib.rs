@@ -6,8 +6,8 @@ pub mod presentation;
 use std::sync::Arc;
 
 use application::{FakeTranslator, InteractionCoordinator};
-use core::{PopupViewModel};
-use platform::windows::{cursor_anchor, UiAutomationSelectionProvider};
+use core::PopupViewModel;
+use platform::windows::{cursor_anchor, WindowsSelectionProvider};
 use presentation::TauriPopupPort;
 use tauri::{Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -52,7 +52,7 @@ pub fn run() {
         .setup(|app| {
             let popup = Arc::new(TauriPopupPort::new(app.handle().clone()));
             let coordinator = InteractionCoordinator::start(
-                Box::new(UiAutomationSelectionProvider::new()),
+                Box::new(WindowsSelectionProvider::new()),
                 Box::new(FakeTranslator),
                 popup,
             );
