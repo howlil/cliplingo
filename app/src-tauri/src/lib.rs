@@ -4,6 +4,7 @@ pub mod platform;
 pub mod presentation;
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use application::{FakeTranslator, InteractionCoordinator};
 use core::PopupViewModel;
@@ -30,6 +31,7 @@ pub fn run() {
                     if event.state() != ShortcutState::Pressed {
                         return;
                     }
+                    let started_at = Instant::now();
                     let coordinator = app.state::<Arc<InteractionCoordinator>>();
                     if coordinator.is_visible() {
                         coordinator.dismiss();
@@ -38,11 +40,15 @@ pub fn run() {
 
                     match cursor_anchor() {
                         Ok(context) => {
-                            coordinator.trigger_at(&context.anchor, &context.work_area);
+                            coordinator.trigger_at(
+                                &context.anchor,
+                                &context.work_area,
+                                started_at,
+                            );
                         }
                         Err(error) => {
                             eprintln!("event=cursor_anchor status=error error={error:?}");
-                            coordinator.trigger();
+                            coordinator.trigger(started_at);
                         }
                     }
                 })

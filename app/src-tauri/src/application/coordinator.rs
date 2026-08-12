@@ -1,10 +1,11 @@
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
+use std::time::Instant;
 
 use crate::core::{
     place_popup, ApplyResult, CaptureError, PopupErrorCode, PopupPort, PopupSession, PopupState,
-    PopupViewModel, RequestId, ScreenRect, ScreenSize, SelectionProvider, Translation,
-    TranslationError, TranslationRequest, Translator,
+    PopupViewModel, RequestId, ScreenRect, ScreenSize, SelectionProvider, SelectionSource,
+    Translation, TranslationError, TranslationRequest, Translator,
 };
 
 const POPUP_SIZE: ScreenSize = ScreenSize {
@@ -62,6 +63,12 @@ impl<T> PendingSlot<T> {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+struct PendingInteraction {
+    request_id: RequestId,
+    started_at: Instant,
+}
+
 pub struct FakeTranslator;
 
 impl Translator for FakeTranslator {
@@ -77,7 +84,7 @@ impl Translator for FakeTranslator {
 
 pub struct InteractionCoordinator {
     session: Arc<Mutex<PopupSession>>,
-    pending: Arc<PendingSlot<RequestId>>,
+    pending: Arc<PendingSlot<PendingInteraction>>,
     popup: Arc<dyn PopupPort>,
 }
 
@@ -99,9 +106,9 @@ impl InteractionCoordinator {
         thread::Builder::new()
             .name("cliplingo-interaction".into())
             .spawn(move || loop {
-                let request_id = pending.wait_take();
+                let interaction = pending.wait_take();
                 Self::process_request(
-                    request_id,
+                    interaction,
                     provider.as_mut(),
                     translator.as_mut(),
                     session.as_ref(),
@@ -113,21 +120,33 @@ impl InteractionCoordinator {
         coordinator
     }
 
-    pub fn trigger_at(&self, anchor: &ScreenRect, work_area: &ScreenRect) -> RequestId {
-        let request_id = self.begin_and_show(Some((anchor, work_area)));
-        self.pending.submit(request_id);
+    pub fn trigger_at(
+        &self,
+        anchor: &ScreenRect,
+        work_area: &ScreenRect,
+        started_at: Instant,
+    ) -> RequestId {
+        let request_id = self.begin_and_show(Some((anchor, work_area)), started_at);
+        self.pending.submit(PendingInteraction {
+            request_id,
+            started_at,
+        });
         request_id
     }
 
-    pub fn trigger(&self) -> RequestId {
-        let request_id = self.begin_and_show(None);
-        self.pending.submit(request_id);
+    pub fn trigger(&self, started_at: Instant) -> RequestId {
+        let request_id = self.begin_and_show(None, started_at);
+        self.pending.submit(PendingInteraction {
+            request_id,
+            started_at,
+        });
         request_id
     }
 
     fn begin_and_show(
         &self,
         initial_position: Option<(&ScreenRect, &ScreenRect)>,
+        started_at: Instant,
     ) -> RequestId {
         let (request_id, model) = {
             let mut session = self
@@ -143,6 +162,10 @@ impl InteractionCoordinator {
             self.popup.move_to(position.x, position.y);
         }
         self.popup.show(model);
+        eprintln!(
+            "event=interaction_timing request_id={request_id} metric=hotkey_to_popup_show_request duration_us={}",
+            started_at.elapsed().as_micros()
+        );
         request_id
     }
 
@@ -173,15 +196,29 @@ impl InteractionCoordinator {
     }
 
     fn process_request(
-        request_id: RequestId,
+        interaction: PendingInteraction,
         provider: &mut dyn SelectionProvider,
         translator: &mut dyn Translator,
         session: &Mutex<PopupSession>,
         popup: &dyn PopupPort,
     ) {
+        let request_id = interaction.request_id;
+        let capture_started = Instant::now();
         let selection = match provider.capture() {
-            Ok(selection) => selection,
+            Ok(selection) => {
+                eprintln!(
+                    "event=interaction_timing request_id={request_id} metric=capture duration_us={} capture_source={}",
+                    capture_started.elapsed().as_micros(),
+                    selection_source_label(&selection.source)
+                );
+                selection
+            }
             Err(error) => {
+                eprintln!(
+                    "event=interaction_timing request_id={request_id} metric=capture duration_us={} status=error error_code={}",
+                    capture_started.elapsed().as_micros(),
+                    capture_error_label(&error)
+                );
                 Self::publish_error(request_id, capture_error_code(&error), session, popup);
                 return;
             }
@@ -203,9 +240,16 @@ impl InteractionCoordinator {
         };
         popup.update(state.view_model());
 
+        let translation_started = Instant::now();
         let translation = translator.translate(&TranslationRequest {
             text: selection.text,
         });
+        eprintln!(
+            "event=interaction_timing request_id={request_id} metric=fake_translation duration_us={} status={}",
+            translation_started.elapsed().as_micros(),
+            if translation.is_ok() { "ok" } else { "error" }
+        );
+
         let state = {
             let mut session = session
                 .lock()
@@ -217,6 +261,10 @@ impl InteractionCoordinator {
         };
         if let ApplyResult::Applied(state) = state {
             popup.update(state.view_model());
+            eprintln!(
+                "event=interaction_timing request_id={request_id} metric=hotkey_to_ready_request duration_us={}",
+                interaction.started_at.elapsed().as_micros()
+            );
         }
     }
 
@@ -236,6 +284,24 @@ impl InteractionCoordinator {
     }
 }
 
+fn selection_source_label(source: &SelectionSource) -> &'static str {
+    match source {
+        SelectionSource::UiAutomation => "uia",
+        SelectionSource::Clipboard => "clipboard",
+    }
+}
+
+fn capture_error_label(error: &CaptureError) -> &'static str {
+    match error {
+        CaptureError::NoSelection => "no_selection",
+        CaptureError::Unsupported => "unsupported",
+        CaptureError::ClipboardUnavailable => "clipboard_unavailable",
+        CaptureError::ClipboardPreservationUnsupported => "clipboard_preservation_unsupported",
+        CaptureError::Timeout => "timeout",
+        CaptureError::NativeFailure { .. } => "native_failure",
+    }
+}
+
 fn capture_error_code(error: &CaptureError) -> PopupErrorCode {
     match error {
         CaptureError::NoSelection => PopupErrorCode::NoSelection,
@@ -251,7 +317,7 @@ mod tests {
     use super::*;
     use crate::core::{ScreenRect, Selection, SelectionSource};
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     #[test]
     fn pending_slot_keeps_only_latest() {
@@ -323,7 +389,7 @@ mod tests {
             Box::new(FakeTranslator),
             popup,
         );
-        coordinator.trigger();
+        coordinator.trigger(Instant::now());
 
         let deadline = Instant::now() + Duration::from_secs(1);
         while coordinator.snapshot().status != "ready" && Instant::now() < deadline {
