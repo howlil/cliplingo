@@ -42,10 +42,7 @@ impl SelectionProvider for ClipboardSelectionProvider {
         drop(listener);
 
         let copied = read_unicode_clipboard();
-        let restored = restore_clipboard(snapshot);
-        if let Err(error) = restored {
-            return Err(error);
-        }
+        restore_clipboard(snapshot)?;
         let text = copied?;
         if text.trim().is_empty() {
             return Err(CaptureError::NoSelection);
