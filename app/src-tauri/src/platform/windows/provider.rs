@@ -25,10 +25,14 @@ impl Default for WindowsSelectionProvider {
 impl SelectionProvider for WindowsSelectionProvider {
     fn capture(&mut self) -> Result<Selection, CaptureError> {
         match self.uia.capture() {
-            Err(CaptureError::Unsupported) => self.clipboard.capture(),
+            Err(error) if should_fallback_to_clipboard(&error) => self.clipboard.capture(),
             result => result,
         }
     }
+}
+
+fn should_fallback_to_clipboard(error: &CaptureError) -> bool {
+    matches!(error, CaptureError::Unsupported)
 }
 
 #[cfg(test)]
@@ -37,31 +41,11 @@ mod tests {
 
     #[test]
     fn clipboard_fallback_is_limited_to_unsupported_uia_provider() {
-        assert!(matches!(
-            fallback_policy(&CaptureError::Unsupported),
-            FallbackPolicy::Clipboard
+        assert!(should_fallback_to_clipboard(&CaptureError::Unsupported));
+        assert!(!should_fallback_to_clipboard(&CaptureError::NoSelection));
+        assert!(!should_fallback_to_clipboard(&CaptureError::Timeout));
+        assert!(!should_fallback_to_clipboard(
+            &CaptureError::ClipboardUnavailable
         ));
-        assert!(matches!(
-            fallback_policy(&CaptureError::NoSelection),
-            FallbackPolicy::Stop
-        ));
-        assert!(matches!(
-            fallback_policy(&CaptureError::Timeout),
-            FallbackPolicy::Stop
-        ));
-    }
-
-    #[derive(Debug, PartialEq)]
-    enum FallbackPolicy {
-        Clipboard,
-        Stop,
-    }
-
-    fn fallback_policy(error: &CaptureError) -> FallbackPolicy {
-        if matches!(error, CaptureError::Unsupported) {
-            FallbackPolicy::Clipboard
-        } else {
-            FallbackPolicy::Stop
-        }
     }
 }
