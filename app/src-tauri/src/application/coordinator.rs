@@ -3,8 +3,8 @@ use std::thread;
 
 use crate::core::{
     place_popup, ApplyResult, CaptureError, PopupErrorCode, PopupPort, PopupSession, PopupState,
-    PopupViewModel, RequestId, ScreenSize, SelectionProvider, Translation, TranslationError,
-    TranslationRequest, Translator,
+    PopupViewModel, RequestId, ScreenRect, ScreenSize, SelectionProvider, Translation,
+    TranslationError, TranslationRequest, Translator,
 };
 
 const POPUP_SIZE: ScreenSize = ScreenSize {
@@ -30,7 +30,10 @@ impl<T> Default for PendingSlot<T> {
 
 impl<T> PendingSlot<T> {
     pub fn submit(&self, value: T) {
-        let mut slot = self.value.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut slot = self
+            .value
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         *slot = Some(value);
         self.wake.notify_one();
     }
@@ -43,7 +46,10 @@ impl<T> PendingSlot<T> {
     }
 
     fn wait_take(&self) -> T {
-        let mut slot = self.value.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut slot = self
+            .value
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         loop {
             if let Some(value) = slot.take() {
                 return value;
@@ -107,7 +113,22 @@ impl InteractionCoordinator {
         coordinator
     }
 
+    pub fn trigger_at(&self, anchor: &ScreenRect, work_area: &ScreenRect) -> RequestId {
+        let request_id = self.begin_and_show(Some((anchor, work_area)));
+        self.pending.submit(request_id);
+        request_id
+    }
+
     pub fn trigger(&self) -> RequestId {
+        let request_id = self.begin_and_show(None);
+        self.pending.submit(request_id);
+        request_id
+    }
+
+    fn begin_and_show(
+        &self,
+        initial_position: Option<(&ScreenRect, &ScreenRect)>,
+    ) -> RequestId {
         let (request_id, model) = {
             let mut session = self
                 .session
@@ -117,8 +138,11 @@ impl InteractionCoordinator {
             (request_id, session.snapshot().view_model())
         };
 
+        if let Some((anchor, work_area)) = initial_position {
+            let position = place_popup(anchor, &POPUP_SIZE, work_area, POPUP_MARGIN);
+            self.popup.move_to(position.x, position.y);
+        }
         self.popup.show(model);
-        self.pending.submit(request_id);
         request_id
     }
 
