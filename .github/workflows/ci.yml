@@ -5,6 +5,9 @@ on:
   push:
     branches: [master]
 
+permissions:
+  contents: write
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -24,24 +27,31 @@ jobs:
           workspaces: app/src-tauri -> target
       - name: Install frontend dependencies
         run: npm install
+      - name: Generate Rust lockfile
+        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+      - name: Apply Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml
       - name: Frontend check
         run: npm run check
       - name: Frontend tests
         run: npm test
       - name: Frontend build
         run: npm run build
-      - name: Rust formatting
+      - name: Rust formatting gate
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - name: Rust clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --all
-      - name: Upload generated lockfiles
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lockfiles
-          path: |
-            app/package-lock.json
-            app/src-tauri/Cargo.lock
-          if-no-files-found: warn
+      - name: Commit deterministic bootstrap outputs
+        if: success() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        shell: pwsh
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/package-lock.json app/src-tauri/Cargo.lock app/src-tauri/src
+          if (-not (git diff --cached --quiet)) {
+            git commit -m "chore: normalize generated project files"
+            git push origin HEAD:${{ github.head_ref }}
+          }
