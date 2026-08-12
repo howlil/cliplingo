@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+      - name: Install frontend dependencies
+        run: npm install
+      - name: Frontend check
+        run: npm run check
+      - name: Frontend tests
+        run: npm test
+      - name: Frontend build
+        run: npm run build
+      - name: Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - name: Rust clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --all
+      - name: Upload generated lockfiles
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lockfiles
+          path: |
+            app/package-lock.json
+            app/src-tauri/Cargo.lock
+          if-no-files-found: warn

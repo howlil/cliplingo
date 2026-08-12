@@ -1,0 +1,23 @@
+[package]
+name = "cliplingo"
+version = "0.1.0"
+description = "Windows-first offline translation utility"
+authors = ["ClipLingo contributors"]
+edition = "2021"
+rust-version = "1.82"
+
+[lib]
+name = "cliplingo_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
