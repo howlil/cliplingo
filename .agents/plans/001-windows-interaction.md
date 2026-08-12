@@ -1085,20 +1085,15 @@ Get-Process cliplingo | Select-Object ProcessName, Id, WorkingSet64, PrivateMemo
 
 Record dev build and a non-debug local build separately if dev mode materially changes memory.
 
-- [ ] **Step 6: use this evidence template**
+- [ ] **Step 6: write the evidence document with observed values only**
 
-`docs/benchmarks/iteration-001.md`:
+Create `docs/benchmarks/iteration-001.md` during execution. It must contain these sections populated directly with actual observations; do not commit placeholder values:
 
 ```markdown
 # Iteration 001 Windows Interaction Evidence
 
 ## Environment
-- Date: <actual execution date>
-- Windows version/build: <actual value>
-- CPU: <actual value>
-- RAM: <actual value>
-- Display/DPI configuration: <actual value>
-- ClipLingo commit: <actual SHA>
+Record execution date, Windows version/build, CPU, RAM, display/DPI configuration, and tested ClipLingo commit SHA as explicit bullet values.
 
 ## Compatibility
 | Application | Version | Capture path | Bounds | Placement | Result |
@@ -1113,19 +1108,17 @@ Record dev build and a non-debug local build separately if dev mode materially c
 |---|---:|---:|---|
 
 ## Known gaps
-Only observed limitations belong here.
+List only limitations actually observed in this iteration.
 ```
 
-Values inside angle brackets are instructions for the executing engineer and must be replaced with observed values before the iteration can be marked DONE.
+If an observation cannot be collected, state why it was unavailable; do not invent a value.
 
-- [ ] **Step 7: commit evidence-producing code**
+- [ ] **Step 7: commit evidence-producing code and the populated evidence**
 
 ```powershell
 git add app docs/benchmarks/iteration-001.md
 git commit -m "test: measure Windows interaction behavior"
 ```
-
-Do not mark the evidence document complete until actual measurements replace the execution markers.
 
 ---
 
@@ -1211,11 +1204,11 @@ If any exit criterion fails, status remains `IN PROGRESS` and the specific block
 - [ ] **Step 6: final commit on the same branch**
 
 ```powershell
-git add .github .agents/ITERATION_STATE.md app docs README.md
+git add .github .agents/ITERATION_STATE.md app docs
 git commit -m "test: verify Windows interaction iteration"
 ```
 
-If README is unchanged, omit it rather than touching it for noise.
+If verified README development instructions changed, include `README.md` in the same commit; otherwise leave it untouched.
 
 ---
 
