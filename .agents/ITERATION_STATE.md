@@ -15,15 +15,17 @@ Established before implementation:
 - release/version/package-channel strategy
 - role-specific engineering skills
 
-No application code exists yet; architecture/performance assumptions remain unproven until Iteration 001 produces evidence.
+Iteration 001 is now exercising these boundaries with real Windows-facing application code; performance and compatibility claims still require observed evidence.
 
 ---
 
 ## Current iteration — Iteration 001: Windows interaction
 
-**Status: PLANNED — implementation not started**
+**Status: IN PROGRESS — implementation present; final reproducible CI and interactive Windows validation pending**
 
 **Implementation plan:** `.agents/plans/001-windows-interaction.md`
+
+**Evidence record:** `docs/benchmarks/iteration-001.md`
 
 ### Goal
 
@@ -38,6 +40,21 @@ select text in another Windows application
  -> deterministic fake translation
  -> dismiss cleanly
 ```
+
+### Implemented on the current iteration branch
+
+- Tauri 2 + Svelte 5 + TypeScript + Vite desktop/popup scaffold.
+- Rust-owned popup state machine and latest-request-wins interaction coordinator.
+- One dedicated interaction thread with a one-slot pending queue; no thread per hotkey and no polling loop.
+- Pre-created hidden popup shown in `Capturing` state before selection capture finishes.
+- Global `Ctrl+Alt+T` shortcut and toggle dismissal.
+- Win32 cursor/monitor work-area positioning plus pure clamping/flipping tests.
+- Windows UI Automation focused-element `TextPattern` selection capture and selection bounds when exposed by the provider.
+- Clipboard fallback only when UIA reports an unsupported provider.
+- Conservative clipboard preservation: unsupported existing clipboard formats are refused rather than intentionally discarded.
+- Deterministic fake translation only: `[FAKE] <selected text>`.
+- Privacy-safe timing metadata for popup request, capture, fake translation, and ready-state request.
+- Windows CI for frontend checks/tests/build plus Rust formatting, Clippy, and tests.
 
 ### Why this iteration comes first
 
@@ -64,26 +81,26 @@ The real C++/CTranslate2 worker is intentionally absent.
 - Tauri 2 + Svelte 5 + TypeScript + Vite.
 - Rust owns application state/workflow.
 - Node.js 24 LTS is the frontend tooling baseline.
-- Development shortcut is `Ctrl+Alt+T`; `Ctrl+Shift+T` is avoided because it conflicts with common browser/application shortcuts.
+- Development shortcut is `Ctrl+Alt+T`; final user-configurable hotkeys are later scope.
 - UI Automation is primary capture.
 - Clipboard fallback must preserve an existing plain-text clipboard and refuse fallback when existing clipboard formats cannot be safely restored.
 - A single dedicated interaction thread owns COM/UIA/clipboard native state; it uses a one-slot latest-request-wins pending request rather than spawning a thread per hotkey.
 - Popup is pre-created/hidden and shown in `Capturing` state before capture/translation finishes.
 - Translation result is deterministic fake output only: `[FAKE] <selected text>`.
 
-### Exit criteria summary
+### Remaining exit evidence
 
-Iteration 001 remains incomplete until:
+Iteration 001 is not DONE until:
 
-- frontend and Rust quality gates pass;
-- Notepad, a Chromium browser, VS Code, and an available selectable PDF reader are checked on Windows;
-- stale requests cannot overwrite newer state;
-- safe clipboard restoration/refusal behavior is verified;
+- the final lockfile-backed, read-only Windows CI workflow passes;
+- Notepad, a Chromium browser, VS Code, and an available selectable PDF reader are checked in a real interactive Windows session;
+- plain Unicode clipboard restoration is observed through a real fallback path;
 - monitor/DPI placement is checked with actual environment evidence;
-- no selected/translated text appears in logs;
-- initial latency, idle memory, idle CPU, and compatibility evidence is recorded in `docs/benchmarks/iteration-001.md`.
+- runtime logs are inspected and contain no selected/translated text;
+- at least 20 warm interactions are measured for p50/p95 timing;
+- idle working set, private memory, and CPU are measured.
 
-The detailed RED/GREEN task sequence, file paths, interfaces, commands, manual verification, architecture-smell checks, and PR gate live only in the implementation plan; do not duplicate them here.
+The exact unverified items and collection procedure live in `docs/benchmarks/iteration-001.md`. Do not convert PENDING evidence into a pass without an observed run.
 
 ---
 
