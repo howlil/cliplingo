@@ -6,19 +6,11 @@ pub mod presentation;
 use std::sync::Arc;
 
 use application::{FakeTranslator, InteractionCoordinator};
-use core::{CaptureError, PopupViewModel, Selection, SelectionProvider};
-use platform::windows::cursor_anchor;
+use core::{PopupViewModel};
+use platform::windows::{cursor_anchor, UiAutomationSelectionProvider};
 use presentation::TauriPopupPort;
 use tauri::{Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-
-struct NoSelectionProvider;
-
-impl SelectionProvider for NoSelectionProvider {
-    fn capture(&mut self) -> Result<Selection, CaptureError> {
-        Err(CaptureError::Unsupported)
-    }
-}
 
 #[tauri::command]
 fn get_popup_state(coordinator: State<'_, Arc<InteractionCoordinator>>) -> PopupViewModel {
@@ -60,7 +52,7 @@ pub fn run() {
         .setup(|app| {
             let popup = Arc::new(TauriPopupPort::new(app.handle().clone()));
             let coordinator = InteractionCoordinator::start(
-                Box::new(NoSelectionProvider),
+                Box::new(UiAutomationSelectionProvider::new()),
                 Box::new(FakeTranslator),
                 popup,
             );

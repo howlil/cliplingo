@@ -20,6 +20,26 @@ pub fn cursor_anchor() -> Result<CursorContext, CaptureError> {
         GetCursorPos(&mut point).map_err(|_| native_error("GetCursorPos"))?;
     }
 
+    Ok(CursorContext {
+        anchor: ScreenRect {
+            x: f64::from(point.x),
+            y: f64::from(point.y),
+            width: 1.0,
+            height: 1.0,
+        },
+        work_area: work_area_for_point(point)?,
+    })
+}
+
+pub fn work_area_for_rect(rect: &ScreenRect) -> Result<ScreenRect, CaptureError> {
+    let point = POINT {
+        x: (rect.x + rect.width).round() as i32,
+        y: (rect.y + rect.height).round() as i32,
+    };
+    work_area_for_point(point)
+}
+
+fn work_area_for_point(point: POINT) -> Result<ScreenRect, CaptureError> {
     let monitor = unsafe { MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST) };
     let mut info = MONITORINFO {
         cbSize: size_of::<MONITORINFO>() as u32,
@@ -30,19 +50,11 @@ pub fn cursor_anchor() -> Result<CursorContext, CaptureError> {
         return Err(native_error("GetMonitorInfoW"));
     }
 
-    Ok(CursorContext {
-        anchor: ScreenRect {
-            x: f64::from(point.x),
-            y: f64::from(point.y),
-            width: 1.0,
-            height: 1.0,
-        },
-        work_area: ScreenRect {
-            x: f64::from(info.rcWork.left),
-            y: f64::from(info.rcWork.top),
-            width: f64::from(info.rcWork.right - info.rcWork.left),
-            height: f64::from(info.rcWork.bottom - info.rcWork.top),
-        },
+    Ok(ScreenRect {
+        x: f64::from(info.rcWork.left),
+        y: f64::from(info.rcWork.top),
+        width: f64::from(info.rcWork.right - info.rcWork.left),
+        height: f64::from(info.rcWork.bottom - info.rcWork.top),
     })
 }
 
