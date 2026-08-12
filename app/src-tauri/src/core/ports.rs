@@ -7,10 +7,7 @@ pub trait SelectionProvider: Send {
 }
 
 pub trait Translator: Send {
-    fn translate(
-        &mut self,
-        request: &TranslationRequest,
-    ) -> Result<Translation, TranslationError>;
+    fn translate(&mut self, request: &TranslationRequest) -> Result<Translation, TranslationError>;
 }
 
 pub trait PopupPort: Send + Sync {

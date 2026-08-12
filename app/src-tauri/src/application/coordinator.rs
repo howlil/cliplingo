@@ -72,10 +72,7 @@ struct PendingInteraction {
 pub struct FakeTranslator;
 
 impl Translator for FakeTranslator {
-    fn translate(
-        &mut self,
-        request: &TranslationRequest,
-    ) -> Result<Translation, TranslationError> {
+    fn translate(&mut self, request: &TranslationRequest) -> Result<Translation, TranslationError> {
         Ok(Translation {
             text: format!("[FAKE] {}", request.text),
         })

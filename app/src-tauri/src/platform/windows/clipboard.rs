@@ -16,7 +16,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_C, VK_CONTROL,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DestroyWindow, GetMessageW, KillTimer, SetTimer, MSG, HWND_MESSAGE,
+    CreateWindowExW, DestroyWindow, GetMessageW, KillTimer, SetTimer, HWND_MESSAGE, MSG,
     WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLIPBOARDUPDATE, WM_TIMER,
 };
 
@@ -188,7 +188,11 @@ fn key_input(key: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY, up: 
         Anonymous: INPUT_0 {
             ki: KEYBDINPUT {
                 wVk: key,
-                dwFlags: if up { KEYEVENTF_KEYUP } else { Default::default() },
+                dwFlags: if up {
+                    KEYEVENTF_KEYUP
+                } else {
+                    Default::default()
+                },
                 ..Default::default()
             },
         },
@@ -275,9 +279,6 @@ mod tests {
     fn only_empty_or_unicode_clipboards_are_mutable_in_iteration_one() {
         assert!(formats_are_restorable(&[]));
         assert!(formats_are_restorable(&[u32::from(CF_UNICODETEXT.0)]));
-        assert!(!formats_are_restorable(&[
-            u32::from(CF_UNICODETEXT.0),
-            15
-        ]));
+        assert!(!formats_are_restorable(&[u32::from(CF_UNICODETEXT.0), 15]));
     }
 }

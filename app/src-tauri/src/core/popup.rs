@@ -250,7 +250,12 @@ mod tests {
         session.hide();
 
         assert_eq!(
-            session.complete(request, Translation { text: "late".into() }),
+            session.complete(
+                request,
+                Translation {
+                    text: "late".into()
+                }
+            ),
             ApplyResult::Stale
         );
         assert_eq!(session.snapshot(), PopupState::Hidden);

@@ -40,11 +40,7 @@ pub fn run() {
 
                     match cursor_anchor() {
                         Ok(context) => {
-                            coordinator.trigger_at(
-                                &context.anchor,
-                                &context.work_area,
-                                started_at,
-                            );
+                            coordinator.trigger_at(&context.anchor, &context.work_area, started_at);
                         }
                         Err(error) => {
                             eprintln!("event=cursor_anchor status=error error={error:?}");

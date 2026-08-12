@@ -139,9 +139,7 @@ fn bounding_rect(range: &IUIAutomationTextRange) -> Option<ScreenRect> {
     result
 }
 
-unsafe fn read_last_rect(
-    array: *mut windows::Win32::System::Com::SAFEARRAY,
-) -> Option<ScreenRect> {
+unsafe fn read_last_rect(array: *mut windows::Win32::System::Com::SAFEARRAY) -> Option<ScreenRect> {
     let lower = SafeArrayGetLBound(array, 1).ok()?;
     let upper = SafeArrayGetUBound(array, 1).ok()?;
     if upper < lower {

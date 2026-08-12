@@ -26,7 +26,12 @@ mod tests {
     use super::*;
 
     fn rect(x: f64, y: f64, width: f64, height: f64) -> ScreenRect {
-        ScreenRect { x, y, width, height }
+        ScreenRect {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     fn size(width: f64, height: f64) -> ScreenSize {
