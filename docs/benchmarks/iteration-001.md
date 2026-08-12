@@ -2,7 +2,7 @@
 
 ## Status
 
-Automated implementation is in progress on `feat/iteration-001-windows-interaction`.
+The planned application slice is implemented on `feat/iteration-001-windows-interaction`. Automated verification is green; interactive Windows acceptance remains pending.
 
 This document deliberately separates evidence that GitHub Actions can verify from evidence that requires a real interactive Windows desktop session. An unobserved GUI check must never be recorded as passed.
 
@@ -24,18 +24,21 @@ Real translation inference is not part of Iteration 001.
 
 ## Automated verification
 
-The final branch gate must pass all of these on `windows-latest`:
+The repository now commits both `app/package-lock.json` and `app/src-tauri/Cargo.lock`. The final CI workflow is read-only and uses the committed dependency graph.
+
+GitHub Actions run `31643633694` on commit `401564c1295f289fd08f86cac4543459af3bcbb9` completed successfully on `windows-latest` with:
 
 ```text
+npm ci
 npm run check
 npm test
 npm run build
 cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all
 ```
 
-Final reproducible CI run: **PENDING** until lockfiles are committed and the read-only final workflow is green.
+Automated result: **PASS**.
 
 ## Privacy review
 
@@ -132,4 +135,4 @@ Get-Process cliplingo | Select-Object ProcessName, Id, WorkingSet64, PrivateMemo
 
 ## Exit decision
 
-Iteration 001 remains **IN PROGRESS** until both the final read-only CI gate is green and the interactive evidence above is recorded. Iteration 002 must not start based only on compilation/unit tests.
+Automated verification is complete. Iteration 001 remains **IN PROGRESS** until the interactive evidence above is recorded. Iteration 002 must not start based only on compilation/unit tests.
