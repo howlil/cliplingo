@@ -1,9 +1,10 @@
 use std::mem::size_of;
 
 use windows::Win32::Foundation::{GetLastError, POINT};
-use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
+use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 use crate::core::{CaptureError, ScreenRect};
 
