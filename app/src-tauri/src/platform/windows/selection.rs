@@ -19,6 +19,8 @@ use crate::core::{CaptureError, ScreenRect, Selection, SelectionProvider, Select
 
 use super::work_area_for_rect;
 
+const UIA_E_NOTSUPPORTED_CODE: i32 = 0x8004_0204u32 as i32;
+
 pub struct UiAutomationSelectionProvider {
     com_initialized: bool,
 }
@@ -77,7 +79,7 @@ impl SelectionProvider for UiAutomationSelectionProvider {
         let pattern: IUIAutomationTextPattern = unsafe {
             focused
                 .GetCurrentPatternAs(UIA_TextPatternId)
-                .map_err(|_| CaptureError::Unsupported)?
+                .map_err(pattern_error)?
         };
         let ranges = unsafe {
             pattern
@@ -169,9 +171,44 @@ unsafe fn read_last_rect(array: *mut windows::Win32::System::Com::SAFEARRAY) -> 
     }
 }
 
+fn pattern_error(error: WindowsError) -> CaptureError {
+    pattern_error_from_code(error.code().0)
+}
+
+fn pattern_error_from_code(code: i32) -> CaptureError {
+    if code == UIA_E_NOTSUPPORTED_CODE {
+        CaptureError::Unsupported
+    } else {
+        CaptureError::NativeFailure {
+            operation: "IUIAutomationElement::GetCurrentPatternAs",
+            code,
+        }
+    }
+}
+
 fn native_error(operation: &'static str, error: &WindowsError) -> CaptureError {
     CaptureError::NativeFailure {
         operation,
         code: error.code().0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unsupported_pattern_is_the_only_pattern_error_that_allows_fallback() {
+        assert_eq!(
+            pattern_error_from_code(UIA_E_NOTSUPPORTED_CODE),
+            CaptureError::Unsupported
+        );
+        assert_eq!(
+            pattern_error_from_code(0x8004_0201u32 as i32),
+            CaptureError::NativeFailure {
+                operation: "IUIAutomationElement::GetCurrentPatternAs",
+                code: 0x8004_0201u32 as i32,
+            }
+        );
     }
 }
