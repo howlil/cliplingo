@@ -28,7 +28,7 @@ const TIMER_ID: usize = 1;
 #[derive(Clone, Debug, PartialEq)]
 enum ClipboardSnapshot {
     Empty,
-    Unicode(String),
+    Unicode(Vec<u16>),
 }
 
 pub struct ClipboardSelectionProvider;
@@ -37,13 +37,15 @@ impl SelectionProvider for ClipboardSelectionProvider {
     fn capture(&mut self) -> Result<Selection, CaptureError> {
         let snapshot = snapshot_clipboard()?;
         let listener = ClipboardListener::new()?;
-        send_copy_shortcut()?;
-        listener.wait_for_update()?;
+
+        let copied = match send_copy_shortcut().and_then(|_| listener.wait_for_update()) {
+            Ok(()) => read_unicode_clipboard(),
+            Err(error) => Err(error),
+        };
         drop(listener);
 
-        let copied = read_unicode_clipboard();
-        restore_clipboard(snapshot)?;
-        let text = copied?;
+        let restored = restore_clipboard(snapshot);
+        let text = finish_capture(copied, restored)?;
         if text.trim().is_empty() {
             return Err(CaptureError::NoSelection);
         }
@@ -57,6 +59,14 @@ impl SelectionProvider for ClipboardSelectionProvider {
     }
 }
 
+fn finish_capture(
+    copied: Result<String, CaptureError>,
+    restored: Result<(), CaptureError>,
+) -> Result<String, CaptureError> {
+    restored?;
+    copied
+}
+
 fn snapshot_clipboard() -> Result<ClipboardSnapshot, CaptureError> {
     with_clipboard(|| {
         let formats = enumerate_formats();
@@ -67,7 +77,7 @@ fn snapshot_clipboard() -> Result<ClipboardSnapshot, CaptureError> {
         if formats.is_empty() {
             Ok(ClipboardSnapshot::Empty)
         } else {
-            read_unicode_clipboard_while_open().map(ClipboardSnapshot::Unicode)
+            read_unicode_units_while_open().map(ClipboardSnapshot::Unicode)
         }
     })
 }
@@ -78,23 +88,23 @@ fn restore_clipboard(snapshot: ClipboardSnapshot) -> Result<(), CaptureError> {
             EmptyClipboard().map_err(|_| clipboard_error("EmptyClipboard"))?;
         }
 
-        if let ClipboardSnapshot::Unicode(text) = snapshot {
-            set_unicode_clipboard_while_open(&text)?;
+        if let ClipboardSnapshot::Unicode(units) = snapshot {
+            set_unicode_units_while_open(&units)?;
         }
         Ok(())
     })
 }
 
 fn read_unicode_clipboard() -> Result<String, CaptureError> {
-    with_clipboard(read_unicode_clipboard_while_open)
+    with_clipboard(|| read_unicode_units_while_open().map(|units| unicode_text(&units)))
 }
 
-fn read_unicode_clipboard_while_open() -> Result<String, CaptureError> {
+fn read_unicode_units_while_open() -> Result<Vec<u16>, CaptureError> {
     let handle = unsafe { GetClipboardData(u32::from(CF_UNICODETEXT.0)) }
         .map_err(|_| CaptureError::NoSelection)?;
     let memory = HGLOBAL(handle.0);
     let bytes = unsafe { GlobalSize(memory) };
-    if bytes < size_of::<u16>() {
+    if bytes < size_of::<u16>() || bytes % size_of::<u16>() != 0 {
         return Err(CaptureError::NoSelection);
     }
 
@@ -104,15 +114,17 @@ fn read_unicode_clipboard_while_open() -> Result<String, CaptureError> {
     }
 
     let capacity = bytes / size_of::<u16>();
-    let units = unsafe { slice::from_raw_parts(raw, capacity) };
-    let len = units.iter().position(|unit| *unit == 0).unwrap_or(capacity);
-    let text = String::from_utf16_lossy(&units[..len]);
+    let units = unsafe { slice::from_raw_parts(raw, capacity) }.to_vec();
     let _ = unsafe { GlobalUnlock(memory) };
-    Ok(text)
+    Ok(units)
 }
 
-fn set_unicode_clipboard_while_open(text: &str) -> Result<(), CaptureError> {
-    let units: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+fn unicode_text(units: &[u16]) -> String {
+    let len = units.iter().position(|unit| *unit == 0).unwrap_or(units.len());
+    String::from_utf16_lossy(&units[..len])
+}
+
+fn set_unicode_units_while_open(units: &[u16]) -> Result<(), CaptureError> {
     let bytes = units.len() * size_of::<u16>();
     let memory = unsafe { GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, bytes) }
         .map_err(|_| clipboard_error("GlobalAlloc"))?;
@@ -280,5 +292,26 @@ mod tests {
         assert!(formats_are_restorable(&[]));
         assert!(formats_are_restorable(&[u32::from(CF_UNICODETEXT.0)]));
         assert!(!formats_are_restorable(&[u32::from(CF_UNICODETEXT.0), 15]));
+    }
+
+    #[test]
+    fn snapshot_can_preserve_raw_utf16_units_losslessly() {
+        let original = vec![0x0041, 0xD800, 0x0000];
+        let snapshot = ClipboardSnapshot::Unicode(original.clone());
+        assert_eq!(snapshot, ClipboardSnapshot::Unicode(original));
+    }
+
+    #[test]
+    fn unicode_text_stops_at_first_nul() {
+        assert_eq!(unicode_text(&[0x0041, 0x0042, 0, 0x0043]), "AB");
+    }
+
+    #[test]
+    fn restore_failure_takes_precedence_over_capture_failure() {
+        let result = finish_capture(
+            Err(CaptureError::Timeout),
+            Err(CaptureError::ClipboardUnavailable),
+        );
+        assert_eq!(result, Err(CaptureError::ClipboardUnavailable));
     }
 }
