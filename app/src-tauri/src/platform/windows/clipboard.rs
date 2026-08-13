@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::mem::{size_of, size_of_val};
 use std::ptr;
 use std::slice;
 use std::thread;
@@ -134,7 +134,7 @@ fn unicode_text(units: &[u16]) -> String {
 }
 
 fn set_unicode_units_while_open(units: &[u16]) -> Result<(), CaptureError> {
-    let bytes = units.len() * size_of::<u16>();
+    let bytes = size_of_val(units);
     let memory = unsafe { GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, bytes) }
         .map_err(|_| clipboard_error("GlobalAlloc"))?;
     let raw = unsafe { GlobalLock(memory) }.cast::<u16>();
