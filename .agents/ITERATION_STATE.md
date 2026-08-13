@@ -1,3 +1,5 @@
+> **Devland migration note:** canonical current work state now lives in `.devland/state.yaml`. This file is retained as a detailed legacy narrative during normalization; update canonical state for status changes and use this document only for supporting detail until it is retired or converted into a projection.
+
 # Iteration State
 
 Last updated: 2026-08-13
@@ -59,7 +61,7 @@ select text in another Windows application
 
 ### Automated gate evidence
 
-GitHub Actions run `31677315164` (run #33) passed on commit `0122dbcc2edab610ec4168c709c963d9c9f42a10` with the complete frontend and Rust gate. The detailed evidence is recorded in `docs/benchmarks/iteration-001.md`.
+GitHub Actions run `31679060138` (run #36) passed on commit `a0dde7f061bbfb277f8df9ad5b0d6519505bba73` with the complete frontend/Rust gate and reproducible Windows acceptance package. The detailed evidence is recorded in `docs/benchmarks/iteration-001.md`.
 
 ### Why this iteration comes first
 

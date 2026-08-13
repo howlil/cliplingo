@@ -1,3 +1,5 @@
+> **Devland migration note:** canonical structured project facts now live in `.devland/project.yaml`. This document is retained as project-local narrative and supporting evidence; if a factual conflict appears, verify repository reality and update the canonical model rather than maintaining two independent truths.
+
 # Project Description
 
 ## Product
