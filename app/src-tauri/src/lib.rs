@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use application::{FakeTranslator, InteractionCoordinator};
 use core::PopupViewModel;
-use platform::windows::{cursor_anchor, WindowsSelectionProvider};
+use platform::windows::{cursor_anchor, WindowsSelectionProvider, TRANSLATE_SHORTCUT};
 use presentation::TauriPopupPort;
 use tauri::{Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -59,7 +59,14 @@ pub fn run() {
                 popup,
             );
             app.manage(Arc::clone(&coordinator));
-            app.global_shortcut().register("Ctrl+Alt+T")?;
+            app.global_shortcut()
+                .register(TRANSLATE_SHORTCUT)
+                .map_err(|error| {
+                    eprintln!(
+                        "event=hotkey_register status=error shortcut={TRANSLATE_SHORTCUT} error={error}"
+                    );
+                    error
+                })?;
             Ok(())
         })
         .run(tauri::generate_context!())
