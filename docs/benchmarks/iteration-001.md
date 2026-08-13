@@ -24,9 +24,9 @@ Real translation inference is not part of Iteration 001.
 
 ## Automated verification
 
-The repository now commits both `app/package-lock.json` and `app/src-tauri/Cargo.lock`. The final CI workflow is read-only and uses the committed dependency graph.
+The repository commits both `app/package-lock.json` and `app/src-tauri/Cargo.lock`. The final CI workflow is read-only and uses the committed dependency graph.
 
-GitHub Actions run `31643633694` on commit `401564c1295f289fd08f86cac4543459af3bcbb9` completed successfully on `windows-latest` with:
+GitHub Actions run `31677315164` (run #33) on commit `0122dbcc2edab610ec4168c709c963d9c9f42a10` completed successfully on `windows-latest` with:
 
 ```text
 npm ci
@@ -39,6 +39,15 @@ cargo test --locked --all
 ```
 
 Automated result: **PASS**.
+
+The native hardening covered by this gate includes:
+
+- UI Automation falls back to clipboard only for `UIA_E_NOTSUPPORTED`; other UIA failures remain native capture errors;
+- clipboard snapshots retain raw UTF-16 units instead of round-tripping through a lossy Rust `String` representation;
+- restoration is attempted after clipboard-copy failure/timeout and restore failure takes precedence over reporting capture success;
+- unsupported existing clipboard formats are refused before mutation;
+- clipboard fallback waits for the `Ctrl+Alt+T` keys to be released before synthesizing `Ctrl+C`, with a bounded timeout;
+- GitHub Actions use current Node-24-based majors for checkout, Node setup, and diagnostic artifact upload.
 
 ## Privacy review
 
@@ -67,14 +76,17 @@ Reason: GitHub Actions runners do not provide the interactive desktop/user selec
 
 ## Clipboard safety checks
 
-Automated policy tests cover:
+Automated policy/unit tests cover:
 
-- clipboard fallback is allowed only after `UIA Unsupported`;
-- `NoSelection` does not trigger clipboard fallback;
+- clipboard fallback is allowed only after `UIA_E_NOTSUPPORTED`;
+- `NoSelection` and other UIA/native failures do not trigger clipboard fallback;
 - the Iteration 001 mutation policy accepts only empty or Unicode-text-only clipboard formats;
-- other existing clipboard formats are refused rather than intentionally discarded.
+- other existing clipboard formats are refused rather than intentionally discarded;
+- the snapshot representation retains raw UTF-16 units;
+- restore failure overrides a nominal capture result;
+- pressed-key detection uses the high-order bit from Windows key state.
 
-Interactive proof that an existing Unicode-text clipboard is restored byte-for-text-equivalent after a real Ctrl+C fallback: **PENDING**.
+Interactive proof that an existing Unicode-text clipboard is restored exactly after a real Ctrl+C fallback: **PENDING**.
 
 ## Display / DPI checks
 

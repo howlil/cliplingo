@@ -21,7 +21,7 @@ Iteration 001 is now exercising these boundaries with real Windows-facing applic
 
 ## Current iteration — Iteration 001: Windows interaction
 
-**Status: IN PROGRESS — implementation present; final reproducible CI and interactive Windows validation pending**
+**Status: IN PROGRESS — implementation and automated gates complete; interactive Windows validation pending**
 
 **Implementation plan:** `.agents/plans/001-windows-interaction.md`
 
@@ -45,16 +45,21 @@ select text in another Windows application
 
 - Tauri 2 + Svelte 5 + TypeScript + Vite desktop/popup scaffold.
 - Rust-owned popup state machine and latest-request-wins interaction coordinator.
-- One dedicated interaction thread with a one-slot pending queue; no thread per hotkey and no polling loop.
+- One dedicated interaction thread with a one-slot pending queue; no thread per hotkey and no idle polling loop.
 - Pre-created hidden popup shown in `Capturing` state before selection capture finishes.
 - Global `Ctrl+Alt+T` shortcut and toggle dismissal.
 - Win32 cursor/monitor work-area positioning plus pure clamping/flipping tests.
 - Windows UI Automation focused-element `TextPattern` selection capture and selection bounds when exposed by the provider.
-- Clipboard fallback only when UIA reports an unsupported provider.
-- Conservative clipboard preservation: unsupported existing clipboard formats are refused rather than intentionally discarded.
+- Clipboard fallback only when UIA returns `UIA_E_NOTSUPPORTED`; unrelated UIA failures do not silently fall back.
+- Conservative clipboard preservation: unsupported existing clipboard formats are refused before mutation.
+- Raw UTF-16 clipboard snapshot/restore path plus bounded shortcut-key-release handling before synthetic `Ctrl+C`.
 - Deterministic fake translation only: `[FAKE] <selected text>`.
 - Privacy-safe timing metadata for popup request, capture, fake translation, and ready-state request.
-- Windows CI for frontend checks/tests/build plus Rust formatting, Clippy, and tests.
+- Lockfile-backed, read-only Windows CI for frontend checks/tests/build plus Rust formatting, strict Clippy, and tests.
+
+### Automated gate evidence
+
+GitHub Actions run `31677315164` (run #33) passed on commit `0122dbcc2edab610ec4168c709c963d9c9f42a10` with the complete frontend and Rust gate. The detailed evidence is recorded in `docs/benchmarks/iteration-001.md`.
 
 ### Why this iteration comes first
 
@@ -92,7 +97,6 @@ The real C++/CTranslate2 worker is intentionally absent.
 
 Iteration 001 is not DONE until:
 
-- the final lockfile-backed, read-only Windows CI workflow passes;
 - Notepad, a Chromium browser, VS Code, and an available selectable PDF reader are checked in a real interactive Windows session;
 - plain Unicode clipboard restoration is observed through a real fallback path;
 - monitor/DPI placement is checked with actual environment evidence;
