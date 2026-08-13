@@ -15,8 +15,8 @@ use windows::Win32::System::Memory::{
 };
 use windows::Win32::System::Ole::CF_UNICODETEXT;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, SendInput, VIRTUAL_KEY, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-    KEYEVENTF_KEYUP, VK_C, VK_CONTROL, VK_MENU,
+    GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+    VIRTUAL_KEY, VK_C, VK_CONTROL, VK_MENU,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, GetMessageW, KillTimer, SetTimer, HWND_MESSAGE, MSG,
@@ -126,7 +126,10 @@ fn read_unicode_units_while_open() -> Result<Vec<u16>, CaptureError> {
 }
 
 fn unicode_text(units: &[u16]) -> String {
-    let len = units.iter().position(|unit| *unit == 0).unwrap_or(units.len());
+    let len = units
+        .iter()
+        .position(|unit| *unit == 0)
+        .unwrap_or(units.len());
     String::from_utf16_lossy(&units[..len])
 }
 
