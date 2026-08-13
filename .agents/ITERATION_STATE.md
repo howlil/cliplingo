@@ -1,3 +1,5 @@
+> **Devland migration note:** canonical current work state now lives in `.devland/state.yaml`. This file is retained as a detailed legacy narrative during normalization; update canonical state for status changes and use this document only for supporting detail until it is retired or converted into a projection.
+
 # Iteration State
 
 Last updated: 2026-08-13

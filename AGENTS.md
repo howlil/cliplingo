@@ -10,8 +10,10 @@ Read the current plan or other project-local artifacts only when referenced by `
 
 Repository source and configuration evidence describe what currently exists. Active approved work artifacts describe what should change. When those differ, treat the difference as planned work or drift and verify before rewriting canonical state.
 
-The existing `.agents/` directory is retained as supporting legacy context during the Devland migration. Read only the relevant file when a task needs detail that is not yet represented canonically, such as code patterns, release constraints, platform-specific guidance, or a referenced implementation plan. Do not treat duplicated universal Git/TDD/engineering prose there as a second canonical policy source.
+The existing `.agents/` directory is retained as supporting legacy context during the Devland migration. Read only the relevant file when a task needs detail that is not yet represented canonically, such as code patterns, release constraints, platform-specific guidance, or a referenced implementation plan.
 
-This file is a router, not an independent source of product, stack, architecture, or work-state truth.
+For universal engineering-process rules such as Git, testing, dependency discipline, verification, security baseline, and documentation discipline, Devland core is the policy source. Legacy `.agents/RULES.md` and `.agents/SDLC.md` remain supporting project context during normalization; if duplicated process text conflicts, use Devland core unless the repository records a deliberate project-specific override with evidence. Iteration grouping never changes the Git unit: one logical task uses at most one working branch by default.
+
+This file is a router, not an independent source of product, stack, architecture, work-state, or engineering-policy truth.
 
 Never claim repository, version-control, CI, release, or deployment actions that the current runtime did not actually perform.
