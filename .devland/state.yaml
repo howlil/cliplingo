@@ -1,0 +1,77 @@
+schema: devland.state/v0
+active_work:
+  - id: windows-interaction
+    kind: feature
+    status: verifying
+    goal: Prove selected-text capture and fast popup interaction on Windows without real ML inference.
+    group:
+      type: iteration
+      id: "001"
+    scope:
+      allowed:
+        - global shortcut and selected-text capture
+        - popup behavior and monitor-aware positioning
+        - deterministic fake translation
+        - compatibility latency memory CPU and privacy measurement
+      excluded:
+        - real inference worker
+        - OCR
+        - all-language routing
+        - settings application
+        - installer or package-manager release work
+    acceptance:
+      - frontend and Rust quality gates pass
+      - representative selectable Windows applications are checked
+      - stale requests cannot overwrite newer state
+      - clipboard fallback preserves or safely refuses unsupported existing clipboard data
+      - popup placement is verified across relevant DPI and monitor conditions
+      - no selected or translated text appears in logs
+      - at least 20 warm interactions are measured for p50 and p95 timing
+      - idle working set private memory and CPU are measured
+    artifacts:
+      spec: null
+      plan: .agents/plans/001-windows-interaction.md
+      evidence:
+        - docs/benchmarks/iteration-001.md
+        - GitHub Actions run 31679060138 passed on a0dde7f061bbfb277f8df9ad5b0d6519505bba73
+        - acceptance artifact iteration-001-windows-acceptance-3 digest sha256:3d8645051a2e714bdf077f89e44a14c8bae678608108fa0f7faf83630be65a3a
+    branch: feat/iteration-001-windows-interaction
+    pull_request: https://github.com/howlil/cliplingo/pull/3
+blocked: []
+recently_completed:
+  - id: engineering-foundation
+    kind: foundation
+    status: done
+    goal: Establish project scope architecture engineering rules release strategy and task-specific skills before implementation.
+    group:
+      type: iteration
+      id: "000"
+    scope:
+      allowed:
+        - product scope and constraints
+        - target architecture
+        - engineering and Git workflow
+        - release strategy
+      excluded:
+        - application implementation
+    acceptance:
+      - project and architecture documentation exist
+      - current implementation plan is defined
+    artifacts:
+      spec: .agents/PROJECT.md
+      plan: null
+      evidence:
+        - .agents/PROJECT.md
+        - .agents/DESIGN.md
+        - .agents/RULES.md
+        - .agents/SDLC.md
+    branch: null
+    pull_request: null
+open_decisions:
+  - whether a pre-created hidden WebView meets the measured idle-memory and popup-latency budget
+  - which Windows applications require clipboard fallback rather than UI Automation
+  - whether clipboard fallback needs broader format preservation after real compatibility testing
+  - first production-quality translation model and language direction
+  - direct CJK-to-Indonesian models versus English-pivot routes
+  - final release latency and resource budgets
+  - Windows code-signing provider and certificate strategy
