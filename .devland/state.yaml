@@ -1,0 +1,72 @@
+schema: devland.state/v0
+active_work:
+  - id: windows-interaction
+    kind: feature
+    status: planned
+    goal: Prove selected-text capture and fast popup interaction on Windows without real ML inference.
+    group:
+      type: iteration
+      id: "001"
+    scope:
+      allowed:
+        - global shortcut and selected-text capture
+        - popup behavior and monitor-aware positioning
+        - deterministic fake translation
+        - compatibility latency memory CPU and privacy measurement
+      excluded:
+        - real inference worker
+        - OCR
+        - all-language routing
+        - settings application
+        - installer or package-manager release work
+    acceptance:
+      - frontend and Rust quality gates pass
+      - representative selectable Windows applications are checked
+      - stale requests cannot overwrite newer state
+      - clipboard fallback preserves or safely refuses unsupported existing clipboard data
+      - popup placement is verified across relevant DPI and monitor conditions
+      - no selected or translated text appears in logs
+      - latency idle memory idle CPU and compatibility evidence are recorded
+    artifacts:
+      spec: null
+      plan: .agents/plans/001-windows-interaction.md
+      evidence: []
+    branch: null
+    pull_request: null
+blocked: []
+recently_completed:
+  - id: engineering-foundation
+    kind: foundation
+    status: done
+    goal: Establish project scope architecture engineering rules release strategy and task-specific skills before implementation.
+    group:
+      type: iteration
+      id: "000"
+    scope:
+      allowed:
+        - product scope and constraints
+        - target architecture
+        - engineering and Git workflow
+        - release strategy
+      excluded:
+        - application implementation
+    acceptance:
+      - project and architecture documentation exist
+      - current implementation plan is defined
+    artifacts:
+      spec: .agents/PROJECT.md
+      plan: null
+      evidence:
+        - .agents/PROJECT.md
+        - .agents/DESIGN.md
+        - .agents/RULES.md
+        - .agents/SDLC.md
+    branch: null
+    pull_request: null
+open_decisions:
+  - whether a pre-created hidden WebView meets the measured idle-memory and popup-latency budget
+  - which Windows applications require clipboard fallback rather than UI Automation
+  - first production-quality translation model and language direction
+  - direct CJK-to-Indonesian models versus English-pivot routes
+  - final release latency and resource budgets
+  - Windows code-signing provider and certificate strategy
