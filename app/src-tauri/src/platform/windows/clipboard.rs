@@ -1,6 +1,8 @@
 use std::mem::size_of;
 use std::ptr;
 use std::slice;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use windows::core::w;
 use windows::Win32::Foundation::{GetLastError, GlobalFree, HANDLE, HGLOBAL};
@@ -13,7 +15,8 @@ use windows::Win32::System::Memory::{
 };
 use windows::Win32::System::Ole::CF_UNICODETEXT;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_C, VK_CONTROL,
+    GetAsyncKeyState, SendInput, VIRTUAL_KEY, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+    KEYEVENTF_KEYUP, VK_C, VK_CONTROL, VK_MENU,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, GetMessageW, KillTimer, SetTimer, HWND_MESSAGE, MSG,
@@ -24,6 +27,9 @@ use crate::core::{CaptureError, Selection, SelectionProvider, SelectionSource};
 
 const CLIPBOARD_TIMEOUT_MS: u32 = 750;
 const TIMER_ID: usize = 1;
+const SHORTCUT_RELEASE_TIMEOUT: Duration = Duration::from_millis(250);
+const SHORTCUT_RELEASE_POLL: Duration = Duration::from_millis(5);
+const VK_T: VIRTUAL_KEY = VIRTUAL_KEY(0x54);
 
 #[derive(Clone, Debug, PartialEq)]
 enum ClipboardSnapshot {
@@ -181,6 +187,8 @@ fn with_clipboard<T>(
 }
 
 fn send_copy_shortcut() -> Result<(), CaptureError> {
+    wait_for_shortcut_keys_release()?;
+
     let inputs = [
         key_input(VK_CONTROL, false),
         key_input(VK_C, false),
@@ -194,7 +202,28 @@ fn send_copy_shortcut() -> Result<(), CaptureError> {
     Ok(())
 }
 
-fn key_input(key: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY, up: bool) -> INPUT {
+fn wait_for_shortcut_keys_release() -> Result<(), CaptureError> {
+    let deadline = Instant::now() + SHORTCUT_RELEASE_TIMEOUT;
+    while shortcut_key_is_down() {
+        if Instant::now() >= deadline {
+            return Err(CaptureError::Timeout);
+        }
+        thread::sleep(SHORTCUT_RELEASE_POLL);
+    }
+    Ok(())
+}
+
+fn shortcut_key_is_down() -> bool {
+    [VK_CONTROL, VK_MENU, VK_T]
+        .into_iter()
+        .any(|key| key_state_is_down(unsafe { GetAsyncKeyState(i32::from(key.0)) }))
+}
+
+fn key_state_is_down(state: i16) -> bool {
+    (state as u16 & 0x8000) != 0
+}
+
+fn key_input(key: VIRTUAL_KEY, up: bool) -> INPUT {
     INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
@@ -313,5 +342,12 @@ mod tests {
             Err(CaptureError::ClipboardUnavailable),
         );
         assert_eq!(result, Err(CaptureError::ClipboardUnavailable));
+    }
+
+    #[test]
+    fn keyboard_state_uses_high_bit_for_pressed_state() {
+        assert!(key_state_is_down(i16::MIN));
+        assert!(!key_state_is_down(1));
+        assert!(!key_state_is_down(0));
     }
 }
