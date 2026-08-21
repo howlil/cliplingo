@@ -2,6 +2,50 @@
 
 These are defaults with teeth. Deviations require evidence and must be documented in the task/PR when they materially affect architecture, security, performance, or release behavior.
 
+The project-specific delivery constraints in `.devland/project.yaml` are deliberate repository overrides/constraints. This file mirrors and explains them for implementation work; Devland core still supplies the universal baseline where no project-specific rule exists.
+
+## Delivery operating model
+
+Optimize for **fast verified delivery**, not raw activity.
+
+```text
+problem / evidence
+  -> acceptance behavior
+  -> RED
+  -> GREEN
+  -> REFACTOR
+  -> focused verification
+  -> PR / CI
+  -> review and fixes on the same branch
+  -> merge
+  -> observe / measure
+```
+
+- Deliver the smallest coherent vertical slice that proves useful behavior or removes a measured risk.
+- Keep WIP low. One agent should normally finish one bounded task before starting unrelated implementation work.
+- Use the shortest safe feedback loop first; widen verification only as risk increases.
+- Keep test failures, review fixes, CI corrections, and small same-task follow-ups on the same branch and PR.
+- Do not over-plan low-risk local work. Use deeper design for native boundaries, IPC, worker lifecycle, privacy/security, updater/release, model/runtime integration, and performance-sensitive architecture.
+- Apply YAGNI aggressively. Speed never justifies bypassing privacy, correctness, compatibility, performance evidence, signing, or release safety.
+
+## Delivery metrics
+
+Use metrics to improve the engineering system, not to score contributors or agents.
+
+Prefer:
+
+- cycle time
+- PR lead time
+- CI feedback time
+- change failure rate
+- escaped defect rate
+- rework rate
+- flaky-test rate
+- WIP age
+- release frequency when the release signal is meaningful
+
+Commit count, branch count, PR count, lines changed, and generated-code volume are **not productivity KPIs**. If delivery slows, inspect oversized scope, slow CI, flaky tests, review latency, unclear acceptance criteria, native-boundary friction, or architecture coupling before increasing WIP.
+
 ## Pragmatism and scope
 
 - Implement what the current iteration needs; do not pre-build future subsystems.
@@ -54,11 +98,24 @@ These are defaults with teeth. Deviations require evidence and must be documente
 
 ## Testing
 
-- Behavior changes follow RED → GREEN → REFACTOR unless a test is technically impossible; document the reason.
+- Behavior changes follow RED → GREEN → REFACTOR unless a test is technically impossible; document the reason and use the nearest deterministic executable reproduction.
+- Confirm RED fails for the intended missing/incorrect behavior, not because of tooling or fixture mistakes.
+- GREEN implements only enough to satisfy the current acceptance behavior.
+- Refactor only while focused tests remain green.
 - Test public behavior and boundaries, not private implementation trivia.
 - Unit tests use fakes for Windows/inference boundaries; do not require real 100 MB+ models for ordinary core tests.
 - Native compatibility must eventually be exercised against representative Windows applications.
 - A bug fix requires a regression test at the lowest useful level.
+- Do not weaken, delete, skip, or rewrite a valid regression merely to make CI green.
+- Treat flaky tests and slow CI as delivery-system defects rather than normal friction.
+
+### Verification by risk
+
+All executable behavior still uses RED → GREEN → REFACTOR. These tiers determine how broadly to verify before merge.
+
+- **Low risk:** docs, repository metadata, formatting, or behavior-preserving local refactor. Use focused/static verification only; do not invent expensive tests with no signal.
+- **Medium risk:** Svelte interaction, Rust application workflow, command contract, deterministic worker protocol logic, or local state behavior. Run focused unit/component tests plus the relevant integration boundary.
+- **High risk:** Windows selection/clipboard/UI Automation behavior, native COM/Win32 integration, IPC/process lifecycle, privacy/security boundaries, updater/signing/release behavior, model/runtime integration, concurrency/latest-request-wins semantics, or performance-sensitive architecture. Require negative/error-path coverage, relevant native/integration/E2E evidence, privacy/log inspection when relevant, benchmark evidence for performance claims, and full mandatory CI.
 
 ## Git and branch hygiene
 
