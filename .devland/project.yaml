@@ -49,3 +49,9 @@ constraints:
   - normal translation must work offline after the required language pack is installed
   - architecture and performance assumptions require benchmark evidence
   - Windows 10/11 is the V1 product platform
+  - executable behavior changes use RED then GREEN then REFACTOR before merge
+  - optimize for fast verified delivery with small coherent vertical slices and low work in progress
+  - one logical task stays on one working branch and one pull request through test failures review fixes and CI feedback unless the work becomes genuinely independent
+  - verification expands with risk; native integration privacy security IPC updater release and performance-sensitive changes require broader evidence than local behavior-preserving changes
+  - delivery health is evaluated with cycle time PR lead time CI feedback time rework escaped defects change failure flaky tests and work-in-progress age rather than commit branch pull-request or lines-changed counts
+  - delivery speed must not bypass privacy security correctness compatibility performance evidence or release-signing requirements
