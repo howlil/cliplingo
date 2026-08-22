@@ -2,7 +2,7 @@ schema: devland.state/v0
 active_work:
   - id: windows-interaction
     kind: feature
-    status: planned
+    status: verifying
     goal: Prove selected-text capture and fast popup interaction on Windows without real ML inference.
     group:
       type: iteration
@@ -26,14 +26,19 @@ active_work:
       - clipboard fallback preserves or safely refuses unsupported existing clipboard data
       - popup placement is verified across relevant DPI and monitor conditions
       - no selected or translated text appears in logs
-      - latency idle memory idle CPU and compatibility evidence are recorded
+      - at least 20 warm interactions are measured for p50 and p95 timing
+      - idle working set private memory and CPU are measured
     artifacts:
       spec: null
       plan: .agents/plans/001-windows-interaction.md
-      evidence: []
-    branch: null
-    pull_request: null
-blocked: []
+      evidence:
+        - docs/benchmarks/iteration-001.md
+        - GitHub Actions run 32529514511 passed on 746252322d11cb7af00071f16cd559a9f1f930ee
+        - acceptance artifact iteration-001-windows-acceptance-3 digest sha256:6fe03dd2abd1f18db45a61f2151a7b7f66dce2e6829e62e88536b3bd1b09931
+    branch: feat/iteration-001-windows-interaction
+    pull_request: https://github.com/howlil/cliplingo/pull/3
+blocked:
+  - Manual Windows acceptance evidence is the single remaining blocker. Freeze this branch from feature, refactor, cleanup, dependency, architecture, and unrelated documentation changes; only evidence capture, defects discovered by acceptance, and closeout state updates are allowed until acceptance passes, then merge immediately.
 recently_completed:
   - id: engineering-foundation
     kind: foundation
@@ -66,6 +71,7 @@ recently_completed:
 open_decisions:
   - whether a pre-created hidden WebView meets the measured idle-memory and popup-latency budget
   - which Windows applications require clipboard fallback rather than UI Automation
+  - whether clipboard fallback needs broader format preservation after real compatibility testing
   - first production-quality translation model and language direction
   - direct CJK-to-Indonesian models versus English-pivot routes
   - final release latency and resource budgets
