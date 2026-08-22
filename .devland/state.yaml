@@ -33,11 +33,12 @@ active_work:
       plan: .agents/plans/001-windows-interaction.md
       evidence:
         - docs/benchmarks/iteration-001.md
-        - GitHub Actions run 31679060138 passed on a0dde7f061bbfb277f8df9ad5b0d6519505bba73
-        - acceptance artifact iteration-001-windows-acceptance-3 digest sha256:3d8645051a2e714bdf077f89e44a14c8bae678608108fa0f7faf83630be65a3a
+        - GitHub Actions run 32529514511 passed on 746252322d11cb7af00071f16cd559a9f1f930ee
+        - acceptance artifact iteration-001-windows-acceptance-3 digest sha256:6fe03dd2abd1f18db45a61f2151a7b7f66dce2e6829e62e88536b3bd1b09931
     branch: feat/iteration-001-windows-interaction
     pull_request: https://github.com/howlil/cliplingo/pull/3
-blocked: []
+blocked:
+  - Manual Windows acceptance evidence is the single remaining blocker. Freeze this branch from feature, refactor, cleanup, dependency, architecture, and unrelated documentation changes; only evidence capture, defects discovered by acceptance, and closeout state updates are allowed until acceptance passes, then merge immediately.
 recently_completed:
   - id: engineering-foundation
     kind: foundation
