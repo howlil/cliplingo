@@ -2,8 +2,8 @@ schema: devland.state/v0
 active_work:
   - id: windows-interaction
     kind: feature
-    status: planned
-    goal: Prove selected-text capture and fast popup interaction on Windows without real ML inference.
+    status: verifying
+    goal: Ship the first Windows selected-text -> popup -> fake-translation path as an alpha-quality vertical slice.
     group:
       type: iteration
       id: "001"
@@ -12,28 +12,32 @@ active_work:
         - global shortcut and selected-text capture
         - popup behavior and monitor-aware positioning
         - deterministic fake translation
-        - compatibility latency memory CPU and privacy measurement
+        - minimum manual Windows smoke evidence needed for alpha confidence
       excluded:
         - real inference worker
         - OCR
         - all-language routing
         - settings application
         - installer or package-manager release work
+        - exhaustive compatibility matrix
+        - stable-grade performance certification
     acceptance:
-      - frontend and Rust quality gates pass
-      - representative selectable Windows applications are checked
+      - mandatory frontend and Rust CI gates pass on the final head
+      - happy-path manual smoke passes on representative selectable Windows applications
       - stale requests cannot overwrite newer state
-      - clipboard fallback preserves or safely refuses unsupported existing clipboard data
-      - popup placement is verified across relevant DPI and monitor conditions
+      - clipboard fallback preserves existing content or safely refuses unsupported restoration
       - no selected or translated text appears in logs
-      - latency idle memory idle CPU and compatibility evidence are recorded
+      - popup remains usable on the tested Windows display configuration
     artifacts:
       spec: null
       plan: .agents/plans/001-windows-interaction.md
       evidence: []
-    branch: null
-    pull_request: null
-blocked: []
+    branch: feat/iteration-001-windows-interaction
+    pull_request: "#3"
+blocked:
+  - id: windows-alpha-smoke
+    work: windows-interaction
+    reason: Final manual Windows alpha smoke evidence has not yet been recorded. Do not expand this blocker into exhaustive beta/stable compatibility or benchmark work.
 recently_completed:
   - id: engineering-foundation
     kind: foundation
@@ -57,16 +61,14 @@ recently_completed:
       spec: .agents/PROJECT.md
       plan: null
       evidence:
-        - .agents/PROJECT.md
         - .agents/DESIGN.md
         - .agents/RULES.md
         - .agents/SDLC.md
     branch: null
     pull_request: null
 open_decisions:
-  - whether a pre-created hidden WebView meets the measured idle-memory and popup-latency budget
   - which Windows applications require clipboard fallback rather than UI Automation
   - first production-quality translation model and language direction
   - direct CJK-to-Indonesian models versus English-pivot routes
-  - final release latency and resource budgets
+  - final beta/stable latency and resource budgets
   - Windows code-signing provider and certificate strategy
