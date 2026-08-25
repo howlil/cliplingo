@@ -1,61 +1,44 @@
-# `.agents` Engineering Context
+# `.agents` Project Engineering Context
 
-This directory contains project-local engineering context retained during the Devland migration. It is intentionally small enough to read selectively.
+`.devland/project.yaml` and `.devland/state.yaml` are canonical. `.agents` contains project-specific implementation guidance only. Read selectively; do not load the whole directory by default.
 
-Canonical project facts and project-specific delivery constraints live in `.devland/project.yaml`. Current approved work state lives in `.devland/state.yaml`. Root `AGENTS.md` is the routing entry point.
+## Required components
 
-The documents here provide deeper project-specific design, implementation, release, and historical context. Where universal process text is duplicated, Devland core is the baseline; deliberate ClipLingo-specific constraints recorded in `.devland/project.yaml` take precedence for this repository and are mirrored in `RULES.md` / `SDLC.md` for implementation clarity.
-
-## Core documents
-
-| File | Purpose |
+| Concern | Source |
 |---|---|
-| `PROJECT.md` | Legacy/deeper product description, scope, priorities, non-goals |
-| `DESIGN.md` | Runtime architecture, boundaries, constraints, data flow |
-| `RULES.md` | ClipLingo-specific engineering and risk constraints |
-| `CODE_PATTERNS.md` | Preferred code patterns and anti-patterns |
-| `SDLC.md` | TDD, fast verified delivery, Git, CI, review, risk-based verification, definition of done |
-| `RELEASE.md` | Versioning, signing, packaging, updater, distribution |
-| `DOCUMENTATION_PLAN.md` | What documentation exists and when to update it |
-| `ITERATION_STATE.md` | Legacy iteration context; canonical active work is `.devland/state.yaml` |
+| System design / boundaries | `DESIGN.md` |
+| Requirement slicing / iteration | `REQUIREMENTS.md` |
+| Engineering rules / legacy policy | `RULES.md` |
+| Code patterns / anti-patterns | `CODE_PATTERNS.md` |
+| Git / CI / testing / Definition of Done | `SDLC.md` |
+| Release strategy | `RELEASE.md` |
+| Delivery health | `METRICS.md` |
+| Task-specific execution checklists | `skills/*/SKILL.md` |
 
-## Delivery posture
-
-ClipLingo optimizes for **fast verified delivery**:
+## Operating principle
 
 ```text
-problem/evidence
-  -> acceptance behavior
-  -> RED
-  -> GREEN
-  -> REFACTOR
-  -> focused verification
-  -> broader risk-based verification
-  -> PR / CI
-  -> merge
-  -> observe / measure
+small requirement
+  -> smallest vertical slice
+  -> focused implementation + test
+  -> fast CI
+  -> merge to master
+  -> observe
+  -> next slice
 ```
 
-Keep vertical slices small, WIP low, and feedback fast. Native Windows behavior, IPC/process lifecycle, privacy/security, updater/release, real-model integration, concurrency, and performance-sensitive changes require broader evidence than low-risk local changes.
+Iterations group intent; they do **not** create long-lived branches or all-or-nothing merge gates. Stable-grade compatibility, performance, signing, and release evidence belongs at the maturity stage that actually needs it.
 
-Delivery health is evaluated using cycle time, PR lead time, CI feedback time, change failures, escaped defects, rework, flaky tests, WIP age, and release frequency when measurable. Commit count, branch count, PR count, and lines changed are not productivity KPIs.
+## Legacy context
+
+`PROJECT.md`, `ITERATION_STATE.md`, `DOCUMENTATION_PLAN.md`, and large historical plans are not canonical process inputs. Keep historical artifacts only when they preserve useful rationale. New agents must not treat them as blockers or duplicate state from them.
+
+When a historical document becomes misleading and its useful decisions already exist in canonical/current docs, delete it rather than maintaining two truths.
 
 ## Skills
 
-Skills are focused checklists for work in a particular area. They are not permission to introduce new architecture.
+Load only skills relevant to the touched boundary. Skills guide execution; they do not authorize new architecture or dependencies.
 
-- `skills/principal-engineering/SKILL.md`
-- `skills/tauri/SKILL.md`
-- `skills/rust/SKILL.md`
-- `skills/svelte/SKILL.md`
-- `skills/windows-desktop/SKILL.md`
-- `skills/backend-core/SKILL.md`
-- `skills/translation-inference/SKILL.md`
-- `skills/tdd/SKILL.md`
-- `skills/performance/SKILL.md`
-- `skills/security-privacy/SKILL.md`
-- `skills/release-engineering/SKILL.md`
+## Maintenance
 
-## Maintenance rule
-
-Documentation must follow working software. Do not create speculative documents for subsystems that do not exist. Update canonical `.devland` state/facts when they change; update the relevant `.agents` document in the same task when deeper architecture, implementation, release, or compatibility guidance changes.
+Prefer fewer durable documents over duplicated policy. Working software and repository evidence lead; documentation follows observable behavior.
