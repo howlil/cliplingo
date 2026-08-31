@@ -1,19 +1,35 @@
 # Lean SDLC and Git Strategy
 
+`AGENT_FLOW.md` defines the canonical engineering lifecycle and authority model. This file defines the repository mechanics used to execute that lifecycle.
+
 ## Flow
 
 ```text
-problem
-  -> acceptance example
+USER INTENT
+  -> UNDERSTAND
+  -> BOUND
+  -> SPECIFY
+  -> DESIGN
+  -> IMPLEMENT
+  -> VERIFY
+  -> QUALITY GATES
+  -> RELEASE READY
+  -> STOP
+```
+
+For a small, reversible, unambiguous task, stages may be fused into one tight loop:
+
+```text
+problem + acceptance
   -> smallest vertical slice
   -> implement + focused test
   -> focused CI
   -> review/fix on same PR
+  -> release ready
   -> squash merge to master
-  -> observe
 ```
 
-The unit of delivery is a **small behavior**, not an iteration.
+The unit of delivery is a **small behavior**, not an iteration. Do not turn lifecycle stages into mandatory documents or meetings.
 
 ## WIP and scope
 
@@ -22,6 +38,7 @@ The unit of delivery is a **small behavior**, not an iteration.
 - If a task contains independently useful behaviors, split before adding more code.
 - Do not start Iteration N+1 work while a merge-ready slice from Iteration N sits unintegrated.
 - Iterations are labels/backlog groupings only.
+- Do not mix unrelated policy/docs/refactor work into an active feature PR.
 
 ## Git
 
@@ -38,12 +55,21 @@ The unit of delivery is a **small behavior**, not an iteration.
 For ordinary work, write only:
 - problem;
 - user-visible behavior;
-- acceptance example;
+- acceptance example/criteria;
 - non-goals;
 - risk level;
-- cheapest useful verification.
+- cheapest useful verification;
+- rollback/revert path.
 
-Use `.agents/REQUIREMENTS.md`. A deeper plan is justified only by uncertainty or high blast radius.
+Use `.agents/REQUIREMENTS.md`. A deeper plan is justified only by ambiguity, uncertainty, or high blast radius.
+
+Acceptance criteria and observable product behavior belong to the user/product authority. The agent may clarify or propose them, but must not silently redefine them to make implementation easier.
+
+## Design before coding
+
+Prefer the smallest design that stays inside approved boundaries. Reuse repository patterns before introducing a new component or abstraction.
+
+If implementation requires a public contract change, security boundary change, material architecture change, destructive migration, or a new ownership model for state/data, stop and surface the decision before coding.
 
 ## Testing and verification
 
@@ -65,6 +91,8 @@ Native Win32/UIA/clipboard, concurrency, privacy/security, process/IPC, real mod
 - full mandatory CI before merge.
 
 Do not turn one high-risk slice into an exhaustive product certification. Alpha proves the changed core path; beta broadens compatibility/reliability/performance; stable enforces supported-platform and release guarantees.
+
+Manual/native evidence is valid engineering evidence when automation cannot exercise the real boundary. Do not replace it with inspection-only claims.
 
 ## CI design
 
@@ -95,21 +123,32 @@ A PR description should answer:
 
 Avoid architecture essays and exhaustive checklists unless the change genuinely needs them.
 
-## Definition of Done
+Review the actual diff against acceptance and approved boundaries. Do not use review to introduce unrelated cleanup or scope expansion.
 
-A slice is done when:
-- its acceptance example works;
+## Release Ready / Definition of Done
+
+A slice is release ready when:
+- its acceptance example/criteria work;
 - required focused tests/checks are green;
 - CI appropriate to the changed risk is green;
+- required native/manual evidence exists for changed native behavior;
 - no known blocker prevents this slice from being useful at its intended maturity;
 - docs/state changed only where truth changed;
-- it is merged to `master`.
+- rollback/revert is understood.
+
+For repository integration, normal work is done when the release-ready slice is merged to `master`.
 
 Beta/stable hardening that is not necessary for the current alpha slice becomes explicit follow-up work, not an invisible merge blocker.
+
+After release ready, stop. Do not automatically continue into cleanup, the next slice, or future hardening.
 
 ## Failure/recovery
 
 Prefer `git revert`/a corrective patch over prolonged branch repair after a bad merge. Keep changes small enough that rollback is cheap.
+
+## Retrospective
+
+Do not run a retrospective after every trivial change. When required by `AGENT_FLOW.md`, use repository evidence to identify the dominant delivery bottleneck and choose one small improvement to verify in subsequent work.
 
 ## Metrics
 
