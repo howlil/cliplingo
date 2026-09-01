@@ -5,6 +5,9 @@ app/dist/
 # Rust
 app/src-tauri/target/
 
+# Generated model packs
+models/build/
+
 # Editors / OS
 .vscode/
 .idea/
