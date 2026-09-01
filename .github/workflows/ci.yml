@@ -55,6 +55,15 @@ jobs:
           if-no-files-found: ignore
       - name: Rust tests
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --all
+      - name: Configure deterministic C++ worker
+        run: cmake -S ../worker -B ../worker/build -A x64
+      - name: Build deterministic C++ worker
+        run: cmake --build ../worker/build --config Release
+      - name: Verify Rust to C++ worker boundary
+        shell: pwsh
+        env:
+          CLIPLINGO_WORKER_EXE: ${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test worker_cpp_integration -- --ignored --nocapture
       - name: Validate acceptance collector
         if: github.event_name == 'pull_request'
         shell: pwsh
