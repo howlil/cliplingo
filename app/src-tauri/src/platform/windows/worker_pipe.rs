@@ -139,7 +139,10 @@ mod tests {
         };
         let mut stream = ScriptedStream::with_response(&response);
 
-        assert_eq!(translate_on_stream(&mut stream, 7, "hello").unwrap(), response);
+        assert_eq!(
+            translate_on_stream(&mut stream, 7, "hello").unwrap(),
+            response
+        );
     }
 
     #[test]
