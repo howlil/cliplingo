@@ -1,8 +1,10 @@
 schema: devland.state/v0
-active_work:
+active_work: []
+blocked: []
+recently_completed:
   - id: worker-supervisor-lifecycle
     kind: feature
-    status: verifying
+    status: done
     goal: Establish deterministic WorkerSupervisor lifecycle transitions and a bounded automatic restart budget before native process transport is introduced.
     group:
       type: milestone
@@ -30,15 +32,15 @@ active_work:
       - automatic restarts cannot exceed configured budget
       - reaching Ready does not silently create an infinite restart cycle
       - intentional stop returns to Stopped and rearms the restart budget
-      - existing automated CI remains green
+      - CI run 61 passed all automated gates on the final code head
     artifacts:
       spec: null
       plan: .agents/plans/002-isolated-inference-boundary-alpha.md
-      evidence: []
+      evidence:
+        - "CI run #61: 33529024502"
+        - "pull request: #11"
     branch: feat/worker-supervisor-lifecycle
     pull_request: "#11"
-blocked: []
-recently_completed:
   - id: worker-framed-io
     kind: feature
     status: done
