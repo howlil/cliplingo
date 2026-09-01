@@ -1,8 +1,10 @@
 schema: devland.state/v0
-active_work:
+active_work: []
+blocked: []
+recently_completed:
   - id: deterministic-cpp-worker
     kind: feature
-    status: verifying
+    status: done
     goal: Build a minimal persistent C++ Named Pipe worker implementing protocol v1 and prove Rust to C++ deterministic translation round-trip in Windows CI.
     group:
       type: milestone
@@ -30,15 +32,15 @@ active_work:
       - Unicode UTF-8 payload bytes survive the Rust to C++ to Rust round-trip
       - worker process exits cleanly after the client disconnects
       - normal worker operation does not log selected or translated text
-      - existing automated frontend and Rust gates remain green
+      - CI run 68 passed all automated frontend Rust C++ and packaging gates
     artifacts:
       spec: docs/protocol/worker-v1.md
       plan: .agents/plans/002-isolated-inference-boundary-alpha.md
-      evidence: []
-    branch: feat/deterministic-cpp-worker
-    pull_request: null
-blocked: []
-recently_completed:
+      evidence:
+        - "CI run #68: 33531612566"
+        - "pull request: #13"
+    branch: null
+    pull_request: "#13"
   - id: worker-named-pipe-client
     kind: feature
     status: done
