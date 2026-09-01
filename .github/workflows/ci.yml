@@ -39,6 +39,8 @@ jobs:
         run: npm test
       - name: Frontend build
         run: npm run build
+      - name: Validate offline model pack plan
+        run: python ../scripts/models/build_opus_pack.py --catalog ../models/catalog/ja-id-opus-v1.json --output ../models/build/ja-id-opus-v1 --dry-run
       - name: Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - name: Rust clippy
