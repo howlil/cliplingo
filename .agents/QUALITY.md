@@ -75,11 +75,9 @@ On `master`, Windows CI currently performs:
 3. Rust format/Clippy/tests;
 4. C++ worker configure/build;
 5. Rust-to-C++ worker integration;
-6. worker-backed translator integration;
-7. PR acceptance-script parse validation;
-8. app build and Windows acceptance-package staging/upload for PRs.
+6. worker-backed translator integration.
 
-A branch may add a focused gate for its new risk. `CURRENT_ITERATION.md` records branch-specific observed evidence and failures.
+Normal PR CI does not build or upload a manual acceptance package. A release or bounded native slice may add focused evidence when a behavior genuinely cannot be verified by the normal automated gates.
 
 ## Native/manual evidence
 
