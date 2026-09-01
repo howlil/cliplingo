@@ -219,6 +219,9 @@ mod tests {
     #[test]
     fn default_worker_path_is_sibling_executable() {
         let path = default_worker_executable();
-        assert_eq!(path.file_name().and_then(|value| value.to_str()), Some(WORKER_EXE_NAME));
+        assert_eq!(
+            path.file_name().and_then(|value| value.to_str()),
+            Some(WORKER_EXE_NAME)
+        );
     }
 }
