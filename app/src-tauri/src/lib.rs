@@ -6,7 +6,7 @@ pub mod presentation;
 use std::sync::Arc;
 use std::time::Instant;
 
-use application::{FakeTranslator, InteractionCoordinator};
+use application::{InteractionCoordinator, WorkerTranslator};
 use core::PopupViewModel;
 use platform::windows::{cursor_anchor, WindowsSelectionProvider, TRANSLATE_SHORTCUT};
 use presentation::TauriPopupPort;
@@ -55,7 +55,7 @@ pub fn run() {
             let popup = Arc::new(TauriPopupPort::new(app.handle().clone()));
             let coordinator = InteractionCoordinator::start(
                 Box::new(WindowsSelectionProvider::new()),
-                Box::new(FakeTranslator),
+                Box::new(WorkerTranslator::new_default()),
                 popup,
             );
             app.manage(Arc::clone(&coordinator));
