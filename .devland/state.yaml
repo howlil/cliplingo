@@ -1,5 +1,42 @@
 schema: devland.state/v0
-active_work: []
+active_work:
+  - id: deterministic-cpp-worker
+    kind: feature
+    status: verifying
+    goal: Build a minimal persistent C++ Named Pipe worker implementing protocol v1 and prove Rust to C++ deterministic translation round-trip in Windows CI.
+    group:
+      type: milestone
+      id: isolated-inference-boundary-alpha
+    scope:
+      allowed:
+        - minimal CMake C++ worker executable
+        - local Windows Named Pipe server for protocol v1
+        - persistent request loop for one client connection
+        - deterministic fake translation response
+        - request ID and UTF-8 payload preservation
+        - automated Rust client to C++ worker integration test
+        - Windows CI worker build and round-trip gate
+      excluded:
+        - CTranslate2 or SentencePiece integration
+        - production model selection
+        - shell process supervision integration
+        - popup workflow integration
+        - installer or package-manager release work
+        - manual Windows testing
+    acceptance:
+      - CI builds cliplingo-worker.exe with the repository Windows runner toolchain
+      - C++ worker accepts protocol v1 translate frames over the fixed local pipe
+      - two sequential requests on one connection return correlated deterministic responses
+      - Unicode UTF-8 payload bytes survive the Rust to C++ to Rust round-trip
+      - worker process exits cleanly after the client disconnects
+      - normal worker operation does not log selected or translated text
+      - existing automated frontend and Rust gates remain green
+    artifacts:
+      spec: docs/protocol/worker-v1.md
+      plan: .agents/plans/002-isolated-inference-boundary-alpha.md
+      evidence: []
+    branch: feat/deterministic-cpp-worker
+    pull_request: null
 blocked: []
 recently_completed:
   - id: worker-named-pipe-client
@@ -39,6 +76,7 @@ recently_completed:
       evidence:
         - "CI run #65: 33531040936"
         - "pull request: #12"
+        - "merge commit: 2fbbea6dda5ebc2468d7c62191cfe2fef37c23e7"
     branch: null
     pull_request: "#12"
   - id: worker-supervisor-lifecycle
