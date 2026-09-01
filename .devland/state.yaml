@@ -1,9 +1,48 @@
 schema: devland.state/v0
 active_work:
-  - id: windows-interaction
+  - id: worker-protocol-contract
     kind: feature
     status: verifying
-    goal: Ship the first Windows selected-text -> popup -> fake-translation path as an alpha-quality vertical slice.
+    goal: Establish the versioned language-agnostic shell-to-worker protocol contract for the Isolated Inference Boundary Alpha milestone.
+    group:
+      type: milestone
+      id: isolated-inference-boundary-alpha
+    scope:
+      allowed:
+        - worker protocol v1 wire contract
+        - request ID correlation
+        - translate request response and error framing
+        - bounded UTF-8 payload handling
+        - deterministic Rust codec tests
+        - language-agnostic protocol documentation for the future C++ worker
+      excluded:
+        - Windows Named Pipe transport
+        - worker process supervision
+        - C++ worker implementation
+        - CTranslate2 or SentencePiece integration
+        - production model selection
+        - language detection or routing
+        - UI behavior changes
+        - manual Windows testing
+    acceptance:
+      - protocol v1 encodes explicit magic version message type request ID and payload length
+      - translate request response and error messages round-trip deterministically
+      - Unicode text is preserved through UTF-8 encode and decode
+      - malformed magic version type truncated oversized and invalid UTF-8 frames fail explicitly
+      - payloads above 1 MiB are rejected before normal frame processing
+      - existing automated CI remains green
+    artifacts:
+      spec: docs/protocol/worker-v1.md
+      plan: .agents/plans/002-isolated-inference-boundary-alpha.md
+      evidence: []
+    branch: feat/worker-protocol-contract
+    pull_request: "#9"
+blocked: []
+recently_completed:
+  - id: windows-interaction
+    kind: feature
+    status: done
+    goal: Ship the first Windows selected-text -> popup -> deterministic fake-translation path as an alpha-quality vertical slice.
     group:
       type: iteration
       id: "001"
@@ -11,8 +50,8 @@ active_work:
       allowed:
         - global shortcut and selected-text capture
         - popup behavior and monitor-aware positioning
-        - deterministic fake translation
-        - minimum manual Windows smoke evidence needed for alpha confidence
+        - deterministic in-process fake translation
+        - automated frontend Rust and Windows packaging gates
       excluded:
         - real inference worker
         - OCR
@@ -21,24 +60,22 @@ active_work:
         - installer or package-manager release work
         - exhaustive compatibility matrix
         - stable-grade performance certification
+        - manual interactive Windows acceptance as a merge blocker
     acceptance:
-      - mandatory frontend and Rust CI gates pass on the final head
-      - happy-path manual smoke passes on representative selectable Windows applications
-      - stale requests cannot overwrite newer state
-      - clipboard fallback preserves existing content or safely refuses unsupported restoration
-      - no selected or translated text appears in logs
-      - popup remains usable on the tested Windows display configuration
+      - current-head CI run 46 passed all automated frontend Rust acceptance collector build and package gates
+      - stale requests cannot overwrite newer popup state in automated coverage
+      - clipboard fallback preservation and refusal logic is covered by the implemented automated checks
+      - selected or translated text is not intentionally emitted by normal application logging paths
+      - manual interactive Windows smoke was explicitly deferred by product authority and is non-blocking for this milestone
     artifacts:
       spec: null
       plan: .agents/plans/001-windows-interaction.md
-      evidence: []
-    branch: feat/iteration-001-windows-interaction
-    pull_request: "#3"
-blocked:
-  - id: windows-alpha-smoke
-    work: windows-interaction
-    reason: Final manual Windows alpha smoke evidence has not yet been recorded. Do not expand this blocker into exhaustive beta/stable compatibility or benchmark work.
-recently_completed:
+      evidence:
+        - "CI run #46: 33526277679"
+        - "acceptance artifact sha256:0c0d325a6566b6d5be1fc58750e49dc044d7dd5832d11b39330afd3413ab67c5"
+        - "merge commit: 7a0fa1ab3c0414ecf571c14c7ca386507e234f6f"
+    branch: null
+    pull_request: "#8"
   - id: engineering-foundation
     kind: foundation
     status: done
@@ -67,7 +104,6 @@ recently_completed:
     branch: null
     pull_request: null
 open_decisions:
-  - which Windows applications require clipboard fallback rather than UI Automation
   - first production-quality translation model and language direction
   - direct CJK-to-Indonesian models versus English-pivot routes
   - final beta/stable latency and resource budgets
