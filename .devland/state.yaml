@@ -1,5 +1,45 @@
 schema: devland.state/v0
-active_work: []
+active_work:
+  - id: worker-shell-integration
+    kind: feature
+    status: verifying
+    goal: Replace the in-process fake translator with a lazy worker-backed Translator using the isolated C++ worker boundary while preserving existing popup workflow contracts.
+    group:
+      type: milestone
+      id: isolated-inference-boundary-alpha
+    scope:
+      allowed:
+        - WorkerTranslator implementing the existing Translator port
+        - sibling cliplingo-worker.exe runtime contract
+        - lazy process start on first translation demand
+        - bounded startup connection retry
+        - one bounded automatic restart through WorkerLifecycle
+        - request ID generation and response mapping
+        - worker cleanup on drop or failure
+        - shell setup uses WorkerTranslator instead of FakeTranslator
+        - CI worker-backed translator integration
+        - stage worker as sibling in Windows acceptance artifact
+      excluded:
+        - CTranslate2 or SentencePiece integration
+        - production model or language selection
+        - language detection or routing
+        - installer signing or package-manager release work
+        - broad manual Windows testing
+    acceptance:
+      - application setup uses WorkerTranslator through the existing Translator port
+      - worker is started lazily and searched as sibling cliplingo-worker.exe by default
+      - missing spawn connect and pipe failures return TranslationError Failed without crashing the shell
+      - automatic restart attempts are bounded by WorkerLifecycle
+      - deterministic worker-backed translator passes two sequential Unicode translations in Windows CI
+      - worker and app executables are staged as siblings in the CI acceptance artifact
+      - existing popup latest-request-wins and automated frontend and Rust gates remain green
+      - no selected or translated text is intentionally emitted in normal logs
+    artifacts:
+      spec: null
+      plan: .agents/plans/002-isolated-inference-boundary-alpha.md
+      evidence: []
+    branch: feat/worker-shell-integration
+    pull_request: null
 blocked: []
 recently_completed:
   - id: deterministic-cpp-worker
@@ -39,6 +79,7 @@ recently_completed:
       evidence:
         - "CI run #68: 33531612566"
         - "pull request: #13"
+        - "merge commit: 9224007807af27823fcfed83581fb9b059d35798"
     branch: null
     pull_request: "#13"
   - id: worker-named-pipe-client
