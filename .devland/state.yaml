@@ -1,5 +1,42 @@
 schema: devland.state/v0
-active_work: []
+active_work:
+  - id: worker-supervisor-lifecycle
+    kind: feature
+    status: verifying
+    goal: Establish deterministic WorkerSupervisor lifecycle transitions and a bounded automatic restart budget before native process transport is introduced.
+    group:
+      type: milestone
+      id: isolated-inference-boundary-alpha
+    scope:
+      allowed:
+        - Stopped Starting Ready Busy Failed state model
+        - deterministic valid and invalid transitions
+        - bounded automatic restart attempts
+        - explicit intentional stop and restart-budget reset
+        - automated state-machine tests
+      excluded:
+        - process spawn or termination
+        - Windows Named Pipe APIs
+        - retry timing or backoff
+        - C++ worker implementation
+        - CTranslate2 or SentencePiece integration
+        - production model selection
+        - UI behavior changes
+        - manual Windows testing
+    acceptance:
+      - normal start ready busy ready lifecycle is deterministic
+      - invalid transitions fail without mutating state
+      - worker failure reaches Failed without crashing caller state
+      - automatic restarts cannot exceed configured budget
+      - reaching Ready does not silently create an infinite restart cycle
+      - intentional stop returns to Stopped and rearms the restart budget
+      - existing automated CI remains green
+    artifacts:
+      spec: null
+      plan: .agents/plans/002-isolated-inference-boundary-alpha.md
+      evidence: []
+    branch: feat/worker-supervisor-lifecycle
+    pull_request: "#11"
 blocked: []
 recently_completed:
   - id: worker-framed-io
@@ -37,7 +74,8 @@ recently_completed:
       evidence:
         - "CI run #57: 33528526787"
         - "pull request: #10"
-    branch: feat/worker-framed-io
+        - "merge commit: 7c925f0b7be1e2dcc17425c4b1ab754228c671f0"
+    branch: null
     pull_request: "#10"
   - id: worker-protocol-contract
     kind: feature
