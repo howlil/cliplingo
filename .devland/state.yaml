@@ -1,8 +1,10 @@
 schema: devland.state/v0
-active_work:
+active_work: []
+blocked: []
+recently_completed:
   - id: offline-model-pack-foundation
     kind: feature
-    status: implementing
+    status: done
     goal: Establish the first distributable offline translation model-pack contract and reproducible Japanese to Indonesian OPUS-MT conversion path.
     group:
       type: milestone
@@ -30,14 +32,16 @@ active_work:
       - generated pack layout preserves SentencePiece source and target models per stage
       - normal Windows CI validates the build plan without downloading model weights
       - generated model binaries are ignored by Git
+      - CI run 75 passed all automated model-pack and regression gates
     artifacts:
       spec: models/catalog/ja-id-opus-v1.json
       plan: .agents/plans/003-real-offline-translation-alpha.md
-      evidence: []
-    branch: feat/offline-model-pack-foundation
-    pull_request: null
-blocked: []
-recently_completed:
+      evidence:
+        - "CI run #75: 33538594417"
+        - "pull request: #15"
+        - "merge commit: e87a0dd1b2a6286dbc6e73bdc1db45bcc30194e3"
+    branch: null
+    pull_request: "#15"
   - id: worker-shell-integration
     kind: feature
     status: done
