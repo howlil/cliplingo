@@ -1,0 +1,15 @@
+# Frontend
+app/node_modules/
+app/dist/
+
+# Rust
+app/src-tauri/target/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs / local artifacts
+*.log
