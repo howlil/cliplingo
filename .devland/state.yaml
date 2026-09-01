@@ -1,8 +1,10 @@
 schema: devland.state/v0
-active_work:
+active_work: []
+blocked: []
+recently_completed:
   - id: worker-shell-integration
     kind: feature
-    status: verifying
+    status: done
     goal: Replace the in-process fake translator with a lazy worker-backed Translator using the isolated C++ worker boundary while preserving existing popup workflow contracts.
     group:
       type: milestone
@@ -34,14 +36,16 @@ active_work:
       - worker and app executables are staged as siblings in the CI acceptance artifact
       - existing popup latest-request-wins and automated frontend and Rust gates remain green
       - no selected or translated text is intentionally emitted in normal logs
+      - CI run 72 passed all automated milestone gates on the final code head
     artifacts:
       spec: null
       plan: .agents/plans/002-isolated-inference-boundary-alpha.md
-      evidence: []
-    branch: feat/worker-shell-integration
-    pull_request: null
-blocked: []
-recently_completed:
+      evidence:
+        - "CI run #72: 33532658962"
+        - "pull request: #14"
+        - "acceptance artifact sha256:f2d1bae03c78194a42e9611fba3e86d62f7dd4bcab6fbaecb8eaebadf48e313e"
+    branch: null
+    pull_request: "#14"
   - id: deterministic-cpp-worker
     kind: feature
     status: done
