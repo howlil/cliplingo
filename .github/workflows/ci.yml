@@ -64,6 +64,11 @@ jobs:
         env:
           CLIPLINGO_WORKER_EXE: ${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test worker_cpp_integration -- --ignored --nocapture
+      - name: Verify worker-backed translator
+        shell: pwsh
+        env:
+          CLIPLINGO_WORKER_EXE: ${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test worker_translator_integration -- --ignored --nocapture
       - name: Validate acceptance collector
         if: github.event_name == 'pull_request'
         shell: pwsh
@@ -92,6 +97,7 @@ jobs:
           Remove-Item $package -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Path $package | Out-Null
           Copy-Item "src-tauri/target/debug/cliplingo.exe" "$package/cliplingo.exe"
+          Copy-Item "../worker/build/Release/cliplingo-worker.exe" "$package/cliplingo-worker.exe"
           Copy-Item "../scripts/windows/iteration-001-acceptance.ps1" "$package/acceptance.ps1"
           @"
           source_head_sha=$env:SOURCE_HEAD_SHA
