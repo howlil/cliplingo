@@ -4,6 +4,8 @@
 
 Maximize verified product throughput with the least process and architecture necessary for the current maturity stage.
 
+`AGENT_FLOW.md` governs authority, lifecycle, scope, stop conditions, Feature Compass, and retrospective behavior. These rules govern implementation quality inside those boundaries.
+
 ## Core rules
 
 - **KISS:** prefer the smallest design that is clear, testable, and reversible.
@@ -14,6 +16,23 @@ Maximize verified product throughput with the least process and architecture nec
 - **Low WIP:** finish and merge before starting unrelated implementation.
 - **Trunk-centered:** `master` is the integration truth. No permanent develop/iteration branches.
 - **Risk-based verification:** match evidence to blast radius and maturity; do not block alpha work on stable-grade evidence.
+- **Minimum change:** modify only what is required for the accepted slice and directly necessary local cleanup.
+
+## Product and architecture authority
+
+The agent may choose implementation details inside approved boundaries. It must not silently change product behavior, scope, acceptance criteria, public contracts, data ownership, security boundaries, or major architecture.
+
+For design choices, prefer:
+
+```text
+reuse existing pattern
+  -> extend existing component
+  -> small local abstraction
+  -> new component
+  -> architecture change
+```
+
+Use the first option that satisfies the requirement cleanly. Architecture changes and other material boundary decisions require explicit user approval before implementation.
 
 ## System design
 
@@ -32,10 +51,11 @@ Prefer direct function/module calls inside one process until isolation is justif
 - Optimize for readability of the current behavior, not architectural impressiveness.
 - Prefer pure functions for decisions and state transitions; isolate OS side effects.
 - Keep modules cohesive and dependencies one-directional.
-- New dependency requires a concrete complexity/risk reduction.
+- New dependency requires a concrete complexity/risk reduction and must not change a material boundary without approval.
 - Bug fixes add the smallest useful regression test.
 - Refactor only touched code or code directly blocking the change.
 - Comments explain non-obvious why/trade-offs, not obvious syntax.
+- Follow repository conventions before introducing a new local pattern.
 
 ## Legacy deletion policy
 
@@ -59,7 +79,7 @@ Use the cheapest evidence that detects the likely regression:
 - native Windows behavior: targeted executable/manual smoke where automation is impractical;
 - release path: release-specific smoke only when releasing.
 
-RED -> GREEN -> REFACTOR is preferred for deterministic behavior. Do not create low-value tests solely to satisfy ceremony.
+RED -> GREEN -> REFACTOR is preferred for deterministic behavior and is required for executable behavior changes where practical under current project constraints. Do not create low-value tests solely to satisfy ceremony.
 
 Do not weaken valid regression tests to obtain green CI. Treat flakes and slow feedback as delivery defects.
 
@@ -72,13 +92,15 @@ These are not maturity-dependent shortcuts:
 - never commit secrets/signing keys;
 - verify downloaded model/update artifacts before use.
 
+A change to these boundaries is a stop condition, not an implementation detail.
+
 ## Performance
 
 Measure before optimizing. Optimize user-visible p95 latency and idle resource use when those become actual bottlenecks. Avoid benchmark gates for unrelated alpha slices.
 
 ## Decision rule
 
-When two solutions are correct, choose the one with:
+When two solutions are correct within approved boundaries, choose the one with:
 1. fewer moving parts;
 2. smaller blast radius;
 3. shorter feedback loop;
