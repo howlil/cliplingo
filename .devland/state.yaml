@@ -2,6 +2,45 @@ schema: devland.state/v0
 active_work: []
 blocked: []
 recently_completed:
+  - id: worker-named-pipe-client
+    kind: feature
+    status: done
+    goal: Add the Windows Named Pipe client adapter that carries protocol v1 translate frames without wiring it into the popup workflow yet.
+    group:
+      type: milestone
+      id: isolated-inference-boundary-alpha
+    scope:
+      allowed:
+        - fixed local worker Named Pipe endpoint
+        - open read write pipe client using the Windows file interface
+        - reuse bounded protocol v1 framed I/O
+        - request ID correlation validation
+        - explicit connect transport and unexpected-response errors
+        - deterministic automated adapter tests
+      excluded:
+        - worker process spawn or termination
+        - retry timing or backoff
+        - C++ worker implementation
+        - CTranslate2 or SentencePiece integration
+        - production model selection
+        - popup workflow integration
+        - manual Windows testing
+    acceptance:
+      - default endpoint is a local Windows Named Pipe path dedicated to worker protocol v1
+      - a translate request is framed through the existing protocol implementation
+      - correlated translate and worker-error responses are accepted
+      - mismatched request IDs and request frames received as responses are rejected
+      - connection and framed transport failures remain explicit and do not include text payloads
+      - no new dependency is required for the client adapter
+      - CI run 65 passed all automated gates on the final code head
+    artifacts:
+      spec: docs/protocol/worker-v1.md
+      plan: .agents/plans/002-isolated-inference-boundary-alpha.md
+      evidence:
+        - "CI run #65: 33531040936"
+        - "pull request: #12"
+    branch: null
+    pull_request: "#12"
   - id: worker-supervisor-lifecycle
     kind: feature
     status: done
@@ -39,7 +78,8 @@ recently_completed:
       evidence:
         - "CI run #61: 33529024502"
         - "pull request: #11"
-    branch: feat/worker-supervisor-lifecycle
+        - "merge commit: b80f5214ca827fe27bebef8a16fc754c721d019b"
+    branch: null
     pull_request: "#11"
   - id: worker-framed-io
     kind: feature
