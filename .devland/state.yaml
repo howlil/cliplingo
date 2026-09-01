@@ -1,8 +1,10 @@
 schema: devland.state/v0
-active_work:
+active_work: []
+blocked: []
+recently_completed:
   - id: worker-protocol-contract
     kind: feature
-    status: verifying
+    status: done
     goal: Establish the versioned language-agnostic shell-to-worker protocol contract for the Isolated Inference Boundary Alpha milestone.
     group:
       type: milestone
@@ -30,15 +32,15 @@ active_work:
       - Unicode text is preserved through UTF-8 encode and decode
       - malformed magic version type truncated oversized and invalid UTF-8 frames fail explicitly
       - payloads above 1 MiB are rejected before normal frame processing
-      - existing automated CI remains green
+      - CI run 52 passed all automated gates on the final slice head
     artifacts:
       spec: docs/protocol/worker-v1.md
       plan: .agents/plans/002-isolated-inference-boundary-alpha.md
-      evidence: []
+      evidence:
+        - "CI run #52: 33527535215"
+        - "pull request: #9"
     branch: feat/worker-protocol-contract
     pull_request: "#9"
-blocked: []
-recently_completed:
   - id: windows-interaction
     kind: feature
     status: done
