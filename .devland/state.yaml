@@ -1,8 +1,10 @@
 schema: devland.state/v0
-active_work:
+active_work: []
+blocked: []
+recently_completed:
   - id: worker-named-pipe-client
     kind: feature
-    status: verifying
+    status: done
     goal: Add the Windows Named Pipe client adapter that carries protocol v1 translate frames without wiring it into the popup workflow yet.
     group:
       type: milestone
@@ -30,15 +32,15 @@ active_work:
       - mismatched request IDs and request frames received as responses are rejected
       - connection and framed transport failures remain explicit and do not include text payloads
       - no new dependency is required for the client adapter
-      - existing automated CI remains green
+      - CI run 65 passed all automated gates on the final code head
     artifacts:
       spec: docs/protocol/worker-v1.md
       plan: .agents/plans/002-isolated-inference-boundary-alpha.md
-      evidence: []
-    branch: feat/worker-named-pipe-client
-    pull_request: null
-blocked: []
-recently_completed:
+      evidence:
+        - "CI run #65: 33531040936"
+        - "pull request: #12"
+    branch: null
+    pull_request: "#12"
   - id: worker-supervisor-lifecycle
     kind: feature
     status: done
