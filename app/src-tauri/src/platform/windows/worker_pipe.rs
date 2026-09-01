@@ -1,9 +1,7 @@
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 
-use crate::core::{
-    read_worker_message, write_worker_message, WorkerIoError, WorkerMessage,
-};
+use crate::core::{read_worker_message, write_worker_message, WorkerIoError, WorkerMessage};
 
 pub const WORKER_PIPE_PATH: &str = r"\\.\pipe\cliplingo-worker-v1";
 
