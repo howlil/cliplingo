@@ -1,62 +1,36 @@
 # Code Patterns
 
-Patterns here are defaults, not a demand for ceremony.
+This file owns ClipLingo-specific implementation conventions that are expensive or error-prone to reconstruct from individual files.
 
-## 1. Boundary-first traits, concrete internals
+## Boundary-first ports, concrete internals
 
-Use traits where there is a real external/volatile boundary:
+Use traits only at real external or replacement-worthy seams such as selection capture and translation execution. Internal helpers/services remain concrete until substitution is actually needed.
 
-```rust
-pub trait SelectionProvider {
-    fn capture(&self) -> Result<Selection, SelectionError>;
-}
-
-pub trait Translator {
-    fn translate(&self, request: TranslationRequest)
-        -> Result<Translation, TranslationError>;
-}
-```
-
-Good candidates: Windows selection provider, worker translator client, model catalog/download source.
-
-Do **not** create traits for every service, repository, helper, formatter, or state object. Concrete internal types are preferred until substitution is required.
-
-## 2. Use-case owns workflow
-
-Keep one cohesive use case rather than micro-use-cases:
+Current meaningful seams include:
 
 ```text
-TranslateSelection
-  capture
-  normalize
-  detect
-  resolve route
-  translate
-  present
+application core -> SelectionProvider -> Windows implementation
+application core -> Translator -> WorkerTranslator -> C++ worker
+Svelte -> narrow Tauri commands/view models -> Rust core
 ```
 
-Do not split this into `GetTextUseCase`, `DetectLanguageUseCase`, `LoadModelUseCase`, etc. unless independent reuse emerges.
+Do not add parallel implementations merely to prove replaceability.
 
-## 3. Explicit domain errors
+## Workflow ownership
 
-Prefer actionable enums over stringly errors:
+Keep the selected-text workflow cohesive. `InteractionCoordinator`/application workflow owns orchestration rather than a chain of tiny service/use-case types.
+
+Conceptually:
 
 ```text
-NoSelection
-SelectionUnsupported
-ClipboardUnavailable
-LanguageUnknown
-RouteUnavailable
-ModelMissing
-ModelCorrupt
-WorkerUnavailable
-WorkerCrashed
-TranslationTimeout
+capture -> normalize/prepare -> translate -> present
 ```
 
-Map them to user-facing messages only at the presentation boundary.
+As language routing/model management grows, keep those decisions in Rust application/core ownership rather than Tauri or Svelte.
 
-## 4. State machines over boolean combinations
+## Explicit state machines
+
+Prefer explicit states over boolean combinations.
 
 Popup:
 
@@ -72,104 +46,65 @@ Stopped -> Starting -> Ready <-> Busy
                      \-> Failed
 ```
 
-Avoid combinations such as `loading=true`, `ready=true`, `error=false` that can represent impossible states.
+Invalid transitions should fail explicitly without silently mutating state.
 
-## 5. Latest request wins
+## Latest request wins
 
-Every interactive request has an identity. When request `N+1` becomes current, results from `N` are ignored. Keep at most one active request and one latest pending request if cancellation is not immediately possible.
+Interactive requests carry identity. Once request `N+1` is current, completion from `N` cannot replace its popup state. Do not introduce an unbounded queue for hotkey-triggered translation.
 
-## 6. Thin Tauri adapters
+## Thin Tauri boundary
 
-Good:
+Tauri command/event code validates transport input, delegates to application/core code, and maps results. It must not directly own selection capture, language/model routing, worker lifecycle, or configuration workflow.
 
-```text
-command copy_translation
-  -> validate transport args
-  -> call application method
-  -> map result
-```
+## View models at the UI boundary
 
-Bad:
+Svelte receives presentation data rather than Rust internals. Rust remains the durable application-state authority; UI reload/recreation must not redefine product state ownership.
 
-```text
-command translate_selection
-  -> UI Automation
-  -> language detection
-  -> model selection
-  -> process spawn
-  -> config writes
-```
+## Windows/native isolation
 
-## 7. View models across the UI boundary
+Keep Win32/COM/UI Automation/clipboard/raw handle details in focused Windows modules. Document non-obvious safety/lifetime assumptions near `unsafe` code. Return safe structures/errors to the application layer.
 
-Svelte should receive presentation data, not Rust internals:
+## Worker protocol v1
+
+`docs/protocol/worker-v1.md` is the wire contract.
+
+A frame is exactly an 18-byte header plus payload:
 
 ```text
-PopupViewModel {
-  status,
-  source_text,
-  translated_text,
-  source_language,
-  target_language,
-  can_copy,
-  error
-}
+0..4   ASCII magic CLNG
+4      protocol version = 1
+5      message type
+6..14  request ID, u64 little-endian
+14..18 payload length, u32 little-endian
+18..   payload bytes
 ```
 
-Rust remains the source of truth. UI reload must not become application-state loss.
+Maximum payload is 1 MiB. Reject oversized declarations before allocating/copying the body. Translate request/response payloads are UTF-8; error payload is the protocol-defined one-byte code.
 
-## 8. IPC protocol stays small
+Reuse the existing bounded framed read/write implementation. Windows Named Pipe is transport, not a reason to create a second protocol. Always validate request-ID correlation and never log raw payloads.
 
-Start with a versioned, length-delimited request/response protocol over Named Pipe. JSON is acceptable for the first working protocol because messages are tiny; replace serialization only if profiling proves it matters.
+## Structured errors
 
-Conceptual messages:
+Use actionable typed errors at application/platform/protocol boundaries. Map them to user-facing state at the presentation boundary. Recoverable runtime conditions must not crash the shell.
+
+## Privacy-safe diagnostics
+
+Allowed diagnostics include request ID, character/byte count, capture source, route identifier, worker state, duration, and non-sensitive status/error code.
+
+Never emit selected source text, translated text, or raw worker payloads in normal logs/telemetry.
+
+## Configuration and model installation
+
+Start with schema/versioned local configuration and filesystem model registry. Do not add SQLite for simple preferences.
+
+Model installation follows:
 
 ```text
-TranslateRequest { protocol_version, request_id, source, target, text }
-TranslateResponse { protocol_version, request_id, translation, inference_ms }
+download/acquire -> temporary location -> verify manifest/hash/license/runtime compatibility -> atomic promotion
 ```
 
-No REST server, no gRPC, no GraphQL.
+A partial or unverified artifact is not installed.
 
-## 9. Atomic model installation
+## Dependency placement
 
-```text
-download -> temp file/dir -> checksum + manifest verification -> atomic rename
-```
-
-Never write a downloading model directly into the installed path.
-
-## 10. Structured privacy-safe logging
-
-Good:
-
-```text
-request=491 capture=uia chars=43 route=ja-en>en-id worker=warm inference_ms=186 status=ok
-```
-
-Bad:
-
-```text
-text="confidential contract ..."
-translation="..."
-```
-
-## 11. Configuration
-
-Start with a schema-versioned JSON configuration. Migrate old schemas explicitly when needed. Do not add SQLite merely for preferences.
-
-## 12. Unsafe/native code
-
-Keep `unsafe` and COM/Win32 details inside focused Windows adapter modules. Document safety assumptions next to the unsafe block. Safe core code should not need to understand raw HWND/COM lifetime details.
-
-## 13. Dependency replacement
-
-Agnosticism is achieved at meaningful seams, not by hiding every library:
-
-```text
-core -> Translator port -> Worker client -> CTranslate2 worker
-core -> SelectionProvider -> Windows UIA implementation
-UI -> application commands/view models -> Tauri transport
-```
-
-If CTranslate2 or Tauri is replaced later, the core workflow should survive. Do not add a second implementation today merely to prove replaceability.
+Agnosticism lives at meaningful seams, not wrapper layers. CTranslate2/SentencePiece stay behind the worker boundary; Windows bindings stay behind Windows adapters; Tauri stays at the UI/native transport boundary. Replacing one should not require rewriting the application workflow.

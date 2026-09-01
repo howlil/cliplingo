@@ -1,44 +1,42 @@
-# ClipLingo Agent Entry Point
+# ClipLingo Agent Instructions
 
-ClipLingo uses Devland with a deliberately lean project-local operating layer.
+This repository uses `.agents/` as the canonical project knowledge and active engineering state layer.
 
-Read in this order:
-1. `.devland/project.yaml` — product facts and hard constraints.
-2. `.devland/state.yaml` — current work, branch/PR, blocker, next action.
-3. Only the relevant `.agents/*` file for the task.
+Before making a meaningful change, read only the canonical sources relevant to the task. Always inspect `CURRENT_ITERATION.md` when continuing active work.
 
-Do not preload the whole `.agents` directory. Repository evidence wins over stale prose; if state and Git disagree, fix the state before expanding work.
+## Canonical sources
 
-## Operating model
+- `.agents/PROJECT.md` — product intent, behavior, scope, contracts, constraints, non-goals, and material open questions.
+- `.agents/ARCHITECTURE.md` — runtime topology, responsibility ownership, boundaries, data flow, and architecture invariants.
+- `.agents/CURRENT_ITERATION.md` — current milestone, active slice, completed work, evidence, blockers, and single next action.
+- `.agents/CODE_PATTERNS.md` — repository-specific implementation patterns and conventions.
+- `.agents/QUALITY.md` — verification strategy, executable checks, and project quality gates.
+- `.agents/DECISIONS.md` — durable material decisions and rationale.
+- `.agents/RELEASE.md` — ClipLingo release/distribution rules; read for release, packaging, signing, or updater work.
+- `.agents/skills/*` — specialized recurring ClipLingo workflows only; load only when relevant.
 
-Optimize for **small production-shaped slices, fast feedback, and frequent integration**.
+## Authority
+
+Use this order when repository information conflicts:
 
 ```text
-problem -> acceptance example -> smallest slice -> implement/test -> focused CI -> merge -> observe -> next slice
+explicit current user instruction
+  -> PROJECT.md + approved material decisions
+  -> ARCHITECTURE.md / DECISIONS.md
+  -> CURRENT_ITERATION.md
+  -> CODE_PATTERNS.md / QUALITY.md
+  -> current code and tests
+  -> historical plans, PR descriptions, and stale docs
 ```
 
-Rules:
-- WIP limit: one active implementation slice per agent.
-- Prefer slices that can merge the same day; split anything that grows beyond one reviewable behavior.
-- Branches are short-lived. `master` is the integration truth; no iteration/develop branch.
-- One task stays in one PR through review and CI fixes.
-- TDD is preferred for deterministic behavior, but ceremony is not a goal. Use the cheapest executable evidence that catches the relevant failure.
-- Verification is risk-based. Do not make broad compatibility/performance research block an alpha slice unless that property is the slice's purpose.
-- YAGNI first. Add abstractions only for an observed duplication, volatile external boundary, or concrete testability need.
-- Delete dead/obsolete code when replacement is proven and references/tests show it is unused. Do not keep parallel legacy paths "just in case".
-- Release early through explicit maturity channels (`alpha` -> `beta` -> stable) instead of demanding stable-grade evidence from every early slice.
+If code and canonical documentation disagree, determine which is stale and repair the bounded inconsistency. Do not invent a product or architecture decision.
 
-## Project-local components
+## Operating rule
 
-- System design: `.agents/DESIGN.md`
-- Requirement slicing / iteration: `.agents/REQUIREMENTS.md`
-- Engineering + code rules: `.agents/RULES.md`
-- Code patterns: `.agents/CODE_PATTERNS.md`
-- Git/CI/DoD: `.agents/SDLC.md`
-- Release strategy: `.agents/RELEASE.md`
-- Delivery metrics: `.agents/METRICS.md`
-- Task-specific skills: `.agents/skills/*`
+Follow the canonical engineering lifecycle and user-authority model. Global engineering behavior is not duplicated in this repository.
 
-Metrics diagnose flow, not people. Primary signals: product cycle time, PR age/size, CI feedback time, rework, change failure, escaped defects, WIP age, and release frequency.
+Do not change product behavior, public contracts, architecture boundaries, data ownership, security boundaries, or other material decisions without explicit user approval.
 
-Never claim tests, CI, releases, benchmarks, deployments, or manual acceptance that were not actually observed.
+Prefer the smallest coherent change. Read the minimum context required to act safely. Do not create persistent task plans or additional `.agents/*.md` files unless the information has a durable project-level owner or the project genuinely requires an optional canonical document.
+
+`.devland/*` may remain as auxiliary tooling metadata, but it does not override the canonical `.agents` sources above.
