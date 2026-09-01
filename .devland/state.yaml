@@ -1,8 +1,10 @@
 schema: devland.state/v0
-active_work:
+active_work: []
+blocked: []
+recently_completed:
   - id: worker-framed-io
     kind: feature
-    status: verifying
+    status: done
     goal: Add bounded framed stream I/O on top of worker protocol v1 as transport preparation for Windows Named Pipes.
     group:
       type: milestone
@@ -28,15 +30,15 @@ active_work:
       - oversized declared payloads fail before payload allocation or read
       - truncated payloads surface as transport I/O failures
       - protocol v1 wire layout remains unchanged
-      - existing automated CI remains green
+      - CI run 57 passed all automated gates on the final code head
     artifacts:
       spec: docs/protocol/worker-v1.md
       plan: .agents/plans/002-isolated-inference-boundary-alpha.md
-      evidence: []
+      evidence:
+        - "CI run #57: 33528526787"
+        - "pull request: #10"
     branch: feat/worker-framed-io
     pull_request: "#10"
-blocked: []
-recently_completed:
   - id: worker-protocol-contract
     kind: feature
     status: done
