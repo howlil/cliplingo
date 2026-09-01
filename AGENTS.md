@@ -26,7 +26,7 @@ explicit current user instruction
   -> CURRENT_ITERATION.md
   -> CODE_PATTERNS.md / QUALITY.md
   -> current code and tests
-  -> historical plans, PR descriptions, and stale docs
+  -> PR descriptions and stale docs
 ```
 
 If code and canonical documentation disagree, determine which is stale and repair the bounded inconsistency. Do not invent a product or architecture decision.
@@ -37,6 +37,4 @@ Follow the canonical engineering lifecycle and user-authority model. Global engi
 
 Do not change product behavior, public contracts, architecture boundaries, data ownership, security boundaries, or other material decisions without explicit user approval.
 
-Prefer the smallest coherent change. Read the minimum context required to act safely. Do not create persistent task plans or additional `.agents/*.md` files unless the information has a durable project-level owner or the project genuinely requires an optional canonical document.
-
-`.devland/*` may remain as auxiliary tooling metadata, but it does not override the canonical `.agents` sources above.
+Prefer the smallest coherent change. Read the minimum context required to act safely. Do not create persistent task plans, secondary iteration-state directories, or additional `.agents/*.md` files unless the information has a durable project-level owner or the project genuinely requires an optional canonical document.
