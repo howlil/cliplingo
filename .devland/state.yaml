@@ -1,5 +1,41 @@
 schema: devland.state/v0
-active_work: []
+active_work:
+  - id: offline-model-pack-foundation
+    kind: feature
+    status: implementing
+    goal: Establish the first distributable offline translation model-pack contract and reproducible Japanese to Indonesian OPUS-MT conversion path.
+    group:
+      type: milestone
+      id: real-offline-translation-alpha
+    scope:
+      allowed:
+        - Japanese to English to Indonesian alpha route
+        - Apache-2.0 OPUS-MT model selection with pinned revisions
+        - CTranslate2 int8 model-pack catalog
+        - pinned model conversion tooling
+        - deterministic dry-run catalog validation in Windows CI
+        - generated model pack layout outside Git
+      excluded:
+        - CTranslate2 linked into the shipped C++ worker
+        - real model inference in the worker
+        - automatic language detection
+        - Chinese or Korean packs
+        - model download or settings UI
+        - installer signing or package-manager release work
+        - manual Windows testing
+    acceptance:
+      - catalog route is explicitly ja to en to id
+      - both model revisions are pinned and Apache-2.0 licensed
+      - CTranslate2 conversion is pinned to int8
+      - generated pack layout preserves SentencePiece source and target models per stage
+      - normal Windows CI validates the build plan without downloading model weights
+      - generated model binaries are ignored by Git
+    artifacts:
+      spec: models/catalog/ja-id-opus-v1.json
+      plan: .agents/plans/003-real-offline-translation-alpha.md
+      evidence: []
+    branch: feat/offline-model-pack-foundation
+    pull_request: null
 blocked: []
 recently_completed:
   - id: worker-shell-integration
@@ -309,7 +345,5 @@ recently_completed:
     branch: null
     pull_request: null
 open_decisions:
-  - first production-quality translation model and language direction
-  - direct CJK-to-Indonesian models versus English-pivot routes
   - final beta/stable latency and resource budgets
   - Windows code-signing provider and certificate strategy
