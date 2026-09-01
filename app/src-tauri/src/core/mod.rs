@@ -13,6 +13,7 @@ pub use types::{
 };
 pub use worker_protocol::{
     decode_message as decode_worker_message, encode_message as encode_worker_message,
-    ProtocolError, WorkerErrorCode, WorkerMessage, HEADER_LEN as WORKER_HEADER_LEN,
+    read_message as read_worker_message, write_message as write_worker_message, ProtocolError,
+    WorkerErrorCode, WorkerIoError, WorkerMessage, HEADER_LEN as WORKER_HEADER_LEN,
     MAX_PAYLOAD_LEN as WORKER_MAX_PAYLOAD_LEN, PROTOCOL_VERSION as WORKER_PROTOCOL_VERSION,
 };
