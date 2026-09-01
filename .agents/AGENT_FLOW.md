@@ -19,22 +19,63 @@ When guidance conflicts, use this order:
 
 Do not silently reinterpret an explicit user decision through an older document.
 
-## Canonical lifecycle
+## Canonical delivery lifecycle
 
 ```text
 USER INTENT
   -> UNDERSTAND
   -> BOUND
-  -> SPECIFY
-  -> DESIGN
-  -> IMPLEMENT
-  -> VERIFY
-  -> QUALITY GATES
+  -> MILESTONE PLAN
+  -> EXECUTE SLICES CONTINUOUSLY
+  -> MILESTONE GATE
   -> RELEASE READY
   -> STOP
 ```
 
-The lifecycle is canonical, not ceremonial. Fuse stages for small, reversible, unambiguous work. Expand them only when uncertainty, blast radius, or risk requires it.
+Plan at milestone boundaries. Execute continuously at slice boundaries. Integrate at logical-change boundaries.
+
+Increase the planning horizon, not the integration batch size.
+
+The lifecycle is canonical, not ceremonial. A small task may enter an existing milestone directly and use a tight execution loop. Do not create a milestone merely to rename a trivial change.
+
+## Work hierarchy
+
+```text
+Milestone
+  -> Slice
+    -> Logical Change
+      -> Commit
+```
+
+### Milestone
+
+A bounded, meaningful product, engineering, reliability, migration, or release outcome worth planning as a whole.
+
+A milestone should define:
+
+- why the outcome matters;
+- desired end state;
+- explicit scope and non-goals;
+- major slices or capability increments;
+- architecture/product decisions already fixed;
+- milestone-level acceptance/gate conditions;
+- important risks or unresolved decisions.
+
+Do not turn milestones into long-lived integration branches or all-or-nothing implementation batches.
+
+### Slice
+
+The smallest coherent vertical increment that advances the milestone and can be independently verified and integrated.
+
+A slice should have clear observable acceptance and stay narrow enough to review, test, revert, and merge without waiting for the rest of the milestone.
+
+### Logical change
+
+A focused implementation change inside a slice. Integrate when the change is coherent and independently safe rather than accumulating unrelated edits for the sake of one branch or one large PR.
+
+### Commit
+
+A repository history unit. Commit boundaries support clarity and rollback; they are not planning units or productivity metrics.
 
 ## Authority model
 
@@ -65,15 +106,15 @@ Within those approved boundaries, the agent owns:
 
 High autonomy for local engineering. Low autonomy for product or architecture changes.
 
-## Stage behavior
+## Outer lifecycle behavior
 
 ### UNDERSTAND
 
-Inspect current code, docs, state, tests, and relevant history before proposing new structure. Restate only the material problem, constraints, and observable outcome.
+Inspect current code, docs, state, tests, relevant history, and active delivery context before proposing new structure. Restate only the material problem, constraints, and observable outcome.
 
 ### BOUND
 
-Define the smallest coherent vertical slice.
+Decide whether the user intent belongs to an existing milestone or requires a new milestone boundary.
 
 Explicitly separate:
 
@@ -84,6 +125,49 @@ Explicitly separate:
 - decisions that require user authority.
 
 Do not expand scope for generic best practices.
+
+### MILESTONE PLAN
+
+Plan the meaningful outcome once, at the milestone boundary. Keep the plan compact enough to remain useful during execution.
+
+A milestone plan should provide orientation, not task-by-task ceremony. Prefer a small ordered set of slices with explicit gates and dependencies over repeated sprint planning.
+
+Do not pre-plan implementation trivia that can be decided safely inside a slice.
+
+### EXECUTE SLICES CONTINUOUSLY
+
+Execute one bounded slice at a time. Within each slice use the inner engineering loop:
+
+```text
+SPECIFY
+  -> DESIGN
+  -> IMPLEMENT
+  -> VERIFY
+  -> QUALITY GATES
+  -> INTEGRATE
+```
+
+Stages may be fused for small, reversible, unambiguous work.
+
+Do not wait for the entire milestone before integration. Merge each release-ready logical change or slice as soon as its required evidence and gates are satisfied.
+
+### MILESTONE GATE
+
+After the planned milestone slices are integrated, verify the milestone-level desired outcome and cross-slice acceptance.
+
+The milestone gate should answer whether the bounded outcome is complete enough for its intended maturity. It must not become an excuse to repeat every slice-level check or add unrequested hardening.
+
+### RELEASE READY
+
+A milestone or release is release ready when its agreed acceptance is satisfied, required evidence exists, relevant gates are green, rollback is understood, and no known blocker prevents intended use.
+
+Release ready does not authorize unrelated hardening or future scope.
+
+### STOP
+
+Stop when the requested milestone/release outcome is ready or when a stop condition is reached. Do not continue into speculative cleanup, the next milestone, or architecture work without new user intent.
+
+## Inner slice engineering loop
 
 ### SPECIFY
 
@@ -131,15 +215,22 @@ Do not substitute code inspection for required native/manual evidence, and do no
 
 Run only gates relevant to the touched risk, plus mandatory repository gates. A valid failing regression test is a defect signal, not a reason to weaken the test.
 
-### RELEASE READY
+### INTEGRATE
 
-A change is release ready when acceptance is satisfied, required evidence exists, relevant quality gates are green, rollback is understood, and no known blocker prevents the intended maturity-level use.
+Integrate at the logical-change boundary when the change is coherent, accepted, verified, and mergeable.
 
-Release ready does not authorize unrelated hardening or follow-up scope.
+Do not keep work unmerged merely because sibling slices in the milestone are unfinished. Prefer short-lived branches and small PRs. If a change is too coupled to integrate independently, reduce or reshape the slice rather than normalizing a large batch.
 
-### STOP
+## Planning and integration rules
 
-Stop when the requested slice is release ready or when a stop condition is reached. Do not continue into speculative cleanup, the next feature, or architecture work without new user intent.
+- Plan milestones, not recurring sprints by default.
+- A milestone may contain several slices; slices may contain several logical changes.
+- Do not create a branch simply because a new slice, iteration label, or planning stage exists.
+- One branch/PR should represent one coherent logical change or tightly coupled slice, not an entire milestone by default.
+- CI/review fixes for the same logical change stay on the same branch/PR.
+- Integrate finished work continuously instead of waiting for milestone completion.
+- Keep WIP low; finish or explicitly block the active slice before expanding implementation scope.
+- Historical iteration/sprint labels may remain for traceability, but they do not control branch lifetime or integration cadence.
 
 ## Minimum-change rule
 
@@ -184,18 +275,26 @@ Feature Shape -> Current Position -> Delta -> Next Move
 
 It should answer:
 
-- what the feature should look/behave like;
+- what the milestone/feature should look and behave like;
 - what changes from current behavior;
-- where the active work is in the lifecycle;
-- what is already done;
-- what is blocked/in progress;
+- which milestone and slice are active;
+- what is already integrated;
+- what is blocked or in progress;
 - the single next meaningful action.
 
-Do not reproduce the full plan or specification unless requested.
+Do not reproduce the full milestone plan or specification unless requested.
+
+## Iteration state
+
+Conversation history is context, not the source of truth for active engineering work.
+
+`.devland/state.yaml` remains the canonical current work-state representation for ClipLingo. It should expose enough information to recover the active milestone/slice position, acceptance, evidence, blocker, branch/PR when relevant, and next meaningful action.
+
+Legacy `iteration` identifiers may remain while existing work completes. Treat them as grouping/traceability metadata, not as mandatory planning cycles or branch boundaries.
 
 ## Retrospective
 
-Run a retrospective only when an iteration/release finishes, meaningful rework/failure occurs, repeated friction appears, or the user requests one.
+Run a retrospective only when a milestone/release finishes, meaningful rework/failure occurs, repeated friction appears, or the user requests one.
 
 Use:
 
