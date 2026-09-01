@@ -32,8 +32,14 @@ impl TryFrom<u8> for WorkerErrorCode {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkerMessage {
-    TranslateRequest { request_id: u64, text: String },
-    TranslateResponse { request_id: u64, text: String },
+    TranslateRequest {
+        request_id: u64,
+        text: String,
+    },
+    TranslateResponse {
+        request_id: u64,
+        text: String,
+    },
     ErrorResponse {
         request_id: u64,
         code: WorkerErrorCode,
