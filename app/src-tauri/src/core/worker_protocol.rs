@@ -1,3 +1,5 @@
+use std::io::{Read, Write};
+
 const MAGIC: [u8; 4] = *b"CLNG";
 pub const PROTOCOL_VERSION: u8 = 1;
 pub const HEADER_LEN: usize = 18;
@@ -69,6 +71,31 @@ pub enum ProtocolError {
     UnknownErrorCode(u8),
 }
 
+#[derive(Debug)]
+pub enum WorkerIoError {
+    Protocol(ProtocolError),
+    Io(std::io::Error),
+}
+
+impl From<ProtocolError> for WorkerIoError {
+    fn from(value: ProtocolError) -> Self {
+        Self::Protocol(value)
+    }
+}
+
+impl From<std::io::Error> for WorkerIoError {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct FrameHeader {
+    message_type: u8,
+    request_id: u64,
+    payload_len: usize,
+}
+
 pub fn encode_message(message: &WorkerMessage) -> Result<Vec<u8>, ProtocolError> {
     let request_id = message.request_id();
     let (message_type, payload): (u8, Vec<u8>) = match message {
@@ -96,6 +123,38 @@ pub fn encode_message(message: &WorkerMessage) -> Result<Vec<u8>, ProtocolError>
 }
 
 pub fn decode_message(frame: &[u8]) -> Result<WorkerMessage, ProtocolError> {
+    let header = decode_header(frame)?;
+    let expected_len = HEADER_LEN + header.payload_len;
+    if frame.len() != expected_len {
+        return Err(ProtocolError::LengthMismatch {
+            expected: expected_len,
+            actual: frame.len(),
+        });
+    }
+
+    decode_payload(header, &frame[HEADER_LEN..])
+}
+
+pub fn write_message<W: Write>(
+    writer: &mut W,
+    message: &WorkerMessage,
+) -> Result<(), WorkerIoError> {
+    let frame = encode_message(message)?;
+    writer.write_all(&frame)?;
+    Ok(())
+}
+
+pub fn read_message<R: Read>(reader: &mut R) -> Result<WorkerMessage, WorkerIoError> {
+    let mut header_bytes = [0_u8; HEADER_LEN];
+    reader.read_exact(&mut header_bytes)?;
+    let header = decode_header(&header_bytes)?;
+
+    let mut payload = vec![0_u8; header.payload_len];
+    reader.read_exact(&mut payload)?;
+    Ok(decode_payload(header, &payload)?)
+}
+
+fn decode_header(frame: &[u8]) -> Result<FrameHeader, ProtocolError> {
     if frame.len() < HEADER_LEN {
         return Err(ProtocolError::FrameTooShort {
             actual: frame.len(),
@@ -134,22 +193,21 @@ pub fn decode_message(frame: &[u8]) -> Result<WorkerMessage, ProtocolError> {
         return Err(ProtocolError::PayloadTooLarge { len: payload_len });
     }
 
-    let expected_len = HEADER_LEN + payload_len;
-    if frame.len() != expected_len {
-        return Err(ProtocolError::LengthMismatch {
-            expected: expected_len,
-            actual: frame.len(),
-        });
-    }
+    Ok(FrameHeader {
+        message_type,
+        request_id,
+        payload_len,
+    })
+}
 
-    let payload = &frame[HEADER_LEN..];
-    match message_type {
+fn decode_payload(header: FrameHeader, payload: &[u8]) -> Result<WorkerMessage, ProtocolError> {
+    match header.message_type {
         TYPE_TRANSLATE_REQUEST => Ok(WorkerMessage::TranslateRequest {
-            request_id,
+            request_id: header.request_id,
             text: decode_text(payload)?,
         }),
         TYPE_TRANSLATE_RESPONSE => Ok(WorkerMessage::TranslateResponse {
-            request_id,
+            request_id: header.request_id,
             text: decode_text(payload)?,
         }),
         TYPE_ERROR_RESPONSE => {
@@ -157,11 +215,11 @@ pub fn decode_message(frame: &[u8]) -> Result<WorkerMessage, ProtocolError> {
                 return Err(ProtocolError::InvalidErrorPayloadLength(payload.len()));
             }
             Ok(WorkerMessage::ErrorResponse {
-                request_id,
+                request_id: header.request_id,
                 code: WorkerErrorCode::try_from(payload[0])?,
             })
         }
-        _ => unreachable!("worker protocol message type validated above"),
+        _ => unreachable!("worker protocol message type validated in header"),
     }
 }
 
@@ -174,6 +232,7 @@ fn decode_text(payload: &[u8]) -> Result<String, ProtocolError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Cursor, ErrorKind};
 
     #[test]
     fn translate_request_round_trips_unicode() {
@@ -206,6 +265,59 @@ mod tests {
 
         let encoded = encode_message(&message).unwrap();
         assert_eq!(decode_message(&encoded).unwrap(), message);
+    }
+
+    #[test]
+    fn framed_stream_round_trips_consecutive_messages() {
+        let first = WorkerMessage::TranslateRequest {
+            request_id: 11,
+            text: "你好".into(),
+        };
+        let second = WorkerMessage::TranslateResponse {
+            request_id: 11,
+            text: "halo".into(),
+        };
+        let mut stream = Cursor::new(Vec::new());
+
+        write_message(&mut stream, &first).unwrap();
+        write_message(&mut stream, &second).unwrap();
+        stream.set_position(0);
+
+        assert_eq!(read_message(&mut stream).unwrap(), first);
+        assert_eq!(read_message(&mut stream).unwrap(), second);
+    }
+
+    #[test]
+    fn framed_stream_rejects_oversized_header_before_reading_payload() {
+        let mut bytes = Vec::with_capacity(HEADER_LEN);
+        bytes.extend_from_slice(&MAGIC);
+        bytes.push(PROTOCOL_VERSION);
+        bytes.push(TYPE_TRANSLATE_REQUEST);
+        bytes.extend_from_slice(&1_u64.to_le_bytes());
+        bytes.extend_from_slice(&((MAX_PAYLOAD_LEN + 1) as u32).to_le_bytes());
+        let mut stream = Cursor::new(bytes);
+
+        match read_message(&mut stream) {
+            Err(WorkerIoError::Protocol(ProtocolError::PayloadTooLarge { len })) => {
+                assert_eq!(len, MAX_PAYLOAD_LEN + 1);
+            }
+            other => panic!("unexpected result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn framed_stream_reports_truncated_payload_as_io_error() {
+        let frame = encode_message(&WorkerMessage::TranslateRequest {
+            request_id: 1,
+            text: "hello".into(),
+        })
+        .unwrap();
+        let mut stream = Cursor::new(frame[..frame.len() - 1].to_vec());
+
+        match read_message(&mut stream) {
+            Err(WorkerIoError::Io(error)) => assert_eq!(error.kind(), ErrorKind::UnexpectedEof),
+            other => panic!("unexpected result: {other:?}"),
+        }
     }
 
     #[test]

@@ -2,6 +2,43 @@ schema: devland.state/v0
 active_work: []
 blocked: []
 recently_completed:
+  - id: worker-framed-io
+    kind: feature
+    status: done
+    goal: Add bounded framed stream I/O on top of worker protocol v1 as transport preparation for Windows Named Pipes.
+    group:
+      type: milestone
+      id: isolated-inference-boundary-alpha
+    scope:
+      allowed:
+        - exact framed reads and writes over generic byte streams
+        - header validation before payload allocation
+        - protocol versus transport error separation
+        - consecutive message framing
+        - deterministic automated tests
+      excluded:
+        - Windows Named Pipe connector
+        - worker process supervision
+        - C++ worker implementation
+        - CTranslate2 or SentencePiece integration
+        - production model selection
+        - UI behavior changes
+        - manual Windows testing
+    acceptance:
+      - framed request and response messages round-trip through generic Read Write streams
+      - multiple consecutive frames remain independently decodable
+      - oversized declared payloads fail before payload allocation or read
+      - truncated payloads surface as transport I/O failures
+      - protocol v1 wire layout remains unchanged
+      - CI run 57 passed all automated gates on the final code head
+    artifacts:
+      spec: docs/protocol/worker-v1.md
+      plan: .agents/plans/002-isolated-inference-boundary-alpha.md
+      evidence:
+        - "CI run #57: 33528526787"
+        - "pull request: #10"
+    branch: feat/worker-framed-io
+    pull_request: "#10"
   - id: worker-protocol-contract
     kind: feature
     status: done
@@ -32,14 +69,15 @@ recently_completed:
       - Unicode text is preserved through UTF-8 encode and decode
       - malformed magic version type truncated oversized and invalid UTF-8 frames fail explicitly
       - payloads above 1 MiB are rejected before normal frame processing
-      - CI run 52 passed all automated gates on the final slice head
+      - CI run 52 passed all automated gates on the final code head
     artifacts:
       spec: docs/protocol/worker-v1.md
       plan: .agents/plans/002-isolated-inference-boundary-alpha.md
       evidence:
         - "CI run #52: 33527535215"
         - "pull request: #9"
-    branch: feat/worker-protocol-contract
+        - "merge commit: f42054b64e6461a40ec4e0bc28a5bcad63d03fb6"
+    branch: null
     pull_request: "#9"
   - id: windows-interaction
     kind: feature
