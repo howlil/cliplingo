@@ -1,58 +1,69 @@
 # Lean SDLC and Git Strategy
 
-`AGENT_FLOW.md` defines the canonical engineering lifecycle and authority model. This file defines the repository mechanics used to execute that lifecycle.
+`AGENT_FLOW.md` defines the canonical milestone delivery model and authority rules. This file defines the repository mechanics used to execute that model.
 
-## Flow
+## Delivery flow
 
 ```text
 USER INTENT
   -> UNDERSTAND
   -> BOUND
-  -> SPECIFY
-  -> DESIGN
-  -> IMPLEMENT
-  -> VERIFY
-  -> QUALITY GATES
+  -> MILESTONE PLAN
+  -> EXECUTE SLICES CONTINUOUSLY
+  -> MILESTONE GATE
   -> RELEASE READY
   -> STOP
 ```
 
-For a small, reversible, unambiguous task, stages may be fused into one tight loop:
+Inside each slice, use the smallest useful engineering loop:
 
 ```text
 problem + acceptance
   -> smallest vertical slice
+  -> specify/design only as needed
   -> implement + focused test
   -> focused CI
   -> review/fix on same PR
-  -> release ready
-  -> squash merge to master
+  -> integrate
 ```
 
-The unit of delivery is a **small behavior**, not an iteration. Do not turn lifecycle stages into mandatory documents or meetings.
+Plan at milestone boundaries. Execute continuously at slice boundaries. Integrate at logical-change boundaries.
+
+The unit of planning is a **milestone**. The unit of execution is a **slice**. The unit of integration is a **logical change or tightly coupled slice**. Commits are history units, not planning units.
+
+Do not turn lifecycle stages, milestones, or slices into mandatory documents or meetings.
+
+## Milestone and slice mechanics
+
+A milestone groups a bounded product/engineering outcome and may contain several slices. It does not imply one milestone branch or one milestone PR.
+
+A slice is independently useful or independently evidence-producing progress toward the milestone. Prefer slices small enough to verify, review, revert, and merge without waiting for sibling slices.
+
+Historical iteration/sprint identifiers may remain in state or plans for traceability. They do not control branch lifetime, merge cadence, or require repeated sprint planning.
 
 ## WIP and scope
 
-- WIP limit: one active implementation PR per agent.
-- Prefer same-day mergeable slices. A normal PR older than ~2 working days triggers scope review/splitting.
-- If a task contains independently useful behaviors, split before adding more code.
-- Do not start Iteration N+1 work while a merge-ready slice from Iteration N sits unintegrated.
-- Iterations are labels/backlog groupings only.
+- Keep implementation WIP low: normally one active implementation slice per agent.
+- Prefer same-day mergeable logical changes. A normal PR older than ~2 working days triggers scope review/splitting.
+- If a slice contains independently useful behaviors, split before adding more code.
+- Do not leave a release-ready change unintegrated while starting unrelated milestone work.
+- A blocker on one slice does not automatically block independent slices, unless the blocked slice is an explicit dependency or milestone gate.
 - Do not mix unrelated policy/docs/refactor work into an active feature PR.
 
 ## Git
 
 - `master` is the only integration branch.
 - Branches are short-lived: `feat/`, `fix/`, `perf/`, `docs/`, `chore/`.
-- One logical task = one branch = one PR.
-- CI fixes, review fixes, and same-task cleanup stay on that PR.
+- One coherent logical change or tightly coupled slice = one branch = one PR.
+- Do **not** create one branch per milestone, sprint, iteration label, planning stage, or trivial edit.
+- CI fixes, review fixes, and same-change cleanup stay on that PR.
 - Squash merge normal work.
 - Delete merged/abandoned branches.
-- Never keep a long-lived `develop`, release-development, or iteration branch.
+- Never keep a long-lived `develop`, release-development, milestone, or iteration branch.
 
 ## Requirement before coding
 
-For ordinary work, write only:
+For an ordinary slice, write only:
 - problem;
 - user-visible behavior;
 - acceptance example/criteria;
@@ -61,7 +72,7 @@ For ordinary work, write only:
 - cheapest useful verification;
 - rollback/revert path.
 
-Use `.agents/REQUIREMENTS.md`. A deeper plan is justified only by ambiguity, uncertainty, or high blast radius.
+Use `.agents/REQUIREMENTS.md`. A deeper slice plan is justified only by ambiguity, uncertainty, or high blast radius. Broader planning belongs at the milestone boundary rather than being recreated for every small change.
 
 Acceptance criteria and observable product behavior belong to the user/product authority. The agent may clarify or propose them, but must not silently redefine them to make implementation easier.
 
@@ -125,22 +136,28 @@ Avoid architecture essays and exhaustive checklists unless the change genuinely 
 
 Review the actual diff against acceptance and approved boundaries. Do not use review to introduce unrelated cleanup or scope expansion.
 
-## Release Ready / Definition of Done
+## Integration readiness
 
-A slice is release ready when:
+A logical change or slice is ready to integrate when:
 - its acceptance example/criteria work;
 - required focused tests/checks are green;
 - CI appropriate to the changed risk is green;
 - required native/manual evidence exists for changed native behavior;
-- no known blocker prevents this slice from being useful at its intended maturity;
+- no known blocker prevents this change from being useful at its intended maturity;
 - docs/state changed only where truth changed;
 - rollback/revert is understood.
 
-For repository integration, normal work is done when the release-ready slice is merged to `master`.
+Merge ready work to `master` without waiting for the rest of the milestone.
 
 Beta/stable hardening that is not necessary for the current alpha slice becomes explicit follow-up work, not an invisible merge blocker.
 
-After release ready, stop. Do not automatically continue into cleanup, the next slice, or future hardening.
+## Milestone gate and release ready
+
+After planned slices are integrated, run only the cross-slice or outcome-level checks needed to confirm the milestone's desired end state.
+
+Do not re-run every slice-level ceremony at the milestone gate. A milestone is release ready when its agreed outcome and maturity-level gates are satisfied and no known release blocker remains.
+
+After release ready, stop. Do not automatically continue into cleanup, the next milestone, or future hardening.
 
 ## Failure/recovery
 
@@ -148,7 +165,7 @@ Prefer `git revert`/a corrective patch over prolonged branch repair after a bad 
 
 ## Retrospective
 
-Do not run a retrospective after every trivial change. When required by `AGENT_FLOW.md`, use repository evidence to identify the dominant delivery bottleneck and choose one small improvement to verify in subsequent work.
+Do not run a retrospective after every trivial change. When required by `AGENT_FLOW.md`, run it after a meaningful milestone/release or evidence of repeated delivery friction. Use repository evidence to identify the dominant bottleneck and choose one small improvement to verify in subsequent work.
 
 ## Metrics
 
