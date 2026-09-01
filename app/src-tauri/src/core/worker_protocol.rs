@@ -200,10 +200,7 @@ fn decode_header(frame: &[u8]) -> Result<FrameHeader, ProtocolError> {
     })
 }
 
-fn decode_payload(
-    header: FrameHeader,
-    payload: &[u8],
-) -> Result<WorkerMessage, ProtocolError> {
+fn decode_payload(header: FrameHeader, payload: &[u8]) -> Result<WorkerMessage, ProtocolError> {
     match header.message_type {
         TYPE_TRANSLATE_REQUEST => Ok(WorkerMessage::TranslateRequest {
             request_id: header.request_id,
