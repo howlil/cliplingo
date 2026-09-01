@@ -50,8 +50,9 @@ constraints:
   - architecture and performance assumptions require benchmark evidence
   - Windows 10/11 is the V1 product platform
   - executable behavior changes use RED then GREEN then REFACTOR before merge
-  - optimize for fast verified delivery with small coherent vertical slices and low work in progress
-  - one logical task stays on one working branch and one pull request through test failures review fixes and CI feedback unless the work becomes genuinely independent
+  - plan bounded product and engineering outcomes at milestone boundaries, execute continuously in small coherent vertical slices, and integrate at logical-change boundaries
+  - increasing the planning horizon must not increase integration batch size; milestones do not imply milestone branches or all-or-nothing pull requests
+  - one coherent logical change or tightly coupled slice stays on one working branch and one pull request through test failures review fixes and CI feedback; trivial changes do not require their own branch merely because they are separate planning items
   - verification expands with risk; native integration privacy security IPC updater release and performance-sensitive changes require broader evidence than local behavior-preserving changes
   - delivery health is evaluated with cycle time PR lead time CI feedback time rework escaped defects change failure flaky tests and work-in-progress age rather than commit branch pull-request or lines-changed counts
   - delivery speed must not bypass privacy security correctness compatibility performance evidence or release-signing requirements

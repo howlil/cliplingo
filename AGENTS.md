@@ -1,25 +1,44 @@
 # ClipLingo Agent Entry Point
 
-This repository uses Devland.
+ClipLingo uses Devland with a deliberately lean project-local operating layer.
 
-Canonical project facts and project-specific delivery constraints: `.devland/project.yaml`  
-Current work state: `.devland/state.yaml`  
-Project architecture: `.agents/DESIGN.md`
+Read in this order:
+1. `.devland/project.yaml` — product facts and hard constraints.
+2. `.devland/state.yaml` — current work, branch/PR, blocker, next action.
+3. Only the relevant `.agents/*` file for the task.
 
-Read the current plan or other project-local artifacts only when referenced by `.devland/state.yaml` or required by the task. Apply only the relevant Devland core policies, profiles, and workflow; do not load the entire Devland catalog by default.
+Do not preload the whole `.agents` directory. Repository evidence wins over stale prose; if state and Git disagree, fix the state before expanding work.
 
-Repository source and configuration evidence describe what currently exists. Active approved work artifacts describe what should change. When those differ, treat the difference as planned work or drift and verify before rewriting canonical state.
+## Operating model
 
-The existing `.agents/` directory is retained as supporting project-local/legacy context during the Devland migration. Read only the relevant file when a task needs detail that is not yet represented canonically, such as code patterns, release constraints, platform-specific guidance, or a referenced implementation plan.
+Optimize for **small production-shaped slices, fast feedback, and frequent integration**.
 
-For universal engineering-process rules such as Git, testing, dependency discipline, verification, security baseline, and documentation discipline, Devland core is the baseline. ClipLingo's deliberate project-specific delivery constraints are recorded under `constraints` in `.devland/project.yaml`; these constraints apply to this repository even when they are stricter or more specific than a generic baseline. `.agents/RULES.md` and `.agents/SDLC.md` explain those constraints in implementation terms.
+```text
+problem -> acceptance example -> smallest slice -> implement/test -> focused CI -> merge -> observe -> next slice
+```
 
-ClipLingo's project-specific delivery model is **fast verified delivery**: executable behavior uses RED → GREEN → REFACTOR, work stays in small coherent vertical slices with low WIP, same-task CI/review feedback stays on the same branch/PR, and verification expands with risk. Native Windows behavior, IPC/process lifecycle, privacy/security, updater/release, model integration, concurrency, and performance-sensitive changes require broader evidence than low-risk local work.
+Rules:
+- WIP limit: one active implementation slice per agent.
+- Prefer slices that can merge the same day; split anything that grows beyond one reviewable behavior.
+- Branches are short-lived. `master` is the integration truth; no iteration/develop branch.
+- One task stays in one PR through review and CI fixes.
+- TDD is preferred for deterministic behavior, but ceremony is not a goal. Use the cheapest executable evidence that catches the relevant failure.
+- Verification is risk-based. Do not make broad compatibility/performance research block an alpha slice unless that property is the slice's purpose.
+- YAGNI first. Add abstractions only for an observed duplication, volatile external boundary, or concrete testability need.
+- Delete dead/obsolete code when replacement is proven and references/tests show it is unused. Do not keep parallel legacy paths "just in case".
+- Release early through explicit maturity channels (`alpha` -> `beta` -> stable) instead of demanding stable-grade evidence from every early slice.
 
-Delivery metrics diagnose the system rather than score activity. Prefer cycle time, PR lead time, CI feedback time, rework, escaped defects, change failure, flaky-test rate, WIP age, and release frequency. Never optimize commit count, branch count, PR count, or lines changed as productivity targets.
+## Project-local components
 
-Iteration grouping never changes the Git unit: one logical task uses at most one working branch by default. Do not advance `.devland/state.yaml` merely because maintenance/policy work merged; active work state changes only when the approved work itself changes.
+- System design: `.agents/DESIGN.md`
+- Requirement slicing / iteration: `.agents/REQUIREMENTS.md`
+- Engineering + code rules: `.agents/RULES.md`
+- Code patterns: `.agents/CODE_PATTERNS.md`
+- Git/CI/DoD: `.agents/SDLC.md`
+- Release strategy: `.agents/RELEASE.md`
+- Delivery metrics: `.agents/METRICS.md`
+- Task-specific skills: `.agents/skills/*`
 
-This file is a router, not an independent source of product, stack, architecture, or work-state truth.
+Metrics diagnose flow, not people. Primary signals: product cycle time, PR age/size, CI feedback time, rework, change failure, escaped defects, WIP age, and release frequency.
 
-Never claim repository, version-control, CI, release, benchmark, or deployment actions that the current runtime did not actually perform or observe.
+Never claim tests, CI, releases, benchmarks, deployments, or manual acceptance that were not actually observed.

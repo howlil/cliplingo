@@ -1,114 +1,63 @@
-# Release and Distribution Plan
+# Release Strategy
 
-This is the target release process. Implement only the parts required by the current iteration.
+ClipLingo releases by product maturity. Do not require stable-grade packaging/signing evidence to merge ordinary alpha development slices.
 
-## Versioning
+## Channels
 
-Use Semantic Versioning and Git tags prefixed with `v`.
+- **Development:** every verified `master` commit is integratable product state.
+- **Alpha (`v0.x.y-alpha.N`):** core path works; targeted manual/native smoke is acceptable; compatibility can be narrow and documented.
+- **Beta (`v0.x.y-beta.N`):** intended feature set exists; broaden compatibility, performance, reliability, update and migration evidence.
+- **RC (`v0.x.y-rc.N`):** production-shaped candidate; only release blockers change.
+- **Stable (`v0.x.y`, later `v1.x.y`):** supported-platform, signing, install/update/uninstall and regression guarantees are enforced.
 
-During early development:
+## Release rules
 
-- `0.x.y` for public development releases.
-- `-alpha.N` for unstable internal/public experiments.
-- `-beta.N` when the intended feature set exists but compatibility/quality is still being validated.
-- `-rc.N` for production-shaped release candidates.
-- Stable: `v0.x.y`, later `v1.0.0` when compatibility expectations are deliberately accepted.
+1. Release only from verified `master`.
+2. Prefer small frequent prereleases over accumulating many finished features on branches.
+3. Tag immutable versions; never replace published binaries under the same tag.
+4. A failed release becomes a normal fix PR and a new patch/prerelease version.
+5. Release automation/signing/package-manager work is implemented only when the current maturity stage needs it.
+6. WinGet/Chocolatey are downstream distribution; they never block the canonical GitHub Release.
+7. ARM64 or additional platforms require a real test target before publication.
 
-When Tauri is scaffolded, keep the application version in `tauri.conf.json` as the canonical app version and validate any package metadata against it in CI.
+## Canonical binary source
 
-## Canonical release source
+GitHub Releases is canonical. Planned Windows artifacts, when applicable:
+- primary x64 installer;
+- optional MSI only when there is a concrete consumer;
+- updater artifact/signature when updater exists;
+- SHA-256 checksums;
+- concise release notes.
 
-**GitHub Releases is the canonical binary source.** Website/package-manager entries should reference immutable stable release assets rather than independently built binaries.
-
-Planned Windows artifacts:
-
-1. `ClipLingo_<version>_x64-setup.exe` — primary NSIS installer.
-2. `ClipLingo_<version>_x64.msi` — optional MSI for users/enterprise tooling that need it.
-3. Tauri updater artifacts/signatures.
-4. `SHA256SUMS.txt`.
-5. Release notes.
-
-Add ARM64 only after Windows x64 is stable and ARM64 has a real test target. Do not publish architectures we cannot test.
+Do not create duplicate independently-built distribution channels.
 
 ## Signing
 
-There are two separate trust concerns:
+Windows code signing and Tauri updater signing are separate trust mechanisms. Private keys never enter the repository. Stable release requires the relevant signatures; alpha development does not wait for signing infrastructure unless signing itself is under test.
 
-- **Windows code signing** for executable/installer publisher trust and SmartScreen reputation.
-- **Tauri updater signing** for cryptographic update authenticity.
+## Release acceptance by maturity
 
-Private signing material must live only in a secure CI secret/key service, never the repository. Losing updater private keys can break the ability to update installed clients, so key backup/rotation planning is a release prerequisite.
+### Alpha
+- mandatory CI green;
+- application launches;
+- changed core path smoke-tested on a representative supported Windows setup;
+- no known privacy/correctness blocker for the advertised alpha behavior.
 
-## Release pipeline
+### Beta
+- broader representative application/DPI/monitor compatibility;
+- latency/resource measurements where user experience depends on them;
+- installer/update path if beta is distributed as installed software;
+- regression suite for accumulated product behaviors.
 
-Stable release flow:
+### Stable
+- clean supported Windows VM fresh install;
+- launch and primary workflow;
+- upgrade from previous supported stable version;
+- uninstall/data-retention behavior;
+- signature/checksum validation;
+- updater/package metadata when enabled;
+- release notes and rollback/fix-forward path.
 
-```text
-verified master
- -> choose semver
- -> update version + changelog/release notes
- -> PR + CI
- -> squash merge
- -> create signed tag vX.Y.Z
- -> Windows release build
- -> tests/smoke install
- -> code-sign artifacts
- -> generate updater artifacts/signatures
- -> generate SHA-256 checksums
- -> publish GitHub Release
- -> verify clean-machine install/update/uninstall
- -> update WinGet manifest
- -> update Chocolatey package when supported
-```
+## Rollback
 
-A failed release is fixed on a normal task branch; do not mutate an already-published stable binary under the same version. Publish a new patch version.
-
-## Direct download
-
-The project website, if/when added, should link to the current stable GitHub Release artifact or a controlled redirect to it. Do not create a second untracked distribution source.
-
-## Command-line install
-
-After stable signing and release automation exist, provide a small versioned PowerShell installer script that downloads the canonical GitHub Release asset and verifies SHA-256 before execution.
-
-Prefer a debuggable flow such as:
-
-```powershell
-curl.exe -fsSL <official-install-script-url> -o install-cliplingo.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install-cliplingo.ps1
-```
-
-Do not make blind `curl | iex` the only documented path. The script must fail closed on checksum/download errors.
-
-## WinGet
-
-Stable public releases should be submitted to the Windows Package Manager Community Repository after the stable installer URL is immutable and tested. Use `wingetcreate` or an equivalent manifest workflow, validate the manifest, and point it to the publisher-owned canonical release asset.
-
-Do not make WinGet submission block the GitHub Release; it is a downstream distribution step.
-
-## Chocolatey
-
-Chocolatey is a secondary channel. Add it after direct installer/release automation is stable. The package should download the publisher-owned stable installer, verify checksums, support silent installation/uninstallation, and be tested in a clean Windows VM before publication.
-
-Do not maintain a separately built binary inside Chocolatey when the canonical installer is sufficient.
-
-## Tauri updater
-
-Use the Tauri updater only for stable/prerelease channels that have an explicit update feed. Update artifacts must be signed and the private updater key must be protected in CI.
-
-Keep update channels separated so stable users do not accidentally receive prereleases.
-
-## Release acceptance
-
-At minimum verify on a clean supported Windows VM:
-
-- fresh install
-- launch and tray startup behavior
-- normal hotkey path
-- model download/install if applicable
-- upgrade from previous supported release
-- uninstall
-- no unexpected user data/model deletion unless documented
-- signature/checksum validity
-
-Package-manager publication happens only after the canonical installer passes this acceptance.
+Desktop releases are immutable. If a published version is defective, stop promoting it and publish a corrected version. Source changes are reverted or fixed through normal small PRs; do not mutate history or published artifacts.
