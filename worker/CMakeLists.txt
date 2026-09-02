@@ -11,10 +11,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # CTranslate2's static Windows build uses the static MSVC runtime. Keep all
-# worker-owned targets and SentencePiece on the same runtime to avoid mixing
-# /MT dependencies with /MD executables at link time.
+# worker-owned targets and every source-built dependency on the same runtime to
+# avoid mixing /MT dependencies with /MD objects at link time.
 if(MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+  # SentencePiece configures bundled Abseil/Protobuf as nested subprojects.
+  # Those projects otherwise select the dynamic CRT independently of our
+  # top-level target property, which produces LNK2038 at final link time.
+  set(ABSL_MSVC_STATIC_RUNTIME ON CACHE BOOL "Use static MSVC runtime for Abseil" FORCE)
+  set(protobuf_MSVC_STATIC_RUNTIME ON CACHE BOOL "Use static MSVC runtime for Protobuf" FORCE)
 
   # SentencePiece configures its bundled Abseil during FetchContent. On hosted
   # MSVC runners Abseil's configure-time probe does not reliably inherit the
