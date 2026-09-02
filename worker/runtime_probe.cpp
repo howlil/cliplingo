@@ -3,7 +3,6 @@
 
 #include <iostream>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace {
@@ -35,7 +34,7 @@ bool probe_sentencepiece(const std::string& model_path) {
 }
 
 bool probe_ctranslate2(const std::string& model_path) {
-  const std::vector<std::string_view> input = {"آ", "ت", "ز", "م", "و", "ن"};
+  const std::vector<std::string> input = {"آ", "ت", "ز", "م", "و", "ن"};
   const std::vector<std::string> expected = {"a", "t", "z", "m", "o", "n"};
 
   try {
