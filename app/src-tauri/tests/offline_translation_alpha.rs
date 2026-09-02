@@ -70,10 +70,8 @@ fn assert_real_translation(snapshot: &PopupViewModel) {
         "qualification must not use deterministic test mode"
     );
     assert!(
-        translated
-            .chars()
-            .any(|character| character.is_ascii_alphabetic()),
-        "translated result must contain Latin-script output"
+        translated.to_lowercase().contains("pagi"),
+        "fixed Japanese greeting must reach Indonesian output through both OPUS stages"
     );
 }
 
