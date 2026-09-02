@@ -74,9 +74,11 @@ jobs:
         shell: pwsh
         env:
           CLIPLINGO_WORKER_EXE: ${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe
+          CLIPLINGO_WORKER_TEST_MODE: deterministic
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test worker_cpp_integration -- --ignored --nocapture
       - name: Verify worker-backed translator
         shell: pwsh
         env:
           CLIPLINGO_WORKER_EXE: ${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe
+          CLIPLINGO_WORKER_TEST_MODE: deterministic
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test worker_translator_integration -- --ignored --nocapture
