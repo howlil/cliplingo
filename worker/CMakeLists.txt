@@ -55,6 +55,10 @@ set(SPM_ENABLE_SHARED OFF CACHE BOOL "" FORCE)
 set(SPM_BUILD_TEST OFF CACHE BOOL "" FORCE)
 set(SPM_ENABLE_TCMALLOC OFF CACHE BOOL "" FORCE)
 set(SPM_ENABLE_MSVC_MT_BUILD ON CACHE BOOL "" FORCE)
+# Keep protobuf inside the source-pinned SentencePiece build. An external
+# protobuf package can inject a prebuilt MSVC runtime/toolset into this static
+# graph and break the worker probe at link time.
+set(SPM_PROTOBUF_PROVIDER internal CACHE STRING "" FORCE)
 
 FetchContent_Declare(
   sentencepiece
@@ -62,6 +66,16 @@ FetchContent_Declare(
   GIT_TAG e0cce7d37b065b5140349dbe12c6bcf6192fdd78
 )
 FetchContent_MakeAvailable(sentencepiece)
+
+# SentencePiece 0.2.2 generates consumer-safe public headers that rewrite its
+# source-tree Abseil includes. Its build target does not expose those headers
+# to in-tree consumers, so attach the generated public interface locally.
+add_dependencies(sentencepiece-static generate_installed_headers)
+target_include_directories(
+  sentencepiece-static
+  INTERFACE
+    $<BUILD_INTERFACE:${sentencepiece_BINARY_DIR}/src/installed_headers>
+)
 
 add_executable(cliplingo_worker main.cpp)
 set_target_properties(cliplingo_worker PROPERTIES OUTPUT_NAME "cliplingo-worker")
