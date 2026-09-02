@@ -8,6 +8,7 @@
 namespace {
 
 bool probe_sentencepiece(const std::string& model_path) {
+  std::cerr << "runtime_probe component=sentencepiece phase=load\n";
   sentencepiece::SentencePieceProcessor processor;
   const auto load_status = processor.Load(model_path);
   if (!load_status.ok()) {
@@ -30,6 +31,7 @@ bool probe_sentencepiece(const std::string& model_path) {
     return false;
   }
 
+  std::cerr << "runtime_probe component=sentencepiece status=pass\n";
   return true;
 }
 
@@ -38,13 +40,21 @@ bool probe_ctranslate2(const std::string& model_path) {
   const std::vector<std::string> expected = {"a", "t", "z", "m", "o", "n"};
 
   try {
+    std::cerr << "runtime_probe component=ctranslate2 phase=load\n";
     ctranslate2::models::ModelLoader model_loader(model_path);
-    ctranslate2::Translator translator(model_loader);
-    const auto results = translator.translate_batch({input});
+    ctranslate2::ReplicaPoolConfig pool_config;
+    pool_config.num_threads_per_replica = 1;
+    ctranslate2::Translator translator(model_loader, pool_config);
+
+    ctranslate2::TranslationOptions options;
+    options.beam_size = 1;
+    std::cerr << "runtime_probe component=ctranslate2 phase=translate\n";
+    const auto results = translator.translate_batch({input}, options);
     if (results.size() != 1 || results[0].output() != expected) {
       std::cerr << "runtime_probe component=ctranslate2 status=unexpected_output\n";
       return false;
     }
+    std::cerr << "runtime_probe component=ctranslate2 status=pass\n";
   } catch (const std::exception&) {
     std::cerr << "runtime_probe component=ctranslate2 status=translation_error\n";
     return false;
