@@ -27,6 +27,21 @@ describe('PopupView', () => {
     expect(screen.getByText('[FAKE] こんにちは')).toBeInTheDocument();
   });
 
+  it('offers explicit model installation when the offline pack is missing', async () => {
+    const onInstallModel = vi.fn();
+    render(PopupView, {
+      model: {
+        ...base,
+        status: 'error',
+        errorCode: 'model_unavailable',
+      },
+      onInstallModel,
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Install offline model' }));
+    expect(onInstallModel).toHaveBeenCalledOnce();
+  });
+
   it('emits dismiss intent from the close action', async () => {
     const onDismiss = vi.fn();
     render(PopupView, { model: { ...base, status: 'capturing' }, onDismiss });
