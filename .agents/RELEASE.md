@@ -13,9 +13,9 @@ ClipLingo releases by product maturity. Release requirements are project-specifi
 ## Release rules
 
 1. Release only from verified `master`.
-2. Prefer small frequent prereleases over accumulating finished features on long-lived branches.
+2. Integrate at coherent feature/slice or logical-change boundaries. Do not accumulate completed value on long-lived branches, and do not split one logical outcome into branch-per-tweak delivery ceremony.
 3. Tag immutable versions; never replace published binaries under the same tag.
-4. A failed release becomes a normal fix and a new patch/prerelease version.
+4. A failed release becomes a bounded fix and a new patch/prerelease version.
 5. Release automation/signing/package-manager work is implemented only when the current maturity stage requires it.
 6. WinGet/Chocolatey are downstream distribution; they do not replace or rebuild the canonical GitHub Release asset.
 7. ARM64 or another platform requires a real test target before publication.
@@ -40,7 +40,7 @@ Windows code signing and Tauri updater signing are separate trust mechanisms. Pr
 
 ### Alpha
 
-- required CI/repository quality gates are green;
+- required repository integration evidence is green for the advertised alpha behavior;
 - the advertised alpha path is proven by the smallest credible automated/native evidence available;
 - no known privacy/correctness blocker exists for the advertised behavior;
 - manual Windows interaction is not a default blocker and is required only when the release/slice explicitly declares it necessary because the behavior cannot be credibly verified otherwise.
@@ -50,7 +50,7 @@ Windows code signing and Tauri updater signing are separate trust mechanisms. Pr
 - broader representative application/DPI/monitor compatibility;
 - latency/resource measurements where user experience depends on them;
 - installer/update path if beta is distributed as installed software;
-- regression suite for accumulated product behaviors;
+- regression coverage for accumulated product behaviors;
 - targeted manual/native evidence only for behavior that remains impractical to automate.
 
 ### Stable
@@ -66,4 +66,4 @@ Windows code signing and Tauri updater signing are separate trust mechanisms. Pr
 
 ## Rollback
 
-Desktop releases are immutable. If a published version is defective, stop promoting it and publish a corrected version. Source changes are reverted or fixed through normal small changes; do not mutate history or published artifacts.
+Desktop releases are immutable. If a published version is defective, stop promoting it and publish a corrected version. Source changes are reverted or fixed through normal bounded logical changes; do not mutate history or published artifacts.
