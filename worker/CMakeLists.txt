@@ -55,6 +55,10 @@ set(SPM_ENABLE_SHARED OFF CACHE BOOL "" FORCE)
 set(SPM_BUILD_TEST OFF CACHE BOOL "" FORCE)
 set(SPM_ENABLE_TCMALLOC OFF CACHE BOOL "" FORCE)
 set(SPM_ENABLE_MSVC_MT_BUILD ON CACHE BOOL "" FORCE)
+# Keep protobuf inside the source-pinned SentencePiece build. An external
+# protobuf package can inject a prebuilt MSVC runtime/toolset into this static
+# graph and break the worker probe at link time.
+set(SPM_PROTOBUF_PROVIDER internal CACHE STRING "" FORCE)
 
 FetchContent_Declare(
   sentencepiece
