@@ -67,14 +67,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(sentencepiece)
 
-# This pinned SentencePiece revision exposes a static alias but does not attach
-# its build-tree headers to the target usage requirements. Repair that upstream
-# target contract locally so worker consumers do not rely on global includes.
+# SentencePiece 0.2.2 generates consumer-safe public headers that rewrite its
+# source-tree Abseil includes. Its build target does not expose those headers
+# to in-tree consumers, so attach the generated public interface locally.
+add_dependencies(sentencepiece-static generate_installed_headers)
 target_include_directories(
   sentencepiece-static
   INTERFACE
-    $<BUILD_INTERFACE:${sentencepiece_SOURCE_DIR}/src>
-    $<BUILD_INTERFACE:${sentencepiece_BINARY_DIR}/src>
+    $<BUILD_INTERFACE:${sentencepiece_BINARY_DIR}/src/installed_headers>
 )
 
 add_executable(cliplingo_worker main.cpp)
