@@ -50,7 +50,19 @@ jobs:
       - name: Configure C++ worker runtimes
         run: cmake -S ../worker -B ../worker/build -A x64
       - name: Build C++ worker and runtime probe
-        run: cmake --build ../worker/build --config Release --target cliplingo_worker cliplingo_worker_runtime_probe
+        shell: pwsh
+        run: |
+          $buildOutput = & cmake --build ../worker/build --config Release --target cliplingo_worker cliplingo_worker_runtime_probe 2>&1
+          $buildExitCode = $LASTEXITCODE
+          if ($buildExitCode -ne 0) {
+            $diagnostics = $buildOutput | Select-String -Pattern 'LNK[0-9]+|unresolved external|fatal error|error:'
+            if ($diagnostics) {
+              $diagnostics | ForEach-Object { Write-Host $_.Line }
+            } else {
+              $buildOutput | Select-Object -Last 80 | ForEach-Object { Write-Host $_ }
+            }
+            exit $buildExitCode
+          }
       - name: Verify native translation runtime
         shell: pwsh
         run: |
