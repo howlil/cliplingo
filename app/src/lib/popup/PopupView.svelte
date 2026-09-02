@@ -4,9 +4,13 @@
   let {
     model,
     onDismiss,
+    onInstallModel,
+    modelInstallState = 'idle',
   }: {
     model: PopupViewModel;
     onDismiss?: () => void;
+    onInstallModel?: () => void;
+    modelInstallState?: 'idle' | 'installing' | 'installed' | 'error';
   } = $props();
 </script>
 
@@ -28,6 +32,23 @@
       {:else if model.status === 'ready'}
         <p class="source">{model.sourceText}</p>
         <p class="translation">{model.translatedText}</p>
+      {:else if model.status === 'error' && model.errorCode === 'model_unavailable'}
+        {#if modelInstallState === 'installing'}
+          <p class="status">Downloading and verifying the offline Japanese → Indonesian model…</p>
+        {:else if modelInstallState === 'installed'}
+          <p class="status">Offline model installed. Press the shortcut again to translate.</p>
+        {:else}
+          <p class="error">
+            {modelInstallState === 'error'
+              ? 'The offline model could not be installed.'
+              : 'The Japanese → Indonesian offline model is not installed.'}
+          </p>
+          {#if onInstallModel}
+            <button class="action" type="button" onclick={onInstallModel}>
+              {modelInstallState === 'error' ? 'Retry model install' : 'Install offline model'}
+            </button>
+          {/if}
+        {/if}
       {:else if model.status === 'error'}
         <p class="error" data-error-code={model.errorCode}>Unable to translate this selection.</p>
       {/if}
@@ -73,7 +94,8 @@
     cursor: pointer;
   }
 
-  .close:hover {
+  .close:hover,
+  .action:hover {
     background: color-mix(in srgb, currentColor 8%, transparent);
   }
 
@@ -114,6 +136,19 @@
 
   .error {
     color: #b42318;
+  }
+
+  .action {
+    justify-self: start;
+    padding: 7px 10px;
+    border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+    border-radius: 8px;
+    color: inherit;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
   }
 
   @media (prefers-color-scheme: dark) {
