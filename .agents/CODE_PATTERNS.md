@@ -28,6 +28,29 @@ capture -> normalize/prepare -> translate -> present
 
 As language routing/model management grows, keep those decisions in Rust application/core ownership rather than Tauri or Svelte.
 
+## Vertical feature delivery
+
+User-facing features are delivered as coherent vertical slices. A feature is not considered delivered merely because its backend/native capability exists or because a UI surface exists independently.
+
+For behavior visible to the user, carry the required path through the relevant layers:
+
+```text
+user intent / UI
+  -> thin Tauri boundary
+  -> Rust application workflow
+  -> native / worker / persistence capability when required
+  -> observable user state or result
+```
+
+Backend/native-only or UI-only slices are allowed when they are explicit technical prerequisites. Such slices must:
+
+- remain bounded to the prerequisite they prove;
+- preserve the intended end-to-end product contract;
+- be described as foundation/infrastructure work rather than a completed user feature;
+- lead into the already-defined vertical product slice instead of becoming a parallel roadmap.
+
+Do not let frontend and backend/native implementations independently declare the same product feature complete. When a feature requires both, evolve their contracts together and integrate them before calling the feature done.
+
 ## Explicit state machines
 
 Prefer explicit states over boolean combinations.

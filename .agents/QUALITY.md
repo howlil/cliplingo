@@ -14,6 +14,22 @@ Changes must preserve these unless the user explicitly approves a material bound
 - Clipboard fallback preserves/restores user clipboard state within the supported safety policy.
 - Model/update artifacts are verified before activation and carry license/compatibility metadata.
 
+## User-facing feature evidence
+
+A user-facing feature is complete only when the required user path is integrated across the layers it depends on. Backend/native implementation evidence or frontend rendering evidence alone is not sufficient when the product behavior requires both.
+
+Verification should prove the smallest credible end-to-end path, for example:
+
+```text
+user action
+  -> UI / Tauri intent
+  -> Rust application behavior
+  -> worker / native / persistence boundary when applicable
+  -> user-visible result or error state
+```
+
+Technical foundation slices may use narrower evidence while they remain prerequisites. Do not report those slices as completed product features, and do not weaken end-to-end acceptance merely because individual layer tests are green.
+
 ## Fast targeted checks
 
 Run only the checks relevant to the touched surface during implementation, then satisfy required pre-merge CI.
