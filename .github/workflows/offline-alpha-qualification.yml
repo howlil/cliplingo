@@ -2,6 +2,11 @@ name: Offline Alpha Qualification
 
 on:
   workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/offline-alpha-qualification.yml'
+      - 'app/src-tauri/tests/offline_translation_alpha.rs'
 
 permissions:
   contents: read
