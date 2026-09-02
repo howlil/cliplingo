@@ -111,15 +111,14 @@ fn selected_japanese_reaches_popup_through_real_offline_worker() {
     let warm_elapsed = warm_started.elapsed();
     assert_real_translation(&warm_snapshot);
 
+    let translated_chars = warm_snapshot
+        .translated_text
+        .as_deref()
+        .map(|text| text.chars().count())
+        .unwrap_or(0);
     println!(
-        "offline_alpha cold_ms={} warm_ms={} translated_chars={}",
+        "offline_alpha cold_ms={} warm_ms={} translated_chars={translated_chars}",
         cold_elapsed.as_millis(),
-        warm_elapsed.as_millis(),
-        warm_snapshot
-            .translated_text
-            .as_deref()
-            .map(str::chars)
-            .map(Iterator::count)
-            .unwrap_or(0)
+        warm_elapsed.as_millis()
     );
 }
