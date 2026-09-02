@@ -1,9 +1,18 @@
 #include <windows.h>
 
+#include <ctranslate2/translator.h>
+#include <sentencepiece_processor.h>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <memory>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -14,7 +23,6 @@ constexpr std::uint8_t kProtocolVersion = 1;
 constexpr std::uint8_t kTranslateRequest = 0x01;
 constexpr std::uint8_t kTranslateResponse = 0x02;
 constexpr std::uint8_t kErrorResponse = 0x03;
-constexpr std::uint8_t kMalformedRequest = 0x01;
 constexpr std::uint8_t kUnsupportedRequest = 0x02;
 constexpr std::uint8_t kTranslationFailed = 0x03;
 constexpr std::size_t kHeaderLen = 18;
@@ -31,6 +39,76 @@ enum class ReadStatus {
   Ok,
   Closed,
   Error,
+};
+
+class TranslationStage {
+ public:
+  explicit TranslationStage(const std::filesystem::path& directory) {
+    const auto source_model = directory / "source.spm";
+    const auto target_model = directory / "target.spm";
+
+    if (!source_tokenizer_.Load(source_model.string()).ok() ||
+        !target_tokenizer_.Load(target_model.string()).ok()) {
+      throw std::runtime_error("failed to load SentencePiece model");
+    }
+
+    ctranslate2::models::ModelLoader model_loader(directory.string());
+    translator_ = std::make_unique<ctranslate2::Translator>(model_loader);
+  }
+
+  std::string translate(const std::string& input) {
+    if (input.empty()) {
+      return {};
+    }
+
+    std::vector<std::string> source_tokens;
+    if (!source_tokenizer_.Encode(input, &source_tokens).ok() || source_tokens.empty()) {
+      throw std::runtime_error("failed to tokenize translation input");
+    }
+
+    std::vector<std::string_view> source_token_views;
+    source_token_views.reserve(source_tokens.size());
+    for (const auto& token : source_tokens) {
+      source_token_views.emplace_back(token);
+    }
+
+    const auto results = translator_->translate_batch({source_token_views});
+    if (results.size() != 1) {
+      throw std::runtime_error("translation returned an unexpected batch size");
+    }
+
+    std::string output;
+    if (!target_tokenizer_.Decode(results[0].output(), &output).ok()) {
+      throw std::runtime_error("failed to decode translation output");
+    }
+    return output;
+  }
+
+ private:
+  sentencepiece::SentencePieceProcessor source_tokenizer_;
+  sentencepiece::SentencePieceProcessor target_tokenizer_;
+  std::unique_ptr<ctranslate2::Translator> translator_;
+};
+
+class OpusRuntime {
+ public:
+  explicit OpusRuntime(const std::filesystem::path& pack_directory)
+      : ja_en_(pack_directory / "stages" / "ja-en"),
+        en_id_(pack_directory / "stages" / "en-id") {}
+
+  bool translate(const std::string& input, std::string& output) {
+    try {
+      const std::string english = ja_en_.translate(input);
+      output = en_id_.translate(english);
+      return true;
+    } catch (const std::exception&) {
+      return false;
+    }
+  }
+
+ private:
+  TranslationStage ja_en_;
+  TranslationStage en_id_;
 };
 
 std::uint64_t read_u64_le(const std::uint8_t* bytes) {
@@ -135,7 +213,25 @@ bool write_error(HANDLE pipe, std::uint64_t request_id, std::uint8_t code) {
   return write_frame(pipe, kErrorResponse, request_id, &code, 1);
 }
 
-int serve_connection(HANDLE pipe) {
+bool deterministic_test_mode() {
+  const char* value = std::getenv("CLIPLINGO_WORKER_TEST_MODE");
+  return value != nullptr && std::strcmp(value, "deterministic") == 0;
+}
+
+std::unique_ptr<OpusRuntime> load_runtime() {
+  const char* pack_directory = std::getenv("CLIPLINGO_MODEL_PACK");
+  if (pack_directory == nullptr || pack_directory[0] == '\0') {
+    return nullptr;
+  }
+
+  try {
+    return std::make_unique<OpusRuntime>(std::filesystem::path(pack_directory));
+  } catch (const std::exception&) {
+    return nullptr;
+  }
+}
+
+int serve_connection(HANDLE pipe, OpusRuntime* runtime, bool deterministic) {
   while (true) {
     std::array<std::uint8_t, kHeaderLen> header_bytes{};
     const ReadStatus header_status = read_exact(pipe, header_bytes.data(), header_bytes.size());
@@ -166,17 +262,35 @@ int serve_connection(HANDLE pipe) {
       continue;
     }
 
-    if (payload.size() > kMaxPayloadLen - kFakePrefix.size()) {
-      if (!write_error(pipe, header.request_id, kTranslationFailed)) {
-        return 14;
-      }
-      continue;
-    }
-
     std::vector<std::uint8_t> translated;
-    translated.reserve(kFakePrefix.size() + payload.size());
-    translated.insert(translated.end(), kFakePrefix.begin(), kFakePrefix.end());
-    translated.insert(translated.end(), payload.begin(), payload.end());
+    if (deterministic) {
+      if (payload.size() > kMaxPayloadLen - kFakePrefix.size()) {
+        if (!write_error(pipe, header.request_id, kTranslationFailed)) {
+          return 14;
+        }
+        continue;
+      }
+      translated.reserve(kFakePrefix.size() + payload.size());
+      translated.insert(translated.end(), kFakePrefix.begin(), kFakePrefix.end());
+      translated.insert(translated.end(), payload.begin(), payload.end());
+    } else {
+      if (runtime == nullptr) {
+        if (!write_error(pipe, header.request_id, kTranslationFailed)) {
+          return 14;
+        }
+        continue;
+      }
+
+      const std::string input(payload.begin(), payload.end());
+      std::string output;
+      if (!runtime->translate(input, output) || output.size() > kMaxPayloadLen) {
+        if (!write_error(pipe, header.request_id, kTranslationFailed)) {
+          return 14;
+        }
+        continue;
+      }
+      translated.assign(output.begin(), output.end());
+    }
 
     if (!write_frame(
             pipe,
@@ -205,13 +319,23 @@ int wmain() {
     return 2;
   }
 
+  const bool deterministic = deterministic_test_mode();
+  std::unique_ptr<OpusRuntime> runtime;
+  if (!deterministic) {
+    runtime = load_runtime();
+    if (!runtime) {
+      CloseHandle(pipe);
+      return 4;
+    }
+  }
+
   const BOOL connected = ConnectNamedPipe(pipe, nullptr);
   if (!connected && GetLastError() != ERROR_PIPE_CONNECTED) {
     CloseHandle(pipe);
     return 3;
   }
 
-  const int result = serve_connection(pipe);
+  const int result = serve_connection(pipe, runtime.get(), deterministic);
   DisconnectNamedPipe(pipe);
   CloseHandle(pipe);
   return result;
