@@ -47,10 +47,17 @@ jobs:
         run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
       - name: Rust tests
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --all
-      - name: Configure deterministic C++ worker
+      - name: Configure C++ worker runtimes
         run: cmake -S ../worker -B ../worker/build -A x64
-      - name: Build deterministic C++ worker
-        run: cmake --build ../worker/build --config Release
+      - name: Build C++ worker and runtime probe
+        run: cmake --build ../worker/build --config Release --target cliplingo_worker cliplingo_worker_runtime_probe
+      - name: Verify native translation runtime
+        shell: pwsh
+        run: |
+          & "../worker/build/Release/cliplingo-worker-runtime-probe.exe" `
+            "../worker/build/_deps/ctranslate2-src/tests/data/models/v2/aren-transliteration-i8" `
+            "../worker/build/_deps/sentencepiece-src/data/botchan_1000_bpe.model"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify Rust to C++ worker boundary
         shell: pwsh
         env:
