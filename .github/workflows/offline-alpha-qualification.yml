@@ -1,0 +1,72 @@
+name: Offline Alpha Qualification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/models/requirements.txt
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      - name: Install model build dependencies
+        run: python -m pip install -r scripts/models/requirements.txt
+
+      - name: Build pinned OPUS model pack
+        run: >-
+          python scripts/models/build_opus_pack.py
+          --catalog models/catalog/ja-id-opus-v1.json
+          --output models/build/ja-id-opus-v1
+
+      - name: Configure release worker
+        run: cmake -S worker -B worker/build -A x64
+
+      - name: Build release worker
+        run: cmake --build worker/build --config Release --target cliplingo_worker
+
+      - name: Prove selected Japanese reaches ready popup through real worker
+        working-directory: app
+        env:
+          CLIPLINGO_WORKER_EXE: ${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe
+          CLIPLINGO_MODEL_PACK: ${{ github.workspace }}\models\build\ja-id-opus-v1
+        run: >-
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
+          --test offline_translation_alpha
+          -- --ignored --nocapture
+
+      - name: Record loaded worker working set
+        shell: pwsh
+        env:
+          CLIPLINGO_MODEL_PACK: ${{ github.workspace }}\models\build\ja-id-opus-v1
+        run: |
+          $worker = Start-Process `
+            -FilePath "${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe" `
+            -PassThru `
+            -WindowStyle Hidden
+          try {
+            Start-Sleep -Seconds 15
+            if ($worker.HasExited) {
+              throw "worker exited before resource sampling with code $($worker.ExitCode)"
+            }
+            $worker.Refresh()
+            $workingSetMb = [math]::Round($worker.WorkingSet64 / 1MB, 1)
+            Write-Output "offline_alpha worker_working_set_mb=$workingSetMb"
+          }
+          finally {
+            if (-not $worker.HasExited) {
+              Stop-Process -Id $worker.Id -Force
+            }
+          }
