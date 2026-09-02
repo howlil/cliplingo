@@ -78,7 +78,9 @@ pub async fn remove(app: tauri::AppHandle) -> Result<ModelPackStatus, String> {
 }
 
 pub fn is_complete(directory: &Path) -> bool {
-    REQUIRED_FILES.iter().all(|relative| directory.join(relative).is_file())
+    REQUIRED_FILES
+        .iter()
+        .all(|relative| directory.join(relative).is_file())
 }
 
 fn status_for_directory(directory: &Path) -> ModelPackStatus {
