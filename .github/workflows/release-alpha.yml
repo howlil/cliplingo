@@ -1,0 +1,151 @@
+name: Release Alpha
+
+on:
+  push:
+    branches:
+      - release/v0.1.0-alpha.1
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: v0.1.0-alpha.1
+  MODEL_ASSET: cliplingo-ja-id-opus-v1.zip
+  INSTALLER_ASSET: ClipLingo_0.1.0-alpha.1_x64-setup.exe
+
+jobs:
+  model-pack:
+    runs-on: ubuntu-latest
+    outputs:
+      sha256: ${{ steps.hash.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: scripts/models/requirements.txt
+      - name: Install model tooling
+        run: python -m pip install -r scripts/models/requirements.txt
+      - name: Build pinned OPUS model pack
+        run: >-
+          python scripts/models/build_opus_pack.py
+          --catalog models/catalog/ja-id-opus-v1.json
+          --output models/build/ja-id-opus-v1
+      - name: Validate production model pack
+        run: |
+          test -f models/build/ja-id-opus-v1/manifest.json
+          for stage in ja-en en-id; do
+            test -f "models/build/ja-id-opus-v1/stages/$stage/config.json"
+            test -f "models/build/ja-id-opus-v1/stages/$stage/model.bin"
+            test -f "models/build/ja-id-opus-v1/stages/$stage/source.spm"
+            test -f "models/build/ja-id-opus-v1/stages/$stage/target.spm"
+          done
+      - name: Archive model pack
+        run: |
+          cd models/build/ja-id-opus-v1
+          zip -9 -r "../../../${MODEL_ASSET}" .
+      - name: Hash model pack
+        id: hash
+        run: |
+          SHA256=$(sha256sum "${MODEL_ASSET}" | awk '{print $1}')
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+          echo "${SHA256}  ${MODEL_ASSET}" > "${MODEL_ASSET}.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-model-pack
+          path: |
+            ${{ env.MODEL_ASSET }}
+            ${{ env.MODEL_ASSET }}.sha256
+          if-no-files-found: error
+
+  windows-release:
+    needs: model-pack
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: production-model-pack
+          path: release-input
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+      - name: Configure native translation runtime
+        run: cmake -S worker -B worker/build -A x64
+      - name: Build worker and runtime probe
+        run: cmake --build worker/build --config Release --target cliplingo_worker cliplingo_worker_runtime_probe
+      - name: Verify native runtime probe
+        run: |
+          & "worker/build/Release/cliplingo-worker-runtime-probe.exe" `
+            "worker/build/_deps/ctranslate2-src/tests/data/models/v2/aren-transliteration-i8" `
+            "worker/build/_deps/sentencepiece-src/data/botchan_1000_bpe.model"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Extract production model pack
+        run: |
+          $pack = "models/release/ja-id-opus-v1"
+          New-Item -ItemType Directory -Force -Path $pack | Out-Null
+          Expand-Archive -LiteralPath "release-input/${env:MODEL_ASSET}" -DestinationPath $pack -Force
+      - name: Real offline translation smoke
+        working-directory: app
+        env:
+          CLIPLINGO_WORKER_EXE: ${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe
+          CLIPLINGO_MODEL_PACK: ${{ github.workspace }}\models\release\ja-id-opus-v1
+        run: >-
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
+          --test worker_real_translation_smoke -- --ignored --nocapture
+      - name: Stage bundled worker
+        run: Copy-Item "worker/build/Release/cliplingo-worker.exe" "app/src-tauri/cliplingo-worker.exe" -Force
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+      - name: Build NSIS installer
+        working-directory: app
+        env:
+          CLIPLINGO_MODEL_PACK_URL: https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/${{ env.MODEL_ASSET }}
+          CLIPLINGO_MODEL_PACK_SHA256: ${{ needs.model-pack.outputs.sha256 }}
+        run: npm run tauri build -- --config src-tauri/tauri.release.conf.json --bundles nsis
+      - name: Normalize installer and hash
+        id: installer
+        working-directory: app
+        run: |
+          $built = Get-ChildItem "src-tauri/target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          if (-not $built) { throw "NSIS installer was not produced" }
+          Copy-Item $built.FullName $env:INSTALLER_ASSET -Force
+          $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $env:INSTALLER_ASSET).Hash.ToLowerInvariant()
+          Set-Content -NoNewline -Path "$env:INSTALLER_ASSET.sha256" -Value "$sha  $env:INSTALLER_ASSET"
+          "sha256=$sha" >> $env:GITHUB_OUTPUT
+      - name: Publish gated alpha release and tag
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:RELEASE_TAG `
+            $env:INSTALLER_ASSET `
+            "$env:INSTALLER_ASSET.sha256" `
+            "../release-input/$env:MODEL_ASSET" `
+            "../release-input/$env:MODEL_ASSET.sha256" `
+            --target $env:GITHUB_SHA `
+            --title "ClipLingo 0.1.0 Alpha 1" `
+            --notes-file "../docs/releases/v0.1.0-alpha.1.md" `
+            --prerelease
+      - name: Release evidence
+        run: |
+          "installer_sha256=${{ steps.installer.outputs.sha256 }}" | Out-File -FilePath release-evidence.txt -Encoding utf8
+          "model_sha256=${{ needs.model-pack.outputs.sha256 }}" | Out-File -FilePath release-evidence.txt -Encoding utf8 -Append
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alpha-release-evidence
+          path: release-evidence.txt
+          if-no-files-found: error
