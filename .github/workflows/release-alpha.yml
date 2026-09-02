@@ -51,6 +51,7 @@ jobs:
           SHA256=$(sha256sum "${MODEL_ASSET}" | awk '{print $1}')
           echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
           echo "${SHA256}  ${MODEL_ASSET}" > "${MODEL_ASSET}.sha256"
+          echo "model_sha256=${SHA256}"
       - uses: actions/upload-artifact@v4
         with:
           name: production-model-pack
@@ -87,6 +88,7 @@ jobs:
       - name: Build worker and runtime probe
         run: cmake --build worker/build --config Release --target cliplingo_worker cliplingo_worker_runtime_probe
       - name: Verify native runtime probe
+        timeout-minutes: 3
         run: |
           & "worker/build/Release/cliplingo-worker-runtime-probe.exe" `
             "worker/build/_deps/ctranslate2-src/tests/data/models/v2/aren-transliteration-i8" `
@@ -98,6 +100,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $pack | Out-Null
           Expand-Archive -LiteralPath "release-input/${env:MODEL_ASSET}" -DestinationPath $pack -Force
       - name: Real offline translation smoke
+        timeout-minutes: 5
         working-directory: app
         env:
           CLIPLINGO_WORKER_EXE: ${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe
@@ -126,6 +129,7 @@ jobs:
           $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $env:INSTALLER_ASSET).Hash.ToLowerInvariant()
           Set-Content -NoNewline -Path "$env:INSTALLER_ASSET.sha256" -Value "$sha  $env:INSTALLER_ASSET"
           "sha256=$sha" >> $env:GITHUB_OUTPUT
+          Write-Host "installer_sha256=$sha"
       - name: Publish gated alpha release and tag
         working-directory: app
         env:
@@ -142,6 +146,8 @@ jobs:
             --prerelease
       - name: Release evidence
         run: |
+          Write-Host "installer_sha256=${{ steps.installer.outputs.sha256 }}"
+          Write-Host "model_sha256=${{ needs.model-pack.outputs.sha256 }}"
           "installer_sha256=${{ steps.installer.outputs.sha256 }}" | Out-File -FilePath release-evidence.txt -Encoding utf8
           "model_sha256=${{ needs.model-pack.outputs.sha256 }}" | Out-File -FilePath release-evidence.txt -Encoding utf8 -Append
       - uses: actions/upload-artifact@v4
