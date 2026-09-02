@@ -64,6 +64,7 @@ jobs:
             exit $buildExitCode
           }
       - name: Verify native translation runtime
+        timeout-minutes: 3
         shell: pwsh
         run: |
           & "../worker/build/Release/cliplingo-worker-runtime-probe.exe" `
