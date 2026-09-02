@@ -12,7 +12,6 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace {
@@ -66,13 +65,7 @@ class TranslationStage {
       throw std::runtime_error("failed to tokenize translation input");
     }
 
-    std::vector<std::string_view> source_token_views;
-    source_token_views.reserve(source_tokens.size());
-    for (const auto& token : source_tokens) {
-      source_token_views.emplace_back(token);
-    }
-
-    const auto results = translator_->translate_batch({source_token_views});
+    const auto results = translator_->translate_batch({source_tokens});
     if (results.size() != 1) {
       throw std::runtime_error("translation returned an unexpected batch size");
     }
