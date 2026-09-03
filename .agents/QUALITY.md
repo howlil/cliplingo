@@ -1,10 +1,12 @@
 # Quality
 
-`QUALITY.md` is the canonical repository-specific verification contract. `.github/workflows/ci.yml` remains the executable CI truth. This file explains which risks the checks protect, how much verification is appropriate during implementation, and which evidence matters.
+`QUALITY.md` is the canonical repository-specific verification contract. `.github/workflows/ci.yml` is the executable PR/integration CI truth; `.agents/RELEASE.md` owns release qualification.
+
+The goal is not maximum test count. The goal is **fast, accurate evidence proportional to changed risk**.
 
 ## Product invariants
 
-Changes must preserve these unless the user explicitly approves a material boundary change:
+Preserve these unless the user explicitly approves a material boundary change:
 
 - Normal translation is offline.
 - Selected and translated content is not emitted to normal logs/telemetry.
@@ -13,62 +15,157 @@ Changes must preserve these unless the user explicitly approves a material bound
 - Worker responses are request-ID correlated and protocol-bounded.
 - Clipboard fallback preserves/restores user clipboard state within the supported safety policy.
 - Model/update artifacts are verified before activation and carry license/compatibility metadata.
+- No valid selection means no translation popup and no translator invocation.
+- PowerShell installation executes only a published ClipLingo GitHub Release installer after SHA256 verification.
 
 ## Verification principle
 
-Use the cheapest, fastest, highest-signal automated verification that can actually prove the changed behavior. Escalate only when a cheaper level leaves material risk invisible.
+Use the cheapest, fastest, highest-signal **automated** verification that can actually prove the changed behavior or boundary. Escalate only when a cheaper level leaves material risk invisible and another deterministic repository-owned check can observe it.
 
-Do **not** automatically run a fixed unit -> integration -> E2E -> manual/staging ladder after every change. Browser black-box testing and manual acceptance are not required merge/release gates. Test depth follows the behavior and repository-owned boundary that changed, not ceremony.
+Do **not** automatically run a fixed `static -> unit -> integration -> E2E -> manual` ladder. Browser black-box testing, native manual acceptance, staging ceremony, and human visual-review gates are not required merge/release gates. Test depth follows changed behavior and blast radius, not ceremony.
 
-Before adding another verification layer, ask:
+Before adding another verification layer, answer:
 
 1. What observable behavior changed?
-2. At which boundary can it fail?
+2. Which repository-owned boundary can fail because of that change?
 3. What is the cheapest automated check that observes that boundary?
-4. What material failure would remain invisible after that check?
+4. What material failure remains invisible after that check?
 5. Is there another deterministic repository-owned check that can observe that risk?
 
-Only escalate when the answer to #5 is yes.
+If #5 is no, document the residual risk and stop adding gates.
 
 ## Verification depth
 
-### Startup
+### Startup / micro
 
-Use for trivial structural/configuration edits where parse/load/basic startup is the meaningful failure mode.
-
-### Micro
-
-Use for tiny local low-risk behavior with a narrow failure surface. Run the smallest directly relevant check or test.
+Use for syntax, configuration, documentation, and tiny local low-risk changes. Run only the directly relevant parser/static/test check. Documentation-only changes do not justify product recompilation.
 
 ### Focused — default
 
-Use for normal feature, bug-fix, and bounded refactor work. Typically combine only the relevant subset of lint/type/static checks, tests covering the changed behavior, the affected build target, and integration/smoke evidence at a boundary the change actually crosses.
+Use for normal features, fixes, and bounded refactors. Combine only the relevant subset of:
+
+- static/lint checks for the touched stack;
+- tests for changed behavior;
+- affected build target;
+- boundary integration where the change crosses that boundary.
 
 ### Full
 
-Use full repository/release validation when the blast radius genuinely warrants it, such as build system/dependency/toolchain/CI/packaging changes, project-wide shared contracts, security/privacy-critical changes spanning multiple boundaries, release qualification, or an explicit user request.
+Use broad repository/release validation only when blast radius warrants it, such as:
 
-Full CI may remain broader than local implementation checks. Green CI is integration evidence; it is not a requirement to reproduce every CI step locally after every logical change.
+- CI/build-system/toolchain/dependency changes;
+- packaging/release changes;
+- shared contract or architecture-boundary changes;
+- security/privacy-critical changes spanning multiple boundaries;
+- milestone/release qualification;
+- explicit user request.
+
+A workflow change is special: because the verification mechanism itself changed, the changed CI workflow intentionally exercises every CI lane once.
+
+## Risk-routed CI architecture
+
+PR/integration CI uses independent lanes that run in parallel. A lightweight classifier maps changed files to risk surfaces. A stable final `required` job aggregates lane results so branch protection can depend on one check even when irrelevant lanes are correctly skipped.
+
+### Frontend lane
+
+Runs only when frontend/tooling risk changes, such as `app/src/**`, package metadata, Vite/TypeScript configuration, or the CI workflow itself.
+
+Evidence:
+
+```text
+npm run check
+npm test
+npm run build
+```
+
+The frontend lane runs on Linux because Svelte/TypeScript production verification is platform-independent. Windows-native behavior is not duplicated here.
+
+### Rust core lane
+
+Runs when `app/src-tauri/**` changes.
+
+Evidence:
+
+```text
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo clippy --locked --manifest-path src-tauri/Cargo.toml --lib --bins --all-features -- -D warnings
+cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
+```
+
+This proves production Rust/Tauri compilation, linting, and application/core unit behavior without compiling every native integration harness on every Rust change.
+
+### Model-contract lane
+
+Runs only when model catalogs/build scripts/model-pack contract code changes.
+
+Evidence:
+
+```text
+python ../scripts/models/build_opus_pack.py --catalog ../models/catalog/en-id-opus-v1.json --output ../models/build/en-id-opus-v1 --dry-run
+```
+
+Ordinary PR verification must not download production model weights. Real weights are a release-gate concern.
+
+### Native boundary lane
+
+Runs only when the C++ worker, worker/protocol Rust boundary, worker integration tests, Cargo dependency boundary, or CI workflow changes.
+
+Evidence:
+
+- configure C++ worker/runtime;
+- build `cliplingo_worker` + runtime probe;
+- execute native runtime probe;
+- deterministic Rust -> C++ protocol regression;
+- deterministic `WorkerTranslator` regression;
+- compile the real-production smoke harness without downloading production weights.
+
+Do not run this lane for unrelated popup/settings/application-core changes merely because the product contains a native worker.
+
+### PowerShell distribution lane
+
+Runs when `scripts/install.ps1` or the CI workflow changes. It is deliberately small and Windows-native.
+
+Evidence:
+
+- parse the PowerShell file with `System.Management.Automation.Language.Parser`;
+- execute `scripts/install.ps1 -ResolveOnly` using the CI read-only GitHub token;
+- prove the resolver can identify the newest published non-draft release, the x64 installer asset, and trusted SHA256 metadata;
+- do **not** download or execute the installer in PR CI.
+
+This tests the distribution bootstrap contract without turning installer-script changes into a product build or release installation.
+
+### Required aggregate
+
+The final `required` job succeeds when the classifier succeeds and every applicable lane is either `success` or intentionally `skipped`. Failure/cancellation of an applicable lane fails the aggregate.
+
+## CI performance rules
+
+- Keep `cancel-in-progress: true` so superseded branch runs stop consuming time.
+- Parallelize independent risk lanes instead of building frontend -> Rust -> native serially.
+- Preserve npm/Rust caches where deterministic and low-risk.
+- Do not cache opaque CMake build outputs by default; stale native artifacts can create false confidence.
+- Add a dependency/tool only when it materially improves signal or lead time.
+- Use bounded timeouts so hung tooling does not become a delivery gate.
+- Do not rerun a full pipeline after a failure when a focused rerun can prove the fix; the next integration run remains authoritative.
+- Once an exact-head qualification is running, do not add documentation/cleanup commits that merely cancel and restart expensive gates.
 
 ## User-facing feature evidence
 
-A user-facing feature is complete only when the required user path is integrated across the repository-owned layers it depends on. Backend/native implementation evidence or frontend rendering evidence alone is not sufficient when the product behavior requires both.
+A user-facing feature is complete only when the required user path is integrated across the repository-owned layers it actually depends on. Backend/native implementation evidence or frontend rendering alone is insufficient when the product behavior requires both.
 
-Prefer deterministic integration across the relevant owners, for example:
+Use the smallest credible deterministic path:
 
 ```text
 user intent/state
   -> UI / Tauri application behavior
   -> Rust application behavior
-  -> worker / native / persistence contract when applicable
+  -> worker/native boundary when applicable
   -> deterministic result or error-state assertion
 ```
 
-Technical foundation slices may use narrower evidence while they remain prerequisites. Do not report those slices as completed product features merely because individual layer tests are green.
+Technical foundation slices may use narrower evidence while they remain prerequisites. Do not report those as completed product features.
 
-## Available targeted checks
-
-These commands are available evidence. Select them proportionally; the list is not a mandatory sequence.
+## Current ClipLingo targeted evidence
 
 ### Frontend
 
@@ -86,57 +183,54 @@ From `app/`:
 
 ```text
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
-cargo test --locked --manifest-path src-tauri/Cargo.toml --all
+cargo clippy --locked --manifest-path src-tauri/Cargo.toml --lib --bins --all-features -- -D warnings
+cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
 ```
+
+Use broader Cargo targets only when integration-test/test-target changes require them.
 
 ### Model-pack contract
 
 ```text
-python ../scripts/models/build_opus_pack.py --catalog ../models/catalog/ja-id-opus-v1.json --output ../models/build/ja-id-opus-v1 --dry-run
+python ../scripts/models/build_opus_pack.py --catalog ../models/catalog/en-id-opus-v1.json --output ../models/build/en-id-opus-v1 --dry-run
 ```
 
-Use this when model catalog/build intent changes. Ordinary verification must not require production model-weight downloads unless the behavior under test genuinely depends on the real weights.
-
-### C++ worker/native runtime
-
-When the worker/native dependency boundary changes:
+### Native worker boundary
 
 ```text
 cmake -S ../worker -B ../worker/build -A x64
-cmake --build ../worker/build --config Release
+cmake --build ../worker/build --config Release --target cliplingo_worker cliplingo_worker_runtime_probe
 ```
 
-Run the corresponding automated native runtime probe or integration test only when the changed boundary requires that evidence.
+Then run only the relevant runtime probe/protocol integration regressions.
 
-## Integration evidence
+### PowerShell installer bootstrap
 
-The repository has Windows integration coverage for:
+```text
+./scripts/install.ps1 -ResolveOnly
+```
 
-- Rust -> C++ worker protocol/Named Pipe round-trip (`worker_cpp_integration`).
-- `WorkerTranslator` spawning/using the worker (`worker_translator_integration`).
+Use parser + `-ResolveOnly` evidence for bootstrap changes. Actual installer publication and artifact integrity are release concerns; manual installer execution is optional debugging/observational work, not a mandatory release gate.
 
-When a change crosses one of those boundaries, keep the relevant regression green and add only the smallest new executable evidence needed for the changed behavior.
+## Release qualification boundary
 
-## Current CI contract
+Real production model download/conversion, non-deterministic EN -> ID inference smoke, NSIS packaging, checksums, and release publication belong to `.github/workflows/release-alpha.yml` / `.agents/RELEASE.md`.
 
-On `master`, Windows CI currently performs broad repository integration checks for frontend, model-pack intent, Rust, C++ worker build, and worker-backed integration. `.github/workflows/ci.yml` is authoritative if this summary becomes stale.
+PR CI proves contracts and executable boundaries cheaply; release CI proves the immutable distributed artifact with real production weights. Do not duplicate release-cost evidence on every PR.
 
-Do not copy the entire CI workflow into every slice plan or treat each CI step as a separate delivery gate. During implementation, use targeted evidence; use the repository CI result at the integration boundary.
-
-## Native runtime evidence
+## Native/environment evidence
 
 Use automated native probes/integration tests for native behavior when that boundary matters. Manual Windows interaction may be useful for debugging, but it is not verification evidence required for merge, milestone completion, or release readiness.
 
-When a native/environment behavior cannot be credibly automated, document the limitation and residual risk rather than creating a mandatory manual acceptance gate.
+When an environment-specific behavior cannot be credibly automated, document the limitation and residual risk rather than creating a mandatory manual acceptance gate.
 
 ## Performance evidence
 
-Performance conclusions require release-mode measurement of the relevant user path and enough environment context to reproduce the result. Relevant ClipLingo metrics include hotkey -> popup latency, selection-capture latency, warm/cold inference latency, worker startup/model-load time, idle CPU, and working-set/peak memory.
+Performance claims require release-mode measurement and enough environment context to reproduce them. Relevant ClipLingo metrics include hotkey -> popup latency, selection-capture latency, warm/cold inference latency, worker startup/model-load time, idle CPU, and working-set/peak memory.
 
-Do not turn unmeasured targets in `PROJECT.md` into claims or merge blockers for unrelated alpha slices.
+Do not turn unmeasured targets into claims or blockers for unrelated slices.
 
-## Security/supply-chain evidence
+## Security / supply-chain evidence
 
 For model/update/release acquisition paths:
 
@@ -146,8 +240,10 @@ For model/update/release acquisition paths:
 - fail closed on verification failure;
 - keep signing credentials outside repository/frontend/logs.
 
+For `scripts/install.ps1`, specifically verify release selection, x64 asset selection, trusted SHA256 metadata resolution, downloaded-file hashing before execution, and no bypass of Windows trust/security behavior.
+
 ## Evidence discipline
 
-Never claim a test, CI run, benchmark, package, release, or deployment that was not actually observed. A valid failing regression is a defect signal; do not weaken the assertion solely to make CI green.
+Never claim a test, CI run, benchmark, package, release, or deployment that was not actually observed. A valid failing regression is a defect signal; fix the defect rather than weakening the assertion.
 
-Release-specific gates are owned by `RELEASE.md`.
+When CI fails, use the failure as the next bounded engineering input. Do not add unrelated cleanup while waiting for evidence.

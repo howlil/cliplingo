@@ -7,7 +7,7 @@ Manual acceptance testing, black-box browser/native testing, and human visual-re
 ## Channels
 
 - **Development:** every verified `master` commit is integratable product state.
-- **Alpha (`v0.x.y-alpha.N`):** core path is proven by the automated evidence required for the advertised alpha behavior; compatibility may remain narrow and documented.
+- **Alpha (`v0.x.y-alpha.N`):** core path is proven by automated evidence required for the advertised alpha behavior; compatibility may remain narrow and documented.
 - **Beta (`v0.x.y-beta.N`):** intended feature set exists; broaden compatibility, performance, reliability, update, and migration evidence.
 - **RC (`v0.x.y-rc.N`):** production-shaped candidate; only release blockers change.
 - **Stable (`v0.x.y`, later `v1.x.y`):** supported-platform, signing, install/update/uninstall, and regression guarantees are enforced through reproducible automated checks where repository-owned automation can observe them.
@@ -15,82 +15,96 @@ Manual acceptance testing, black-box browser/native testing, and human visual-re
 ## Release rules
 
 1. Release only from verified `master`.
-2. Integrate at coherent feature/slice or logical-change boundaries. Do not accumulate completed value on long-lived branches, and do not split one logical outcome into branch-per-tweak delivery ceremony.
-3. Tag immutable versions; never replace published binaries under the same tag.
+2. Integrate at coherent feature/slice or logical-change boundaries. Do not accumulate completed value on long-lived branches or split one outcome into branch-per-tweak ceremony.
+3. Published tags/binaries are immutable; never replace an existing release with different behavior.
 4. A failed release becomes a bounded fix and a new patch/prerelease version.
-5. Release automation/signing/package-manager work is implemented only when the current maturity stage requires it.
-6. WinGet/Chocolatey are downstream distribution; they do not replace or rebuild the canonical GitHub Release asset.
-7. A new platform requires an executable CI/runtime target before publication; do not substitute manual acceptance as the release gate.
+5. GitHub Releases is the canonical binary/model source; package managers and convenience installers reference those exact assets and do not rebuild them.
+6. Release automation/signing/package-manager work is implemented only when current maturity requires it.
+7. A new platform requires a real executable CI/runtime target before publication; do not substitute manual acceptance as the release gate.
 
 ## Canonical binary source
 
-GitHub Releases is canonical. Planned Windows artifacts, when applicable:
+GitHub Releases is canonical. Alpha Windows artifacts include:
 
-- primary x64 installer;
-- optional MSI only for a concrete consumer;
-- updater artifact/signature when updater exists;
-- SHA-256 checksums;
+- x64 NSIS installer;
+- versioned offline model pack required by the advertised route;
+- SHA-256 checksum sidecars;
 - concise release notes.
 
 Do not create duplicate independently-built distribution channels.
 
-## Current alpha release route
+## PowerShell bootstrap installer
 
-The first requested distributable release is `v0.1.0-alpha.1`.
+`scripts/install.ps1` is the canonical convenience installer for Windows PowerShell 5.1 and PowerShell 7. It does not build, mirror, or redefine release artifacts.
 
-The release is intentionally automated rather than created by a manual source-only tag:
+Its contract is:
 
-1. merge the verified Real Offline Translation Alpha capability to `master`;
-2. create `release/v0.1.0-alpha.1` from that exact verified `master` commit;
-3. `.github/workflows/release-alpha.yml` builds the pinned `ja-id-opus-v1` production model pack;
-4. validate required model-pack files and compute its SHA256;
-5. build the source-pinned Windows C++ worker/runtime probe;
-6. execute the bounded automated native runtime probe;
-7. execute a real non-deterministic Japanese translation through the production OPUS pack;
-8. stage `cliplingo-worker.exe` into the Tauri resource directory;
-9. build the x64 NSIS installer with the immutable GitHub Release model URL and model SHA256 compiled into the model lifecycle;
-10. compute the installer SHA256;
-11. only then create the immutable GitHub prerelease/tag and upload installer, model pack, checksums, and release notes.
+1. query `howlil/cliplingo` GitHub Releases;
+2. choose the newest published, non-draft release by publication time, including prereleases;
+3. require exactly one `ClipLingo_*_x64-setup.exe` asset;
+4. obtain expected SHA256 from GitHub release asset `digest`, falling back only to the matching `.sha256` release asset;
+5. download the installer from its canonical GitHub Release URL;
+6. verify the downloaded SHA256 before execution;
+7. run the installer normally, or with NSIS `/S` only when the caller explicitly supplies `-Silent`;
+8. never bypass SmartScreen, code-signing, checksum, or architecture checks.
 
-If any prerequisite fails, no release tag is created. Fix the concrete failure and rerun automated qualification rather than publishing an unqualified artifact.
+The stable bootstrap command points at `master/scripts/install.ps1`; the script resolves the latest published release dynamically so users do not need a version-specific command.
 
-### Alpha 1 canonical assets
+CI validates PowerShell syntax and `-ResolveOnly` release/checksum resolution when this bootstrap changes. `-ResolveOnly` must not download or execute the installer.
 
-- tag: `v0.1.0-alpha.1`;
-- installer: `ClipLingo_0.1.0-alpha.1_x64-setup.exe`;
-- model pack: `cliplingo-ja-id-opus-v1.zip`;
-- checksum sidecars for both assets;
-- release notes: `docs/releases/v0.1.0-alpha.1.md`.
+## Current release candidate — Alpha 2
+
+The EN→ID Native Tray Translation Experience qualifies as `v0.1.0-alpha.2` because `v0.1.0-alpha.1` is already published and immutable.
+
+The automated gated route is:
+
+1. merge the verified EN→ID/tray capability to `master`;
+2. create `release/v0.1.0-alpha.2` from that exact verified commit;
+3. `.github/workflows/release-alpha.yml` builds pinned `en-id-opus-v1`;
+4. validate required EN -> ID model files and compute model SHA256;
+5. build and execute the source-pinned native worker runtime probe;
+6. execute a real non-deterministic English -> Indonesian worker translation using the production pack;
+7. stage `cliplingo-worker.exe` into the Tauri resource directory;
+8. build the tray-enabled x64 NSIS installer with immutable model URL/SHA compiled into model lifecycle;
+9. compute installer SHA256;
+10. only then publish `v0.1.0-alpha.2` with installer, model pack, checksums, and release notes.
+
+If any prerequisite fails, no Alpha 2 tag is created. Fix the concrete failure and rerun automated qualification rather than publishing an unqualified artifact.
+
+### Alpha 2 planned canonical assets
+
+- tag: `v0.1.0-alpha.2`;
+- installer: `ClipLingo_0.1.0-alpha.2_x64-setup.exe`;
+- model pack: `cliplingo-en-id-opus-v1.zip`;
+- release notes: `docs/releases/v0.1.0-alpha.2.md`.
+
+## Published Alpha 1
+
+`v0.1.0-alpha.1` remains historical and immutable. It used the earlier JA -> EN -> ID pack. Documentation may correct factual mistakes, but published binaries/hashes are never replaced.
 
 ## WinGet downstream rule
 
-WinGet submission occurs only after the canonical GitHub Release exists.
+WinGet submission occurs only after the corresponding canonical GitHub Release exists. Every WinGet version references the exact release installer URL and SHA256; it must not rebuild or mirror ClipLingo.
 
-For ClipLingo Alpha 1:
+Package identity remains `Howlil.ClipLingo` unless product authority changes publisher identity. Because the application repository does not currently declare a public application license, package metadata must not invent one. Catalog availability is not claimed until the upstream `microsoft/winget-pkgs` PR is validated and merged.
 
-- WinGet must reference the exact GitHub Release NSIS installer URL;
-- `InstallerSha256` must be the SHA256 emitted by the release workflow for that exact binary;
-- the package manager must not rebuild, mirror, or substitute the installer;
-- package identity is `Howlil.ClipLingo` unless a future product authority decision changes publisher identity;
-- because the ClipLingo application repository currently declares no public application license, WinGet metadata must not invent one; use the package-manager-appropriate proprietary/undeclared license representation until an application license is explicitly adopted;
-- model licenses remain governed by the model-pack manifest and are not rewritten as the application license;
-- submission completion means an upstream `microsoft/winget-pkgs` PR exists. Catalog availability is not claimed until upstream validation and merge succeed.
+The PowerShell bootstrap is independent from WinGet catalog publication and may install the latest verified GitHub Release before a WinGet manifest is merged.
 
 ## Signing
 
 Windows code signing and Tauri updater signing are separate trust mechanisms. Private keys never enter the repository. Stable release requires the relevant signatures; alpha development does not wait for signing infrastructure unless signing itself is under test.
 
-The first alpha may therefore be unsigned and can trigger Windows SmartScreen. This must be documented, not bypassed by weakening Windows security behavior.
+An unsigned alpha may trigger Windows SmartScreen. Document that fact rather than weakening Windows security behavior.
 
 ## Release evidence by maturity
 
 ### Alpha
 
-- required repository integration evidence is green for the advertised alpha behavior;
-- the advertised alpha path is proven by the smallest credible automated/native evidence available;
-- no known privacy/correctness blocker exists for the advertised behavior;
-- a distributed alpha installer contains the runtime components required by the advertised path;
-- a model-dependent alpha proves model acquisition/integrity and production inference through automated release/runtime probes.
+- required repository integration evidence is green for the advertised behavior;
+- the advertised path is proven by the smallest credible deterministic repository/native evidence available;
+- a model-dependent alpha proves model acquisition/integrity and real production inference through automated release/runtime probes;
+- a distributed installer contains runtime components required by the advertised path;
+- no known privacy/correctness blocker exists for the advertised behavior.
 
 ### Beta
 
@@ -109,7 +123,7 @@ The first alpha may therefore be unsigned and can trigger Windows SmartScreen. T
 - updater/package metadata when enabled;
 - release notes and rollback/fix-forward path.
 
-Environment-specific limitations that cannot be automated are documented as residual risk; they do not create a manual acceptance gate.
+Environment-specific limitations that cannot be automated are documented as residual risk; they do not create a mandatory manual acceptance gate.
 
 ## Rollback
 

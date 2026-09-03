@@ -17,32 +17,29 @@ def load_catalog(path: Path) -> dict:
 
     if catalog.get("schema") != REQUIRED_SCHEMA:
         raise ValueError(f"unsupported catalog schema: {catalog.get('schema')!r}")
-    if catalog.get("route") != ["ja", "en", "id"]:
-        raise ValueError("alpha catalog route must be ja -> en -> id")
+    if catalog.get("route") != ["en", "id"]:
+        raise ValueError("catalog route must be en -> id")
     if catalog.get("runtime", {}).get("engine") != "ctranslate2":
-        raise ValueError("alpha catalog runtime must be ctranslate2")
+        raise ValueError("catalog runtime must be ctranslate2")
     if catalog.get("runtime", {}).get("quantization") != "int8":
-        raise ValueError("alpha catalog quantization must be int8")
+        raise ValueError("catalog quantization must be int8")
 
     stages = catalog.get("stages")
-    if not isinstance(stages, list) or len(stages) != 2:
-        raise ValueError("alpha catalog must contain exactly two ordered stages")
+    if not isinstance(stages, list) or len(stages) != 1:
+        raise ValueError("EN -> ID catalog must contain exactly one stage")
 
-    expected_pairs = [("ja", "en"), ("en", "id")]
-    for index, (stage, expected_pair) in enumerate(zip(stages, expected_pairs, strict=True)):
-        actual_pair = (stage.get("source_language"), stage.get("target_language"))
-        if actual_pair != expected_pair:
-            raise ValueError(
-                f"stage {index} must be {expected_pair[0]} -> {expected_pair[1]}, got {actual_pair}"
-            )
-        revision = stage.get("revision", "")
-        if len(revision) != 40 or any(ch not in "0123456789abcdef" for ch in revision):
-            raise ValueError(f"stage {stage.get('id')} must pin a 40-character git revision")
-        if stage.get("license") != "Apache-2.0":
-            raise ValueError(f"stage {stage.get('id')} must use the distributable Apache-2.0 baseline")
-        copy_files = set(stage.get("copy_files", []))
-        if not {"source.spm", "target.spm"}.issubset(copy_files):
-            raise ValueError(f"stage {stage.get('id')} must preserve SentencePiece models")
+    stage = stages[0]
+    actual_pair = (stage.get("source_language"), stage.get("target_language"))
+    if actual_pair != ("en", "id"):
+        raise ValueError(f"stage must be en -> id, got {actual_pair[0]} -> {actual_pair[1]}")
+    revision = stage.get("revision", "")
+    if len(revision) != 40 or any(ch not in "0123456789abcdef" for ch in revision):
+        raise ValueError(f"stage {stage.get('id')} must pin a 40-character git revision")
+    if stage.get("license") != "Apache-2.0":
+        raise ValueError(f"stage {stage.get('id')} must use the distributable Apache-2.0 baseline")
+    copy_files = set(stage.get("copy_files", []))
+    if not {"source.spm", "target.spm"}.issubset(copy_files):
+        raise ValueError(f"stage {stage.get('id')} must preserve SentencePiece models")
 
     return catalog
 
@@ -115,7 +112,7 @@ def build_pack(catalog: dict, output: Path) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build a ClipLingo OPUS-MT language pack")
+    parser = argparse.ArgumentParser(description="Build the ClipLingo EN to ID OPUS-MT language pack")
     parser.add_argument("--catalog", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(

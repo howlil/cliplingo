@@ -1,9 +1,9 @@
 {
   "schema": "cliplingo.model-pack/v1",
-  "id": "ja-id-opus-v1",
-  "source_language": "ja",
+  "id": "en-id-opus-v1",
+  "source_language": "en",
   "target_language": "id",
-  "route": ["ja", "en", "id"],
+  "route": ["en", "id"],
   "runtime": {
     "engine": "ctranslate2",
     "version": "4.8.2",
@@ -18,16 +18,6 @@
     "sentencepiece": "0.2.2"
   },
   "stages": [
-    {
-      "id": "ja-en",
-      "source_language": "ja",
-      "target_language": "en",
-      "model": "Helsinki-NLP/opus-mt-ja-en",
-      "revision": "424876924b1a9f8a9ee4648a64581466afa072b5",
-      "license": "Apache-2.0",
-      "output_directory": "stages/ja-en",
-      "copy_files": ["source.spm", "target.spm", "tokenizer_config.json"]
-    },
     {
       "id": "en-id",
       "source_language": "en",

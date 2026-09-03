@@ -1,116 +1,127 @@
-# Completed Milestone — Real Offline Translation Alpha
+# Current Milestone — EN→ID Native Tray Translation Experience
 
-**Status:** product milestone and requested GitHub alpha release are complete. `v0.1.0-alpha.1` was published from verified `master`. The only remaining distribution follow-up is opening the prepared WinGet manifest set as an upstream `microsoft/winget-pkgs` PR; the connected GitHub integration is not authorized to create a PR in that upstream repository.
+**Status:** the product slices and proportional CI architecture are implemented on branch `feat/en-id-native-tray-experience`. A PowerShell latest-release bootstrap has now been added as the requested distribution path. Previous full CI self-validation passed; the new PowerShell distribution lane still needs exact-head CI evidence before merge. Do not call the native UX completely accepted until explicit Windows interaction acceptance is observed where automation cannot credibly prove shell behavior.
 
-**Goal achieved:** selected Japanese text can flow through the existing Windows capture/popup path to a real local OPUS `ja -> en -> id` translation worker, with a fresh-install model acquisition path and no cloud translation dependency.
+**Goal:** make ClipLingo behave as a focused Windows background utility: run from the system tray, translate selected English directly to Indonesian offline, show nothing when no valid selection exists, present the result in a compact draggable utility popup, and provide a safe one-command Windows PowerShell installation route to the newest published release.
 
 ## Feature Compass
 
-**Shape:** select Japanese text -> `Ctrl+Shift+T` -> Windows selection capture -> local SentencePiece/CTranslate2 `ja -> en` -> local SentencePiece/CTranslate2 `en -> id` -> Indonesian popup result. If the model pack is absent, the popup exposes a verified one-time install action.
+**Shape:** system tray -> select English text -> `Ctrl+Alt+T` -> validate/capture selection -> direct local OPUS `en -> id` -> compact draggable Indonesian popup. Installation can start from PowerShell and resolves the newest published GitHub Release automatically. No selection means no visible translation UI.
 
-**Position:** the coherent capability was merged through PR #23 and released as `v0.1.0-alpha.1`. Integration CI, production model-pack build, native runtime probe, real non-deterministic OPUS translation smoke, NSIS packaging, checksum generation, and GitHub prerelease publication all passed.
+**Position:** the branch contains the one-stage EN -> ID model/runtime, selection-before-popup ordering, silent no-selection regression, native Tauri tray + Settings lifecycle, restrained draggable popup UI, risk-routed CI, and `scripts/install.ps1`. The bootstrap resolves the newest published non-draft release including prereleases, requires the x64 installer asset, verifies SHA256 from GitHub release metadata or its checksum sidecar, and only then executes the installer. CI run `33793098041` previously proved the frontend/Rust/model/native risk lanes and aggregate `required`; the new distribution lane is awaiting exact-head evidence.
 
-**Delta:** no product-capability delta remains for this milestone. The downstream WinGet manifest set is complete in `howlil/winget-pkgs` branch `howlil-cliplingo-0.1.0-alpha.1`; upstream PR creation is the only unresolved distribution action.
+**Delta:** validate the PowerShell bootstrap parser + `-ResolveOnly` release/checksum resolution together with the workflow change, merge PR #25, then run gated `v0.1.0-alpha.2` release qualification. Native Windows interaction acceptance remains explicit evidence for calling the shell UX fully accepted.
 
-**Next Move:** open the prepared WinGet branch against `microsoft/winget-pkgs:master` from a GitHub identity/integration authorized to create upstream pull requests. Do not start another product milestone until the user defines the next core capability.
+**Next Move:** complete exact-head CI for the PowerShell distribution change. Fix only evidence-backed failures, then merge the coherent milestone.
 
-## Delivered scope
+## Milestone scope
 
-- pinned native CTranslate2 4.8.2 + SentencePiece 0.2.2 runtime;
-- one coherent static MSVC CRT policy across the native dependency graph;
-- OPUS-MT `ja -> en -> id` CPU INT8 production route;
-- real production inference inside isolated `cliplingo-worker.exe`;
-- existing protocol v1, request correlation, latest-request-wins, popup, and Windows capture path preserved;
-- installed/missing model-pack state;
-- explicit model download/install with SHA256 verification and staged activation;
-- model removal and stable local model-pack location;
-- missing/corrupt model behavior that does not crash the shell;
-- real non-deterministic production worker smoke with cold/warm timing instrumentation;
-- Windows x64 NSIS alpha installer containing the worker;
-- README + release documentation;
-- GitHub prerelease/tag `v0.1.0-alpha.1`;
-- complete WinGet 1.12.0 multi-file manifest set using the canonical release installer and SHA256.
+### In
 
-## Explicit non-scope retained
+- direct OPUS-MT English -> Indonesian CPU INT8 route;
+- `en-id-opus-v1` single-stage model pack and lifecycle;
+- `Ctrl+Alt+T` as the canonical default shortcut across code/docs/UI;
+- capture/selection validation before popup visibility;
+- no-selection silent stop with no translator call;
+- Windows system tray/notification-area application home;
+- left-click tray -> Settings;
+- tray menu -> Settings / Quit ClipLingo;
+- close Settings -> remain running in tray;
+- minimal Settings surface for route, shortcut, model state/install/remove, status, and quit;
+- draggable translation popup;
+- popup auto-position near selection/cursor for each new translation;
+- anti-slop UI pass: compact Windows utility hierarchy, no decorative glass/gradient/glow/bento treatment;
+- proportional risk-routed CI/testing contract;
+- PowerShell bootstrap that installs the newest published GitHub Release with SHA256 verification;
+- real EN -> ID production inference smoke and alpha packaging route.
 
-- additional language routes;
+### Out
+
+- Japanese/additional production routes;
+- automatic language detection;
 - OCR;
 - cloud fallback;
 - GPU inference;
+- translation history;
 - accounts/sync;
-- unrelated UI redesign;
-- advanced model marketplace/automatic route selection;
-- stable-grade signing or compatibility certification.
+- configurable shortcut UI;
+- updater;
+- broad settings dashboard;
+- package mirroring or a separate distribution backend;
+- test-framework expansion or E2E ceremony unrelated to changed risk.
 
-## Milestone slices
+## Slices
 
-- [x] **Model-pack foundation** — catalog, pinned revisions, manifest/license/integrity intent.
-- [x] **Native translation runtime** — configure, compile, link, and bounded runtime execution proven on Windows.
-- [x] **Worker OPUS runtime** — real two-stage SentencePiece/CTranslate2 execution in production worker.
-- [x] **Model-pack lifecycle** — installed/missing detection, verified download, staged activation, removal, worker path injection, and popup install action.
-- [x] **End-to-end offline translation implementation** — existing selected-text/popup path wired to the real worker; production-model worker smoke passed.
-- [x] **Alpha release gate** — production model pack, native probe, real translation smoke, NSIS installer, checksums, and GitHub prerelease/tag all published successfully.
-- [~] **WinGet distribution** — manifests are complete on the user fork; upstream PR creation is externally blocked by GitHub integration authorization. Catalog publication remains upstream-owned after PR validation/merge.
+- [x] **Direct EN→ID Runtime** — source implementation complete and applicable PR CI green; release qualification still owns real production weights.
+- [x] **Selection-Gated Interaction** — capture occurs before `popup.show`; capture failures cancel invisibly; regression proves no popup and zero translator calls for `NoSelection`.
+- [~] **Windows Tray + Settings Shell** — source implementation and Windows compile evidence complete; native shell interaction acceptance remains.
+- [~] **Movable Translation Surface + UI Quality** — source implementation and frontend verification complete; manual drag behavior remains part of native interaction acceptance.
+- [x] **Fast Accurate CI Contract** — classifier, parallel frontend/Rust/model/native lanes, stable aggregate `required`, bounded timeouts, cancellation of superseded runs, release-only real-model cost, and no aggressive opaque CMake cache. Baseline full self-validation passed in run `33793098041`.
+- [~] **PowerShell Latest-Release Installer** — `scripts/install.ps1`, README usage, release contract, SHA256 verification, optional `-Silent`, `-ResolveOnly`, and a dedicated fast CI distribution lane are implemented; exact-head CI evidence pending.
+- [ ] **Alpha 2 qualification/release** — after merge from verified `master`, build real EN -> ID pack, execute real production inference smoke, build NSIS installer, emit hashes, and publish immutable `v0.1.0-alpha.2` only if release gates pass.
 
-## Release evidence
+## Existing CI evidence — run 33793098041
 
-### Integration
+The prior CI workflow change intentionally forced every existing lane to run once because the verification mechanism itself changed.
 
-- PR #23: `feat: ship real offline translation alpha`.
-- PR #23 final CI run: `33688039468` — success.
-- Merge commit on `master`: `30db32e2bdd69d96739709be6eff5642d6f30aae`.
+Passed:
 
-The final PR run passed:
+1. `classify risk` — changed-file risk routing;
+2. `frontend` — install, Svelte static check, component tests, production build;
+3. `rust core` — format, production-target Clippy, unit/application tests;
+4. `model contract` — EN -> ID model-pack dry-run without production weights;
+5. `native boundary` — C++ configure/build, runtime probe, Rust -> C++ protocol regression, WorkerTranslator regression, real-production smoke harness compile;
+6. `required` — aggregate accepted all applicable lane results.
 
-- frontend check/tests/build;
-- model-pack dry-run;
-- Rust formatting, Clippy, and tests;
-- native CMake configure;
-- C++ worker/runtime-probe build;
-- native runtime probe;
-- Rust -> C++ worker boundary regression;
-- worker-backed translator regression.
+The PowerShell bootstrap change adds one small distribution lane and therefore requires a new exact-head run before merge.
 
-### Release
+## Implementation decisions
 
-- Release workflow run: `33718354847` — success.
-- Tag/prerelease: `v0.1.0-alpha.1` / `ClipLingo 0.1.0 Alpha 1`.
-- Release target: `30db32e2bdd69d96739709be6eff5642d6f30aae`.
-- Windows installer: `ClipLingo_0.1.0-alpha.1_x64-setup.exe`.
-- Installer SHA256: `96a26f3985c95553177cb20f120b0bd1abb31040d8ded6af32132438c667e39b`.
-- Production model pack: `cliplingo-ja-id-opus-v1.zip`.
-- Model-pack SHA256: `e3e6873d688d4ba3860ce20b6e2539481fc6dc1f8ae2396fc037e7329c754e30`.
+- Rust remains application/workflow authority; Svelte remains presentation/control-surface code.
+- System tray uses Tauri native tray support; no separate tray framework is introduced.
+- Settings is a hidden Tauri window loaded with the same frontend bundle and selected by window label.
+- Closing Settings is intercepted and hides the window instead of terminating the tray process.
+- Popup remains frameless/always-on-top and uses a Tauri drag region instead of restoring decorative native chrome.
+- No-selection is not represented as an error UI. Capture failures are logged without raw source content and cancel the current request invisibly.
+- The active production worker loads only `stages/en-id`; the former JA -> EN stage is removed from the active catalog and pack completeness contract.
+- Alpha 2 is the next prerelease because published Alpha 1 artifacts are immutable and must not be replaced.
+- PR CI proves changed contracts/boundaries with the cheapest credible evidence; real production model inference and packaging remain release qualification concerns.
+- The PowerShell bootstrap installs only published non-draft GitHub Release assets, including prereleases, and never installs unmerged branch code.
+- Installer integrity is checked before execution using GitHub asset SHA256 metadata with the release `.sha256` asset as a fallback.
+- The bootstrap does not bypass SmartScreen, code-signing, architecture, or checksum protections.
 
-The release workflow passed, in order:
+## Required evidence
 
-1. build pinned production OPUS model pack;
-2. validate required pack files;
-3. hash/archive pack;
-4. configure and build native worker/runtime probe;
-5. execute native runtime probe;
-6. extract production model pack;
-7. execute real offline Japanese translation smoke with no deterministic test mode;
-8. stage bundled worker;
-9. build NSIS installer;
-10. normalize/hash installer;
-11. publish gated alpha release and tag;
-12. publish release evidence artifact.
+### PR / integration
 
-## WinGet evidence
+Use the risk-routed CI contract from `.agents/QUALITY.md`:
 
-Prepared fork branch:
+- **frontend lane** when frontend/tooling changes: Svelte check, component tests, production build;
+- **Rust lane** when `app/src-tauri/**` changes: fmt, production-target Clippy, library/application tests including no-selection regression;
+- **model-contract lane** when model catalog/build/pack contract changes: EN -> ID dry-run only, no production weights;
+- **native boundary lane** only when worker/protocol/native boundary changes: C++ configure/build/runtime probe, deterministic Rust <-> C++ regressions, real-smoke harness compile;
+- **distribution lane** when `scripts/install.ps1` changes: PowerShell parser + `-ResolveOnly` newest-release/checksum resolution, with no installer execution;
+- **required aggregate**: all applicable lanes must succeed; irrelevant lanes may be skipped.
 
-- repository: `howlil/winget-pkgs`;
-- branch: `howlil-cliplingo-0.1.0-alpha.1`;
-- package identifier: `Howlil.ClipLingo`;
-- package version: `0.1.0-alpha.1`;
-- schema: WinGet multi-file manifest `1.12.0`;
-- installer type: `nullsoft`;
-- installer URL: canonical GitHub Release NSIS asset;
-- installer SHA256 matches the published GitHub asset digest.
+### Release qualification
 
-Attempting to create the cross-repository PR through the connected GitHub integration returned `403 Resource not accessible by integration`. This is an authorization boundary, not a manifest/product failure. Do not claim WinGet catalog availability until an upstream PR is actually opened, validated, and merged.
+- build pinned production `en-id-opus-v1` pack;
+- validate required single-stage files and SHA256;
+- execute real non-deterministic English -> Indonesian worker smoke;
+- build tray-enabled Windows x64 NSIS installer;
+- publish checksums and immutable prerelease only after prior steps pass.
 
-## Final milestone assessment
+### Native interaction acceptance
 
-The advertised Real Offline Translation Alpha capability and GitHub alpha distribution gate are complete. No known source/runtime/release blocker remains for the published alpha. The remaining WinGet action is external submission authorization only.
+Automation does not fully prove Windows shell interaction. Before calling the native UX completely accepted, verify on Windows:
+
+1. launch ClipLingo and observe its notification-area/system-tray icon;
+2. left-click tray -> Settings opens;
+3. close Settings -> ClipLingo remains in tray;
+4. invoke `Ctrl+Alt+T` without selection -> nothing visible;
+5. select `The deployment failed yesterday.` -> invoke shortcut -> Indonesian result popup;
+6. drag popup by `EN → ID` header;
+7. dismiss result without terminating ClipLingo;
+8. tray menu Quit terminates the app.
+
+Do not substitute this manual interaction evidence with source-inspection claims. Conversely, do not block independently automatable implementation/CI work while waiting for the manual interaction check.

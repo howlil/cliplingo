@@ -4,46 +4,57 @@
 
 ## Purpose
 
-ClipLingo is a Windows-first native translation utility for translating selected text without leaving the user's current application. The user selects text, invokes a global shortcut, and receives a small translation popup near the selection or cursor.
+ClipLingo is a Windows-first native translation utility for translating selected text without leaving the user's current application. It runs as a background utility in the Windows notification area/system tray, validates the current selection when the global shortcut is invoked, and only then shows a compact translation popup near the selected text or cursor fallback.
 
 Normal translation must work offline after the required language pack is installed.
 
 ## Primary experience
 
-1. Select real text in a Windows application such as a browser, PDF reader, editor, IDE, or chat application.
-2. Invoke the configured global shortcut; the initial default is `Ctrl+Shift+T` unless it conflicts.
-3. Capture the selection without unnecessarily stealing focus.
-4. Show a popup quickly near the selection/cursor and communicate progress immediately.
-5. Translate locally.
-6. Replace progress with the result; Escape dismisses the popup and keyboard-first actions remain possible.
+1. Launch ClipLingo; it remains available from the Windows system tray/notification area.
+2. Select non-empty English text in a Windows application such as a browser, PDF reader, editor, IDE, or chat application.
+3. Invoke the canonical global shortcut: `Ctrl+Alt+T`.
+4. Validate/capture the selection before any translation window is shown.
+5. If there is no valid selection, stop silently: no popup, no translation request, and no worker startup for that interaction.
+6. If the selection is valid, show the popup near the selected text or cursor fallback and translate locally through the direct English -> Indonesian route.
+7. The popup is a compact utility surface, can be dragged by its `EN → ID` header, and can be dismissed without terminating ClipLingo.
+8. Open Settings from the tray to inspect route, shortcut, model state, install/remove the offline model, or explicitly quit ClipLingo. Closing Settings keeps the tray process running.
+
+## Product invariants
+
+- **Selection-gated UI:** a translation popup must not become visible until a valid, non-empty selection has been captured for the current request.
+- **Silent no-selection:** `Ctrl+Alt+T` with no valid selection produces no visible UI and does not call the translator.
+- **Direct primary route:** the current production route is English -> Indonesian. Japanese/pivot routing is not part of the active product path.
+- **Tray ownership:** ClipLingo is a background Windows utility; the system tray is its persistent application home, while Settings is a control surface rather than a dashboard.
+- **Local normal path:** source text and translation remain on-device during normal translation.
+- **Restrained UI:** translation content outranks branding/decorative chrome. The product must not default to generic glass/gradient/bento/AI visual treatments.
 
 ## Product priorities
 
 When constraints conflict, prefer in this order:
 
-1. Reliable text capture and predictable popup behavior.
+1. Reliable selection detection and predictable popup behavior.
 2. Privacy and offline normal operation.
 3. Low perceived latency and near-zero idle CPU.
-4. Strong CJK translation quality, especially Chinese/Japanese/Korean plus English and Indonesian.
-5. Low memory/disk cost through explicit model lifecycle management.
-6. Broader language coverage.
-7. Arbitrary language-to-language routing.
+4. Strong English-to-Indonesian translation quality.
+5. Native Windows utility behavior, including tray lifecycle and unobtrusive settings.
+6. Low memory/disk cost through explicit model lifecycle management.
+7. Broader language coverage only after the primary path is proven.
 
 Broad future capability must not expand current scope automatically.
 
-## Committed V1 scope
+## Committed current scope
 
-- Windows 10/11 desktop.
-- Global shortcut invocation.
-- Selected real text; OCR is not required for the first product path.
-- UI Automation selection capture with safe clipboard fallback.
-- Popup and settings surfaces.
-- Indonesian as the initial primary target language.
-- English may be used as a routing pivot where quality/licensing/runtime evidence justifies it.
-- CJK/English language-pack path first.
-- Local CPU inference.
+- Windows 10/11 desktop, x64 first.
+- System tray/notification-area lifecycle with Settings and Quit.
+- Canonical global shortcut `Ctrl+Alt+T`.
+- Selected real text; OCR is not required for the current product path.
+- UI Automation selection capture with safe clipboard fallback where supported.
+- Selection validation before popup visibility.
+- Draggable compact translation popup.
+- Indonesian as the primary target language.
+- Direct OPUS-MT English -> Indonesian local CPU inference.
 - Model install/remove/version/integrity lifecycle.
-- Direct installer and GitHub Releases distribution when release maturity requires it.
+- Direct installer and GitHub Releases distribution for alpha builds.
 
 ## Data and privacy expectations
 
@@ -57,24 +68,38 @@ Broad future capability must not expand current scope automatically.
 
 Do not promote these into current scope without new product intent:
 
-- Electron.
+- Japanese or other additional production routes.
+- Automatic language detection/routing.
+- OCR/screen-reading.
 - Cloud translation as the normal path.
-- User accounts.
-- Database storage before a real queryable persistent feature proves the need.
-- OCR/screen-reading in the first working translation path.
+- Translation history.
+- Configurable shortcut UI.
+- User accounts, sync, or collaboration.
 - GPU requirement.
 - macOS/Linux/mobile implementation before Windows behavior is proven.
-- Plugin marketplace, sync, collaboration, telemetry-heavy analytics, or language-count competition.
+- Plugin marketplace, telemetry-heavy analytics, or language-count competition.
+
+## UI quality direction
+
+ClipLingo should read as a native Windows utility, not a generic SaaS/AI surface:
+
+- compact spacing and restrained radius;
+- semantic typography and information hierarchy;
+- native light/dark adaptation;
+- modest, functional elevation only where a floating popup needs separation;
+- no decorative gradient, glow, glass blur, bento/card stacks, oversized radius, hero copy, or unnecessary iconography;
+- popup header communicates `EN → ID`, not redundant product branding;
+- Settings uses simple rows/dividers rather than nested cards.
 
 ## Quality hypotheses
 
 These are engineering targets to measure, not product guarantees:
 
 - Idle CPU: effectively 0% during normal inactivity.
-- Hotkey -> visible popup: target p95 under 100 ms on supported development hardware.
-- Warm short-text translation: target p95 under 500 ms after a suitable model is loaded.
+- Hotkey -> visible popup after a valid selection is captured: target p95 under 100 ms on supported development hardware.
+- Warm short-text EN -> ID translation: target p95 under 500 ms after the model is loaded.
 - Cold short-text translation: target p95 under 1 second where model size/runtime permit.
-- Resident shell including popup: aim under 100 MB, then tighten only from measurements.
+- Resident shell including tray/popup: aim under 100 MB, then tighten only from measurements.
 
 Do not change these into release guarantees without benchmark evidence and an explicit maturity decision.
 
