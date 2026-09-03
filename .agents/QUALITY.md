@@ -16,17 +16,17 @@ Changes must preserve these unless the user explicitly approves a material bound
 
 ## Verification principle
 
-Use the cheapest, fastest, highest-signal verification that can actually prove the changed behavior. Escalate only when a cheaper level leaves material risk invisible.
+Use the cheapest, fastest, highest-signal automated verification that can actually prove the changed behavior. Escalate only when a cheaper level leaves material risk invisible.
 
-Do **not** automatically run a fixed `unit -> integration -> E2E -> manual/staging` ladder after every change. Test depth follows the behavior and boundary that changed, not ceremony.
+Do **not** automatically run a fixed unit -> integration -> E2E -> manual/staging ladder after every change. Browser black-box testing and manual acceptance are not required merge/release gates. Test depth follows the behavior and repository-owned boundary that changed, not ceremony.
 
 Before adding another verification layer, ask:
 
 1. What observable behavior changed?
 2. At which boundary can it fail?
-3. What is the cheapest check that observes that boundary?
+3. What is the cheapest automated check that observes that boundary?
 4. What material failure would remain invisible after that check?
-5. Is that remaining risk large enough to justify a deeper check?
+5. Is there another deterministic repository-owned check that can observe that risk?
 
 Only escalate when the answer to #5 is yes.
 
@@ -36,52 +36,35 @@ Only escalate when the answer to #5 is yes.
 
 Use for trivial structural/configuration edits where parse/load/basic startup is the meaningful failure mode.
 
-Examples: syntax validation, configuration parse, basic command startup.
-
 ### Micro
 
-Use for tiny local low-risk behavior with a narrow failure surface.
-
-Run the smallest directly relevant check or test. Do not broaden verification merely because more suites exist.
+Use for tiny local low-risk behavior with a narrow failure surface. Run the smallest directly relevant check or test.
 
 ### Focused — default
 
-Use for normal feature, bug-fix, and bounded refactor work.
-
-Typically combine only the relevant subset of:
-
-- lint/type/static checks for the touched stack;
-- tests covering the changed behavior;
-- the build target affected by the change;
-- integration/smoke evidence at a boundary the change actually crosses.
+Use for normal feature, bug-fix, and bounded refactor work. Typically combine only the relevant subset of lint/type/static checks, tests covering the changed behavior, the affected build target, and integration/smoke evidence at a boundary the change actually crosses.
 
 ### Full
 
-Use full repository/release validation when the blast radius genuinely warrants it, such as:
-
-- build system, dependency, toolchain, CI, packaging, or release changes;
-- project-wide refactors or shared contracts with broad consumers;
-- security/privacy-critical changes whose risk spans multiple boundaries;
-- milestone/release qualification;
-- an explicit user request.
+Use full repository/release validation when the blast radius genuinely warrants it, such as build system/dependency/toolchain/CI/packaging changes, project-wide shared contracts, security/privacy-critical changes spanning multiple boundaries, release qualification, or an explicit user request.
 
 Full CI may remain broader than local implementation checks. Green CI is integration evidence; it is not a requirement to reproduce every CI step locally after every logical change.
 
 ## User-facing feature evidence
 
-A user-facing feature is complete only when the required user path is integrated across the layers it depends on. Backend/native implementation evidence or frontend rendering evidence alone is not sufficient when the product behavior requires both.
+A user-facing feature is complete only when the required user path is integrated across the repository-owned layers it depends on. Backend/native implementation evidence or frontend rendering evidence alone is not sufficient when the product behavior requires both.
 
-Verification should prove the smallest credible end-to-end path, for example:
+Prefer deterministic integration across the relevant owners, for example:
 
 ```text
-user action
-  -> UI / Tauri intent
+user intent/state
+  -> UI / Tauri application behavior
   -> Rust application behavior
-  -> worker / native / persistence boundary when applicable
-  -> user-visible result or error state
+  -> worker / native / persistence contract when applicable
+  -> deterministic result or error-state assertion
 ```
 
-Technical foundation slices may use narrower evidence while they remain prerequisites. Do not report those slices as completed product features, and do not weaken end-to-end acceptance merely because individual layer tests are green.
+Technical foundation slices may use narrower evidence while they remain prerequisites. Do not report those slices as completed product features merely because individual layer tests are green.
 
 ## Available targeted checks
 
@@ -124,7 +107,7 @@ cmake -S ../worker -B ../worker/build -A x64
 cmake --build ../worker/build --config Release
 ```
 
-Run the corresponding native runtime probe or integration test only when the changed boundary requires that evidence.
+Run the corresponding automated native runtime probe or integration test only when the changed boundary requires that evidence.
 
 ## Integration evidence
 
@@ -141,22 +124,15 @@ On `master`, Windows CI currently performs broad repository integration checks f
 
 Do not copy the entire CI workflow into every slice plan or treat each CI step as a separate delivery gate. During implementation, use targeted evidence; use the repository CI result at the integration boundary.
 
-## Native/manual evidence
+## Native runtime evidence
 
-Manual Windows interaction is valid evidence when a real native behavior cannot be credibly automated. It is **not** a default merge blocker for active alpha development.
+Use automated native probes/integration tests for native behavior when that boundary matters. Manual Windows interaction may be useful for debugging, but it is not verification evidence required for merge, milestone completion, or release readiness.
 
-Require manual evidence only when the active behavior genuinely cannot be proven otherwise or the user explicitly makes it a gate. Do not substitute inspection claims for an explicitly required native/manual gate.
+When a native/environment behavior cannot be credibly automated, document the limitation and residual risk rather than creating a mandatory manual acceptance gate.
 
 ## Performance evidence
 
-Performance conclusions require release-mode measurement of the relevant user path and enough environment context to reproduce the result. Relevant ClipLingo metrics include:
-
-- hotkey -> popup latency;
-- selection-capture latency;
-- warm/cold inference latency;
-- worker startup/model-load time;
-- idle CPU;
-- working-set/peak memory.
+Performance conclusions require release-mode measurement of the relevant user path and enough environment context to reproduce the result. Relevant ClipLingo metrics include hotkey -> popup latency, selection-capture latency, warm/cold inference latency, worker startup/model-load time, idle CPU, and working-set/peak memory.
 
 Do not turn unmeasured targets in `PROJECT.md` into claims or merge blockers for unrelated alpha slices.
 
@@ -172,6 +148,6 @@ For model/update/release acquisition paths:
 
 ## Evidence discipline
 
-Never claim a test, CI run, benchmark, package, release, deployment, or manual acceptance that was not actually observed. A valid failing regression is a defect signal; do not weaken the assertion solely to make CI green.
+Never claim a test, CI run, benchmark, package, release, or deployment that was not actually observed. A valid failing regression is a defect signal; do not weaken the assertion solely to make CI green.
 
 Release-specific gates are owned by `RELEASE.md`.
