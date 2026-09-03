@@ -77,10 +77,6 @@
     cursor: move;
   }
 
-  *[data-tauri-drag-region] {
-    app-region: drag;
-  }
-
   .route {
     font-size: 11.5px;
     font-weight: 650;
