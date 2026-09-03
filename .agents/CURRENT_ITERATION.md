@@ -1,6 +1,6 @@
 # Current Milestone — EN→ID Native Tray Translation Experience
 
-**Status:** implementation is active on branch `feat/en-id-native-tray-experience`. All four product slices are implemented in source. The CI/testing contract is being tightened to the canonical proportional, risk-routed workflow before merge. Do not report the milestone complete until the coherent branch passes its applicable automated gates and the explicitly required native interaction acceptance is checked where automation cannot credibly prove it.
+**Status:** all four product slices are implemented in source and the new proportional CI/testing contract has passed full self-validation on branch `feat/en-id-native-tray-experience`. The coherent capability is ready for merge once the documentation-only follow-up confirms the fast skip path. Do not call the native UX completely accepted until the explicit Windows interaction acceptance is observed where automation cannot credibly prove shell behavior.
 
 **Goal:** make ClipLingo behave as a focused Windows background utility: run from the system tray, translate selected English directly to Indonesian offline, show nothing when no valid selection exists, and present the result in a compact draggable utility popup.
 
@@ -8,11 +8,11 @@
 
 **Shape:** system tray -> select English text -> `Ctrl+Alt+T` -> validate/capture selection -> direct local OPUS `en -> id` -> compact draggable Indonesian popup. No selection means no visible UI. Tray Settings exposes route, shortcut, model lifecycle, running status, and explicit Quit.
 
-**Position:** the capability branch has replaced the two-stage JA -> EN -> ID active route with a one-stage EN -> ID model pack/runtime, changed coordinator ordering so capture precedes popup visibility, added a silent no-selection cancellation regression, added Tauri system tray + Settings lifecycle, and redesigned the popup as a restrained draggable Windows utility surface. The repository CI is now being changed from one serial full Windows ladder into parallel risk lanes so frontend, Rust, model-contract, and native evidence run only when their boundary changes. `AGENTS.md` and `.agents/QUALITY.md` are aligned to that operating rule and to `DESIGN.md` as the canonical UI quality contract.
+**Position:** the capability branch now contains the one-stage EN -> ID model/runtime, selection-before-popup ordering, silent no-selection cancellation regression, native Tauri tray + Settings lifecycle, restrained draggable popup UI, and a risk-routed CI contract. CI run `33793098041` exercised every lane because the workflow itself changed and finished green: classifier, frontend, Rust core, model contract, native boundary, and aggregate `required` all passed. `AGENTS.md` and `.agents/QUALITY.md` now encode the same operating rule, while `DESIGN.md` remains the canonical UI/interaction quality contract.
 
-**Delta:** validate the new CI workflow itself with all lanes enabled once, fix only evidence-backed failures, merge the coherent capability, then run gated `v0.1.0-alpha.2` release qualification for the real EN -> ID model pack, production inference smoke, and installer.
+**Delta:** confirm the documentation-only follow-up runs only classifier + aggregate `required`, merge PR #25, then run gated `v0.1.0-alpha.2` release qualification for the real EN -> ID model pack, production inference smoke, and installer. Native Windows interaction acceptance remains explicit evidence for calling the shell UX fully accepted.
 
-**Next Move:** complete CI self-validation on the latest branch head. Do not add product scope while qualification is running.
+**Next Move:** verify the docs-only CI skip path, then merge PR #25. Do not add product scope while qualification is running.
 
 ## Milestone scope
 
@@ -50,12 +50,27 @@
 
 ## Slices
 
-- [~] **Direct EN→ID Runtime** — source implementation complete: catalog/model lifecycle/worker/smoke now target `en-id-opus-v1`; final applicable CI/release qualification pending.
-- [~] **Selection-Gated Interaction** — source implementation complete: capture occurs before `popup.show`; capture failures cancel invisibly; explicit regression asserts no popup and zero translator calls for `NoSelection`; final branch qualification pending.
-- [~] **Windows Tray + Settings Shell** — source implementation complete: native Tauri tray, left-click Settings, tray Settings/Quit menu, close-to-tray Settings behavior, and minimal model controls; native interaction acceptance remains.
-- [~] **Movable Translation Surface + UI Quality** — source implementation complete: `EN → ID` drag region, restrained utility styling, source secondary/result primary, no decorative blur/gradient/bento treatment; final branch qualification pending.
-- [~] **Fast Accurate CI Contract** — implementation added: changed-risk classifier, parallel frontend/Rust/model/native lanes, stable aggregate `required` check, bounded timeouts, cancellation of superseded runs, docs-only skip behavior, and release-only real-model cost. Workflow self-validation pending.
+- [x] **Direct EN→ID Runtime** — source implementation complete and applicable PR CI green; release qualification still owns real production weights.
+- [x] **Selection-Gated Interaction** — capture occurs before `popup.show`; capture failures cancel invisibly; regression proves no popup and zero translator calls for `NoSelection`.
+- [~] **Windows Tray + Settings Shell** — source implementation and Windows compile evidence complete; native shell interaction acceptance remains.
+- [~] **Movable Translation Surface + UI Quality** — source implementation and frontend verification complete; manual drag behavior remains part of native interaction acceptance.
+- [x] **Fast Accurate CI Contract** — classifier, parallel frontend/Rust/model/native lanes, stable aggregate `required`, bounded timeouts, cancellation of superseded runs, release-only real-model cost, and no aggressive opaque CMake cache. Full self-validation passed in run `33793098041`.
 - [ ] **Alpha 2 qualification/release** — after merge from verified `master`, build real EN -> ID pack, execute real production inference smoke, build NSIS installer, emit hashes, and publish immutable `v0.1.0-alpha.2` only if release gates pass.
+
+## CI evidence — run 33793098041
+
+The CI workflow change intentionally forced every lane to run once because the verification mechanism itself changed.
+
+Passed:
+
+1. `classify risk` — changed-file risk routing executed successfully;
+2. `frontend` — install, Svelte static check, component tests, production build;
+3. `rust core` — format, production-target Clippy, unit/application tests;
+4. `model contract` — EN -> ID model-pack dry-run without production weights;
+5. `native boundary` — C++ configure/build, runtime probe, Rust -> C++ protocol regression, WorkerTranslator regression, real-production smoke harness compile;
+6. `required` — aggregate accepted all applicable lane results.
+
+The superseded pre-change run was cancelled before its expensive stages completed, confirming `cancel-in-progress` behavior. This documentation-only update is intentionally outside all product risk patterns and should therefore exercise only classification plus the stable aggregate check.
 
 ## Implementation decisions
 
@@ -68,7 +83,7 @@
 - The active production worker loads only `stages/en-id`; the former JA -> EN stage is removed from the active catalog and pack completeness contract.
 - Alpha 2 is the next prerelease because published Alpha 1 artifacts are immutable and must not be replaced.
 - PR CI proves changed contracts/boundaries with the cheapest credible evidence; real production model inference and packaging remain release qualification concerns.
-- CI workflow changes intentionally exercise all CI lanes once. Ordinary docs-only changes do not recompile the product.
+- CI workflow changes intentionally exercise all CI lanes once. Ordinary documentation-only changes must not recompile the product.
 
 ## Required evidence
 
