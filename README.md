@@ -2,6 +2,24 @@
 
 ClipLingo is a Windows-first offline translation utility built around one interaction: select text in another application, invoke a global shortcut, and read the translation in a compact popup without leaving the current workflow.
 
+## Install from PowerShell
+
+From Windows PowerShell 5.1 or PowerShell 7, run:
+
+```powershell
+$p = Join-Path $env:TEMP 'cliplingo-install.ps1'; Invoke-WebRequest 'https://raw.githubusercontent.com/howlil/cliplingo/master/scripts/install.ps1' -UseBasicParsing -OutFile $p; & $p
+```
+
+The bootstrap resolves the newest **published, non-draft GitHub Release**, including alpha/beta prereleases, selects the Windows x64 NSIS installer, verifies its SHA256 from GitHub release metadata (with the release checksum sidecar as fallback), and only then runs the installer. The command is version-independent, so a future `alpha.2`, `alpha.3`, or stable release is picked automatically once it is published.
+
+Optional silent install:
+
+```powershell
+& $p -Silent
+```
+
+This installs the newest **published release**, not unmerged development code. Until Alpha 2 is actually published, the bootstrap resolves the current Alpha 1 release.
+
 ## Current development experience — EN → ID
 
 The active product path is direct English -> Indonesian translation through a local OPUS-MT model:

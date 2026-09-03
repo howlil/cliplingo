@@ -16,7 +16,7 @@ ClipLingo releases by product maturity. Release requirements are project-specifi
 2. Integrate at coherent feature/slice or logical-change boundaries.
 3. Published tags/binaries are immutable; never replace Alpha 1 artifacts with Alpha 2 behavior.
 4. A failed release becomes a bounded fix and a new prerelease version.
-5. GitHub Releases is the canonical binary/model source; package managers reference those exact assets.
+5. GitHub Releases is the canonical binary/model source; package managers and convenience installers reference those exact assets.
 6. ARM64 or another platform requires a real test target before publication.
 
 ## Canonical binary source
@@ -27,6 +27,25 @@ GitHub Releases is canonical. Alpha Windows artifacts include:
 - versioned offline model pack required by the advertised route;
 - SHA-256 checksum sidecars;
 - concise release notes.
+
+## PowerShell bootstrap installer
+
+`scripts/install.ps1` is the canonical convenience installer for Windows PowerShell 5.1 and PowerShell 7. It does not build, mirror, or redefine release artifacts.
+
+Its contract is:
+
+1. query `howlil/cliplingo` GitHub Releases;
+2. choose the newest published, non-draft release by publication time, including prereleases;
+3. require exactly one `ClipLingo_*_x64-setup.exe` asset;
+4. obtain expected SHA256 from GitHub release asset `digest`, falling back only to the matching `.sha256` release asset;
+5. download the installer from its canonical GitHub Release URL;
+6. verify the downloaded SHA256 before execution;
+7. run the installer normally, or with NSIS `/S` only when the caller explicitly supplies `-Silent`;
+8. never bypass SmartScreen, code-signing, checksum, or architecture checks.
+
+The stable bootstrap command points at `master/scripts/install.ps1`; the script itself resolves the latest published release dynamically, so users do not need a version-specific command.
+
+CI must validate PowerShell syntax and `-ResolveOnly` release/checksum resolution when this bootstrap changes. `-ResolveOnly` must not download or execute the installer.
 
 ## Current release candidate — Alpha 2
 
@@ -63,6 +82,8 @@ If any prerequisite fails, no Alpha 2 tag is created. Fix the concrete failure a
 WinGet submission occurs only after the corresponding canonical GitHub Release exists. Every WinGet version must reference the exact release installer URL and SHA256 for that version; it must not rebuild or mirror ClipLingo.
 
 Package identity remains `Howlil.ClipLingo` unless product authority changes publisher identity. Because the application repository does not currently declare a public application license, package metadata must not invent one. Catalog availability is not claimed until the upstream `microsoft/winget-pkgs` PR is validated and merged.
+
+The PowerShell bootstrap is independent from WinGet catalog publication and may install the latest verified GitHub Release before a WinGet manifest is merged.
 
 ## Signing
 

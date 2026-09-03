@@ -1,18 +1,18 @@
 # Current Milestone — EN→ID Native Tray Translation Experience
 
-**Status:** all four product slices are implemented in source and the new proportional CI/testing contract has passed full self-validation on branch `feat/en-id-native-tray-experience`. The coherent capability is ready for merge once the documentation-only follow-up confirms the fast skip path. Do not call the native UX completely accepted until the explicit Windows interaction acceptance is observed where automation cannot credibly prove shell behavior.
+**Status:** the product slices and proportional CI architecture are implemented on branch `feat/en-id-native-tray-experience`. A PowerShell latest-release bootstrap has now been added as the requested distribution path. Previous full CI self-validation passed; the new PowerShell distribution lane still needs exact-head CI evidence before merge. Do not call the native UX completely accepted until explicit Windows interaction acceptance is observed where automation cannot credibly prove shell behavior.
 
-**Goal:** make ClipLingo behave as a focused Windows background utility: run from the system tray, translate selected English directly to Indonesian offline, show nothing when no valid selection exists, and present the result in a compact draggable utility popup.
+**Goal:** make ClipLingo behave as a focused Windows background utility: run from the system tray, translate selected English directly to Indonesian offline, show nothing when no valid selection exists, present the result in a compact draggable utility popup, and provide a safe one-command Windows PowerShell installation route to the newest published release.
 
 ## Feature Compass
 
-**Shape:** system tray -> select English text -> `Ctrl+Alt+T` -> validate/capture selection -> direct local OPUS `en -> id` -> compact draggable Indonesian popup. No selection means no visible UI. Tray Settings exposes route, shortcut, model lifecycle, running status, and explicit Quit.
+**Shape:** system tray -> select English text -> `Ctrl+Alt+T` -> validate/capture selection -> direct local OPUS `en -> id` -> compact draggable Indonesian popup. Installation can start from PowerShell and resolves the newest published GitHub Release automatically. No selection means no visible translation UI.
 
-**Position:** the capability branch now contains the one-stage EN -> ID model/runtime, selection-before-popup ordering, silent no-selection cancellation regression, native Tauri tray + Settings lifecycle, restrained draggable popup UI, and a risk-routed CI contract. CI run `33793098041` exercised every lane because the workflow itself changed and finished green: classifier, frontend, Rust core, model contract, native boundary, and aggregate `required` all passed. `AGENTS.md` and `.agents/QUALITY.md` now encode the same operating rule, while `DESIGN.md` remains the canonical UI/interaction quality contract.
+**Position:** the branch contains the one-stage EN -> ID model/runtime, selection-before-popup ordering, silent no-selection regression, native Tauri tray + Settings lifecycle, restrained draggable popup UI, risk-routed CI, and `scripts/install.ps1`. The bootstrap resolves the newest published non-draft release including prereleases, requires the x64 installer asset, verifies SHA256 from GitHub release metadata or its checksum sidecar, and only then executes the installer. CI run `33793098041` previously proved the frontend/Rust/model/native risk lanes and aggregate `required`; the new distribution lane is awaiting exact-head evidence.
 
-**Delta:** confirm the documentation-only follow-up runs only classifier + aggregate `required`, merge PR #25, then run gated `v0.1.0-alpha.2` release qualification for the real EN -> ID model pack, production inference smoke, and installer. Native Windows interaction acceptance remains explicit evidence for calling the shell UX fully accepted.
+**Delta:** validate the PowerShell bootstrap parser + `-ResolveOnly` release/checksum resolution together with the workflow change, merge PR #25, then run gated `v0.1.0-alpha.2` release qualification. Native Windows interaction acceptance remains explicit evidence for calling the shell UX fully accepted.
 
-**Next Move:** verify the docs-only CI skip path, then merge PR #25. Do not add product scope while qualification is running.
+**Next Move:** complete exact-head CI for the PowerShell distribution change. Fix only evidence-backed failures, then merge the coherent milestone.
 
 ## Milestone scope
 
@@ -32,6 +32,7 @@
 - popup auto-position near selection/cursor for each new translation;
 - anti-slop UI pass: compact Windows utility hierarchy, no decorative glass/gradient/glow/bento treatment;
 - proportional risk-routed CI/testing contract;
+- PowerShell bootstrap that installs the newest published GitHub Release with SHA256 verification;
 - real EN -> ID production inference smoke and alpha packaging route.
 
 ### Out
@@ -46,6 +47,7 @@
 - configurable shortcut UI;
 - updater;
 - broad settings dashboard;
+- package mirroring or a separate distribution backend;
 - test-framework expansion or E2E ceremony unrelated to changed risk.
 
 ## Slices
@@ -54,23 +56,24 @@
 - [x] **Selection-Gated Interaction** — capture occurs before `popup.show`; capture failures cancel invisibly; regression proves no popup and zero translator calls for `NoSelection`.
 - [~] **Windows Tray + Settings Shell** — source implementation and Windows compile evidence complete; native shell interaction acceptance remains.
 - [~] **Movable Translation Surface + UI Quality** — source implementation and frontend verification complete; manual drag behavior remains part of native interaction acceptance.
-- [x] **Fast Accurate CI Contract** — classifier, parallel frontend/Rust/model/native lanes, stable aggregate `required`, bounded timeouts, cancellation of superseded runs, release-only real-model cost, and no aggressive opaque CMake cache. Full self-validation passed in run `33793098041`.
+- [x] **Fast Accurate CI Contract** — classifier, parallel frontend/Rust/model/native lanes, stable aggregate `required`, bounded timeouts, cancellation of superseded runs, release-only real-model cost, and no aggressive opaque CMake cache. Baseline full self-validation passed in run `33793098041`.
+- [~] **PowerShell Latest-Release Installer** — `scripts/install.ps1`, README usage, release contract, SHA256 verification, optional `-Silent`, `-ResolveOnly`, and a dedicated fast CI distribution lane are implemented; exact-head CI evidence pending.
 - [ ] **Alpha 2 qualification/release** — after merge from verified `master`, build real EN -> ID pack, execute real production inference smoke, build NSIS installer, emit hashes, and publish immutable `v0.1.0-alpha.2` only if release gates pass.
 
-## CI evidence — run 33793098041
+## Existing CI evidence — run 33793098041
 
-The CI workflow change intentionally forced every lane to run once because the verification mechanism itself changed.
+The prior CI workflow change intentionally forced every existing lane to run once because the verification mechanism itself changed.
 
 Passed:
 
-1. `classify risk` — changed-file risk routing executed successfully;
+1. `classify risk` — changed-file risk routing;
 2. `frontend` — install, Svelte static check, component tests, production build;
 3. `rust core` — format, production-target Clippy, unit/application tests;
 4. `model contract` — EN -> ID model-pack dry-run without production weights;
 5. `native boundary` — C++ configure/build, runtime probe, Rust -> C++ protocol regression, WorkerTranslator regression, real-production smoke harness compile;
 6. `required` — aggregate accepted all applicable lane results.
 
-The superseded pre-change run was cancelled before its expensive stages completed, confirming `cancel-in-progress` behavior. This documentation-only update is intentionally outside all product risk patterns and should therefore exercise only classification plus the stable aggregate check.
+The PowerShell bootstrap change adds one small distribution lane and therefore requires a new exact-head run before merge.
 
 ## Implementation decisions
 
@@ -83,7 +86,9 @@ The superseded pre-change run was cancelled before its expensive stages complete
 - The active production worker loads only `stages/en-id`; the former JA -> EN stage is removed from the active catalog and pack completeness contract.
 - Alpha 2 is the next prerelease because published Alpha 1 artifacts are immutable and must not be replaced.
 - PR CI proves changed contracts/boundaries with the cheapest credible evidence; real production model inference and packaging remain release qualification concerns.
-- CI workflow changes intentionally exercise all CI lanes once. Ordinary documentation-only changes must not recompile the product.
+- The PowerShell bootstrap installs only published non-draft GitHub Release assets, including prereleases, and never installs unmerged branch code.
+- Installer integrity is checked before execution using GitHub asset SHA256 metadata with the release `.sha256` asset as a fallback.
+- The bootstrap does not bypass SmartScreen, code-signing, architecture, or checksum protections.
 
 ## Required evidence
 
@@ -95,6 +100,7 @@ Use the risk-routed CI contract from `.agents/QUALITY.md`:
 - **Rust lane** when `app/src-tauri/**` changes: fmt, production-target Clippy, library/application tests including no-selection regression;
 - **model-contract lane** when model catalog/build/pack contract changes: EN -> ID dry-run only, no production weights;
 - **native boundary lane** only when worker/protocol/native boundary changes: C++ configure/build/runtime probe, deterministic Rust <-> C++ regressions, real-smoke harness compile;
+- **distribution lane** when `scripts/install.ps1` changes: PowerShell parser + `-ResolveOnly` newest-release/checksum resolution, with no installer execution;
 - **required aggregate**: all applicable lanes must succeed; irrelevant lanes may be skipped.
 
 ### Release qualification

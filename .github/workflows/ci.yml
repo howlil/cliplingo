@@ -22,6 +22,7 @@ jobs:
       rust: ${{ steps.paths.outputs.rust }}
       model: ${{ steps.paths.outputs.model }}
       native: ${{ steps.paths.outputs.native }}
+      distribution: ${{ steps.paths.outputs.distribution }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -42,6 +43,7 @@ jobs:
           rust=false
           model=false
           native=false
+          distribution=false
 
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             base="$PR_BASE_SHA"
@@ -65,6 +67,7 @@ jobs:
               rust=true
               model=true
               native=true
+              distribution=true
             fi
 
             if [[ "$file" == app/src/* || "$file" == app/index.html || "$file" == app/package.json || "$file" == app/package-lock.json || "$file" == app/vite.config.* || "$file" == app/tsconfig*.json ]]; then
@@ -82,6 +85,10 @@ jobs:
             if [[ "$file" == worker/* || "$file" == app/src-tauri/tests/worker_* || "$file" == app/src-tauri/src/*worker* || "$file" == app/src-tauri/src/*protocol* || "$file" == app/src-tauri/Cargo.toml || "$file" == app/src-tauri/Cargo.lock ]]; then
               native=true
             fi
+
+            if [[ "$file" == scripts/install.ps1 ]]; then
+              distribution=true
+            fi
           done <<< "$changed_files"
 
           {
@@ -89,9 +96,10 @@ jobs:
             echo "rust=$rust"
             echo "model=$model"
             echo "native=$native"
+            echo "distribution=$distribution"
           } >> "$GITHUB_OUTPUT"
 
-          printf 'risk lanes: frontend=%s rust=%s model=%s native=%s\n' "$frontend" "$rust" "$model" "$native"
+          printf 'risk lanes: frontend=%s rust=%s model=%s native=%s distribution=%s\n' "$frontend" "$rust" "$model" "$native" "$distribution"
 
   frontend:
     name: frontend
@@ -210,10 +218,34 @@ jobs:
       - name: Compile real-production smoke harness
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test worker_real_translation_smoke --no-run
 
+  distribution:
+    name: powershell installer
+    needs: classify
+    if: needs.classify.outputs.distribution == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v6
+      - name: Parse installer bootstrap
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'scripts/install.ps1').Path, [ref]$tokens, [ref]$errors)
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+      - name: Resolve latest release and checksum metadata
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./scripts/install.ps1 -ResolveOnly
+
   required:
     name: required
     if: always()
-    needs: [classify, frontend, rust, model-contract, native]
+    needs: [classify, frontend, rust, model-contract, native, distribution]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -225,9 +257,10 @@ jobs:
           RUST: ${{ needs.rust.result }}
           MODEL: ${{ needs.model-contract.result }}
           NATIVE: ${{ needs.native.result }}
+          DISTRIBUTION: ${{ needs.distribution.result }}
         run: |
           set -euo pipefail
-          for result in "$CLASSIFY" "$FRONTEND" "$RUST" "$MODEL" "$NATIVE"; do
+          for result in "$CLASSIFY" "$FRONTEND" "$RUST" "$MODEL" "$NATIVE" "$DISTRIBUTION"; do
             case "$result" in
               success|skipped) ;;
               *) echo "CI lane failed or was cancelled: $result" >&2; exit 1 ;;
