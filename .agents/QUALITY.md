@@ -16,6 +16,7 @@ Preserve these unless the user explicitly approves a material boundary change:
 - Clipboard fallback preserves/restores user clipboard state within the supported safety policy.
 - Model/update artifacts are verified before activation and carry license/compatibility metadata.
 - No valid selection means no translation popup and no translator invocation.
+- PowerShell installation executes only a published ClipLingo GitHub Release installer after SHA256 verification.
 
 ## Verification principle
 
@@ -120,6 +121,19 @@ Evidence:
 
 Do not run this lane for unrelated popup/settings/application-core changes merely because the product contains a native worker.
 
+### PowerShell distribution lane
+
+Runs when `scripts/install.ps1` or the CI workflow changes. It is deliberately small and Windows-native.
+
+Evidence:
+
+- parse the PowerShell file with `System.Management.Automation.Language.Parser`;
+- execute `scripts/install.ps1 -ResolveOnly` using the CI read-only GitHub token;
+- prove the resolver can identify the newest published non-draft release, the x64 installer asset, and trusted SHA256 metadata;
+- do **not** download or execute the installer in PR CI.
+
+This lane tests the distribution bootstrap contract without turning every installer-script change into a product build or release installation.
+
 ### Required aggregate
 
 The final `required` job succeeds when the classifier succeeds and every applicable lane is either `success` or intentionally `skipped`. Failure/cancellation of an applicable lane fails the aggregate.
@@ -191,6 +205,14 @@ cmake --build ../worker/build --config Release --target cliplingo_worker cliplin
 
 Then run only the relevant runtime probe/protocol integration regressions.
 
+### PowerShell installer bootstrap
+
+```text
+./scripts/install.ps1 -ResolveOnly
+```
+
+Use the parser + `-ResolveOnly` evidence for bootstrap changes. A real installer execution belongs to release/native installation acceptance, not ordinary PR CI.
+
 ## Release qualification boundary
 
 Real production model download/conversion, non-deterministic EN -> ID inference smoke, NSIS packaging, checksums, and release publication belong to `.github/workflows/release-alpha.yml` / `.agents/RELEASE.md`.
@@ -225,6 +247,8 @@ For model/update/release acquisition paths:
 - preserve license/redistribution metadata;
 - fail closed on verification failure;
 - keep signing credentials outside repository/frontend/logs.
+
+For `scripts/install.ps1`, specifically verify release selection, x64 asset selection, trusted SHA256 metadata resolution, downloaded-file hashing before execution, and no bypass of Windows trust/security behavior.
 
 ## Evidence discipline
 
