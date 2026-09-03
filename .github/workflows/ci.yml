@@ -13,8 +13,92 @@ permissions:
   contents: read
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  classify:
+    name: classify risk
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      frontend: ${{ steps.paths.outputs.frontend }}
+      rust: ${{ steps.paths.outputs.rust }}
+      model: ${{ steps.paths.outputs.model }}
+      native: ${{ steps.paths.outputs.native }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Classify changed risk surfaces
+        id: paths
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          frontend=false
+          rust=false
+          model=false
+          native=false
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$PR_BASE_SHA"
+            head="$PR_HEAD_SHA"
+          else
+            base="$PUSH_BASE_SHA"
+            head="$PUSH_HEAD_SHA"
+          fi
+
+          if [[ -z "$base" || "$base" =~ ^0+$ ]] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            changed_files="$(git ls-files)"
+          else
+            changed_files="$(git diff --name-only "$base" "$head")"
+          fi
+
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+
+            if [[ "$file" == .github/workflows/* ]]; then
+              frontend=true
+              rust=true
+              model=true
+              native=true
+            fi
+
+            if [[ "$file" == app/src/* || "$file" == app/index.html || "$file" == app/package.json || "$file" == app/package-lock.json || "$file" == app/vite.config.* || "$file" == app/tsconfig*.json ]]; then
+              frontend=true
+            fi
+
+            if [[ "$file" == app/src-tauri/* ]]; then
+              rust=true
+            fi
+
+            if [[ "$file" == models/* || "$file" == scripts/models/* || "$file" == app/src-tauri/src/*model_pack* ]]; then
+              model=true
+            fi
+
+            if [[ "$file" == worker/* || "$file" == app/src-tauri/tests/worker_* || "$file" == app/src-tauri/src/*worker* || "$file" == app/src-tauri/src/*protocol* || "$file" == app/src-tauri/Cargo.toml || "$file" == app/src-tauri/Cargo.lock ]]; then
+              native=true
+            fi
+          done <<< "$changed_files"
+
+          {
+            echo "frontend=$frontend"
+            echo "rust=$rust"
+            echo "model=$model"
+            echo "native=$native"
+          } >> "$GITHUB_OUTPUT"
+
+          printf 'risk lanes: frontend=%s rust=%s model=%s native=%s\n' "$frontend" "$rust" "$model" "$native"
+
+  frontend:
+    name: frontend
+    needs: classify
+    if: needs.classify.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
     defaults:
       run:
         working-directory: app
@@ -25,31 +109,71 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: app/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Static check
+        run: npm run check
+      - name: Component tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+
+  rust:
+    name: rust core
+    needs: classify
+    if: needs.classify.outputs.rust == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: app/src-tauri -> target
-      - name: Install frontend dependencies
-        run: npm ci
-      - name: Frontend check
-        run: npm run check
-      - name: Frontend tests
-        run: npm test
-      - name: Frontend build
-        run: npm run build
-      - name: Validate offline model pack plan
-        run: python ../scripts/models/build_opus_pack.py --catalog ../models/catalog/en-id-opus-v1.json --output ../models/build/en-id-opus-v1 --dry-run
-      - name: Rust formatting
+      - name: Formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-      - name: Rust clippy
-        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
-      - name: Rust tests
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --all
-      - name: Configure C++ worker runtimes
+      - name: Lint production targets
+        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --lib --bins --all-features -- -D warnings
+      - name: Unit and application tests
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
+
+  model-contract:
+    name: model contract
+    needs: classify
+    if: needs.classify.outputs.model == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate EN-ID model-pack plan
+        run: python ../scripts/models/build_opus_pack.py --catalog ../models/catalog/en-id-opus-v1.json --output ../models/build/en-id-opus-v1 --dry-run
+
+  native:
+    name: native boundary
+    needs: classify
+    if: needs.classify.outputs.native == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 18
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+      - name: Configure C++ worker runtime
         run: cmake -S ../worker -B ../worker/build -A x64
-      - name: Build C++ worker and runtime probe
+      - name: Build worker and runtime probe
         shell: pwsh
         run: |
           $buildOutput = & cmake --build ../worker/build --config Release --target cliplingo_worker cliplingo_worker_runtime_probe 2>&1
@@ -71,7 +195,7 @@ jobs:
             "../worker/build/_deps/ctranslate2-src/tests/data/models/v2/aren-transliteration-i8" `
             "../worker/build/_deps/sentencepiece-src/data/botchan_1000_bpe.model"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Verify Rust to C++ worker boundary
+      - name: Verify Rust to C++ protocol boundary
         shell: pwsh
         env:
           CLIPLINGO_WORKER_EXE: ${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe
@@ -83,3 +207,29 @@ jobs:
           CLIPLINGO_WORKER_EXE: ${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe
           CLIPLINGO_WORKER_TEST_MODE: deterministic
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test worker_translator_integration -- --ignored --nocapture
+      - name: Compile real-production smoke harness
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test worker_real_translation_smoke --no-run
+
+  required:
+    name: required
+    if: always()
+    needs: [classify, frontend, rust, model-contract, native]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Enforce proportional CI result
+        shell: bash
+        env:
+          CLASSIFY: ${{ needs.classify.result }}
+          FRONTEND: ${{ needs.frontend.result }}
+          RUST: ${{ needs.rust.result }}
+          MODEL: ${{ needs.model-contract.result }}
+          NATIVE: ${{ needs.native.result }}
+        run: |
+          set -euo pipefail
+          for result in "$CLASSIFY" "$FRONTEND" "$RUST" "$MODEL" "$NATIVE"; do
+            case "$result" in
+              success|skipped) ;;
+              *) echo "CI lane failed or was cancelled: $result" >&2; exit 1 ;;
+            esac
+          done
