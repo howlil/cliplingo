@@ -20,19 +20,19 @@ Preserve these unless the user explicitly approves a material boundary change:
 
 ## Verification principle
 
-Use the cheapest, fastest, highest-signal check that can actually prove the changed behavior or boundary. Escalate only when a cheaper level leaves material risk invisible.
+Use the cheapest, fastest, highest-signal **automated** verification that can actually prove the changed behavior or boundary. Escalate only when a cheaper level leaves material risk invisible and another deterministic repository-owned check can observe it.
 
-Do **not** automatically run a fixed `static -> unit -> integration -> E2E -> manual` ladder. Test depth follows the changed behavior and blast radius, not ceremony.
+Do **not** automatically run a fixed `static -> unit -> integration -> E2E -> manual` ladder. Browser black-box testing, native manual acceptance, staging ceremony, and human visual-review gates are not required merge/release gates. Test depth follows changed behavior and blast radius, not ceremony.
 
-Before adding or running another verification layer, answer:
+Before adding another verification layer, answer:
 
 1. What observable behavior changed?
-2. Which boundary can fail because of that change?
-3. What is the cheapest check that observes that boundary?
+2. Which repository-owned boundary can fail because of that change?
+3. What is the cheapest automated check that observes that boundary?
 4. What material failure remains invisible after that check?
-5. Is the remaining risk large enough to justify deeper evidence?
+5. Is there another deterministic repository-owned check that can observe that risk?
 
-If #5 is no, stop testing and continue delivery.
+If #5 is no, document the residual risk and stop adding gates.
 
 ## Verification depth
 
@@ -64,7 +64,7 @@ A workflow change is special: because the verification mechanism itself changed,
 
 ## Risk-routed CI architecture
 
-PR/integration CI is designed as independent lanes that can run in parallel. A lightweight classifier maps changed files to risk surfaces. A stable final `required` job aggregates the lane results so branch protection can depend on one check even when some lanes are correctly skipped.
+PR/integration CI uses independent lanes that run in parallel. A lightweight classifier maps changed files to risk surfaces. A stable final `required` job aggregates lane results so branch protection can depend on one check even when irrelevant lanes are correctly skipped.
 
 ### Frontend lane
 
@@ -92,7 +92,7 @@ cargo clippy --locked --manifest-path src-tauri/Cargo.toml --lib --bins --all-fe
 cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
 ```
 
-This lane proves production Rust/Tauri compilation, linting, and application/core unit behavior without compiling every native integration harness on every Rust change.
+This proves production Rust/Tauri compilation, linting, and application/core unit behavior without compiling every native integration harness on every Rust change.
 
 ### Model-contract lane
 
@@ -132,36 +132,35 @@ Evidence:
 - prove the resolver can identify the newest published non-draft release, the x64 installer asset, and trusted SHA256 metadata;
 - do **not** download or execute the installer in PR CI.
 
-This lane tests the distribution bootstrap contract without turning every installer-script change into a product build or release installation.
+This tests the distribution bootstrap contract without turning installer-script changes into a product build or release installation.
 
 ### Required aggregate
 
 The final `required` job succeeds when the classifier succeeds and every applicable lane is either `success` or intentionally `skipped`. Failure/cancellation of an applicable lane fails the aggregate.
 
-This gives one stable integration signal without forcing irrelevant jobs to run.
-
 ## CI performance rules
 
 - Keep `cancel-in-progress: true` so superseded branch runs stop consuming time.
 - Parallelize independent risk lanes instead of building frontend -> Rust -> native serially.
-- Preserve npm/Rust caches where they are deterministic and low-risk.
+- Preserve npm/Rust caches where deterministic and low-risk.
 - Do not cache opaque CMake build outputs by default; stale native artifacts can create false confidence.
-- Add a dependency/tool only when it materially improves signal or lead time. Changed-file classification is implemented with Git already present on the runner rather than another third-party filtering action.
+- Add a dependency/tool only when it materially improves signal or lead time.
 - Use bounded timeouts so hung tooling does not become a delivery gate.
-- Do not rerun a full pipeline after a failure when a focused local/CI rerun can prove the fix; the next integration run remains authoritative.
+- Do not rerun a full pipeline after a failure when a focused rerun can prove the fix; the next integration run remains authoritative.
+- Once an exact-head qualification is running, do not add documentation/cleanup commits that merely cancel and restart expensive gates.
 
 ## User-facing feature evidence
 
-A user-facing feature is complete only when the required user path is integrated across the layers it actually depends on. Backend/native implementation evidence or frontend rendering alone is insufficient when the product behavior requires both.
+A user-facing feature is complete only when the required user path is integrated across the repository-owned layers it actually depends on. Backend/native implementation evidence or frontend rendering alone is insufficient when the product behavior requires both.
 
-Use the smallest credible end-to-end path:
+Use the smallest credible deterministic path:
 
 ```text
-user action
-  -> UI / Tauri intent
+user intent/state
+  -> UI / Tauri application behavior
   -> Rust application behavior
   -> worker/native boundary when applicable
-  -> user-visible result or error state
+  -> deterministic result or error-state assertion
 ```
 
 Technical foundation slices may use narrower evidence while they remain prerequisites. Do not report those as completed product features.
@@ -211,30 +210,23 @@ Then run only the relevant runtime probe/protocol integration regressions.
 ./scripts/install.ps1 -ResolveOnly
 ```
 
-Use the parser + `-ResolveOnly` evidence for bootstrap changes. A real installer execution belongs to release/native installation acceptance, not ordinary PR CI.
+Use parser + `-ResolveOnly` evidence for bootstrap changes. Actual installer publication and artifact integrity are release concerns; manual installer execution is optional debugging/observational work, not a mandatory release gate.
 
 ## Release qualification boundary
 
 Real production model download/conversion, non-deterministic EN -> ID inference smoke, NSIS packaging, checksums, and release publication belong to `.github/workflows/release-alpha.yml` / `.agents/RELEASE.md`.
 
-PR CI should prove contracts and executable boundaries cheaply; release CI proves the immutable distributed artifact with real production weights. Do not duplicate release-cost evidence on every PR.
+PR CI proves contracts and executable boundaries cheaply; release CI proves the immutable distributed artifact with real production weights. Do not duplicate release-cost evidence on every PR.
 
-## Native/manual evidence
+## Native/environment evidence
 
-Manual Windows interaction is valid when a real shell behavior cannot be credibly automated. It is **not** a default blocker for unrelated implementation work.
+Use automated native probes/integration tests for native behavior when that boundary matters. Manual Windows interaction may be useful for debugging, but it is not verification evidence required for merge, milestone completion, or release readiness.
 
-Require manual evidence only when the active observable behavior genuinely needs it or the user explicitly makes it a gate. Do not substitute source inspection for an explicitly required native/manual acceptance check.
+When an environment-specific behavior cannot be credibly automated, document the limitation and residual risk rather than creating a mandatory manual acceptance gate.
 
 ## Performance evidence
 
-Performance claims require release-mode measurement and enough environment context to reproduce them. Relevant ClipLingo metrics include:
-
-- hotkey -> popup latency;
-- selection-capture latency;
-- warm/cold inference latency;
-- worker startup/model-load time;
-- idle CPU;
-- working-set/peak memory.
+Performance claims require release-mode measurement and enough environment context to reproduce them. Relevant ClipLingo metrics include hotkey -> popup latency, selection-capture latency, warm/cold inference latency, worker startup/model-load time, idle CPU, and working-set/peak memory.
 
 Do not turn unmeasured targets into claims or blockers for unrelated slices.
 
@@ -252,6 +244,6 @@ For `scripts/install.ps1`, specifically verify release selection, x64 asset sele
 
 ## Evidence discipline
 
-Never claim a test, CI run, benchmark, package, release, deployment, or manual acceptance that was not actually observed. A valid failing regression is a defect signal; fix the defect rather than weakening the assertion.
+Never claim a test, CI run, benchmark, package, release, or deployment that was not actually observed. A valid failing regression is a defect signal; fix the defect rather than weakening the assertion.
 
 When CI fails, use the failure as the next bounded engineering input. Do not add unrelated cleanup while waiting for evidence.
