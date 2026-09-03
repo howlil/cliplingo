@@ -6,7 +6,6 @@ pub type RequestId = u64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PopupErrorCode {
-    NoSelection,
     ClipboardPreservationUnsupported,
     CaptureUnavailable,
     ModelUnavailable,
@@ -16,7 +15,6 @@ pub enum PopupErrorCode {
 impl PopupErrorCode {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::NoSelection => "no_selection",
             Self::ClipboardPreservationUnsupported => "clipboard_preservation_unsupported",
             Self::CaptureUnavailable => "capture_unavailable",
             Self::ModelUnavailable => "model_unavailable",
@@ -149,6 +147,14 @@ impl PopupSession {
         request_id
     }
 
+    pub fn cancel(&mut self, request_id: RequestId) -> ApplyResult {
+        if !self.is_current(request_id) {
+            return ApplyResult::Stale;
+        }
+        self.state = PopupState::Hidden;
+        ApplyResult::Applied(self.state.clone())
+    }
+
     pub fn mark_translating(
         &mut self,
         request_id: RequestId,
@@ -216,6 +222,16 @@ mod tests {
     fn new_session_is_hidden() {
         let session = PopupSession::default();
         assert_eq!(session.snapshot(), PopupState::Hidden);
+    }
+
+    #[test]
+    fn current_capture_can_be_cancelled_without_error_state() {
+        let mut session = PopupSession::default();
+        let request = session.begin_request();
+        assert_eq!(
+            session.cancel(request),
+            ApplyResult::Applied(PopupState::Hidden)
+        );
     }
 
     #[test]

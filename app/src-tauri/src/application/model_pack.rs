@@ -5,16 +5,12 @@ use std::process::Command;
 use serde::Serialize;
 use tauri::Manager;
 
-pub const MODEL_PACK_ID: &str = "ja-id-opus-v1";
+pub const MODEL_PACK_ID: &str = "en-id-opus-v1";
 const MODEL_PACK_URL: Option<&str> = option_env!("CLIPLINGO_MODEL_PACK_URL");
 const MODEL_PACK_SHA256: Option<&str> = option_env!("CLIPLINGO_MODEL_PACK_SHA256");
 
 const REQUIRED_FILES: &[&str] = &[
     "manifest.json",
-    "stages/ja-en/config.json",
-    "stages/ja-en/model.bin",
-    "stages/ja-en/source.spm",
-    "stages/ja-en/target.spm",
     "stages/en-id/config.json",
     "stages/en-id/model.bin",
     "stages/en-id/source.spm",

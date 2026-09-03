@@ -86,13 +86,11 @@ class TranslationStage {
 class OpusRuntime {
  public:
   explicit OpusRuntime(const std::filesystem::path& pack_directory)
-      : ja_en_(pack_directory / "stages" / "ja-en"),
-        en_id_(pack_directory / "stages" / "en-id") {}
+      : en_id_(pack_directory / "stages" / "en-id") {}
 
   bool translate(const std::string& input, std::string& output) {
     try {
-      const std::string english = ja_en_.translate(input);
-      output = en_id_.translate(english);
+      output = en_id_.translate(input);
       return true;
     } catch (const std::exception&) {
       return false;
@@ -100,7 +98,6 @@ class OpusRuntime {
   }
 
  private:
-  TranslationStage ja_en_;
   TranslationStage en_id_;
 };
 
