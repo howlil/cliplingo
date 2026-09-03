@@ -212,7 +212,6 @@ impl InteractionCoordinator {
             .bounds
             .as_ref()
             .zip(selection.work_area.as_ref())
-            .map(|(anchor, work_area)| (anchor, work_area))
             .or_else(|| {
                 interaction
                     .fallback_position
