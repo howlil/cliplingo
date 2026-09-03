@@ -47,17 +47,39 @@ jobs:
         run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
       - name: Rust tests
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --all
-      - name: Configure deterministic C++ worker
+      - name: Configure C++ worker runtimes
         run: cmake -S ../worker -B ../worker/build -A x64
-      - name: Build deterministic C++ worker
-        run: cmake --build ../worker/build --config Release
+      - name: Build C++ worker and runtime probe
+        shell: pwsh
+        run: |
+          $buildOutput = & cmake --build ../worker/build --config Release --target cliplingo_worker cliplingo_worker_runtime_probe 2>&1
+          $buildExitCode = $LASTEXITCODE
+          if ($buildExitCode -ne 0) {
+            $diagnostics = $buildOutput | Select-String -Pattern 'LNK[0-9]+|unresolved external|fatal error|error:'
+            if ($diagnostics) {
+              $diagnostics | ForEach-Object { Write-Host $_.Line }
+            } else {
+              $buildOutput | Select-Object -Last 80 | ForEach-Object { Write-Host $_ }
+            }
+            exit $buildExitCode
+          }
+      - name: Verify native translation runtime
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          & "../worker/build/Release/cliplingo-worker-runtime-probe.exe" `
+            "../worker/build/_deps/ctranslate2-src/tests/data/models/v2/aren-transliteration-i8" `
+            "../worker/build/_deps/sentencepiece-src/data/botchan_1000_bpe.model"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify Rust to C++ worker boundary
         shell: pwsh
         env:
           CLIPLINGO_WORKER_EXE: ${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe
+          CLIPLINGO_WORKER_TEST_MODE: deterministic
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test worker_cpp_integration -- --ignored --nocapture
       - name: Verify worker-backed translator
         shell: pwsh
         env:
           CLIPLINGO_WORKER_EXE: ${{ github.workspace }}\worker\build\Release\cliplingo-worker.exe
+          CLIPLINGO_WORKER_TEST_MODE: deterministic
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test worker_translator_integration -- --ignored --nocapture

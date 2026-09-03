@@ -10,6 +10,8 @@ use crate::core::{
 };
 use crate::platform::windows::WorkerPipeClient;
 
+use super::model_pack;
+
 const WORKER_EXE_NAME: &str = "cliplingo-worker.exe";
 const MAX_RESTART_ATTEMPTS: u8 = 1;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
@@ -17,6 +19,7 @@ const CONNECT_RETRY_DELAY: Duration = Duration::from_millis(20);
 
 pub struct WorkerTranslator {
     executable: PathBuf,
+    model_pack: Option<PathBuf>,
     lifecycle: WorkerLifecycle,
     child: Option<Child>,
     client: Option<WorkerPipeClient>,
@@ -24,13 +27,25 @@ pub struct WorkerTranslator {
 }
 
 impl WorkerTranslator {
-    pub fn new_default() -> Self {
-        Self::with_executable(default_worker_executable())
+    pub fn new_default(model_pack: PathBuf) -> Self {
+        Self::with_configuration(default_worker_executable(), Some(model_pack))
     }
 
     pub fn with_executable(executable: impl Into<PathBuf>) -> Self {
+        Self::with_configuration(executable.into(), None)
+    }
+
+    pub fn with_executable_and_model(
+        executable: impl Into<PathBuf>,
+        model_pack: impl Into<PathBuf>,
+    ) -> Self {
+        Self::with_configuration(executable.into(), Some(model_pack.into()))
+    }
+
+    fn with_configuration(executable: PathBuf, model_pack: Option<PathBuf>) -> Self {
         Self {
-            executable: executable.into(),
+            executable,
+            model_pack,
             lifecycle: WorkerLifecycle::new(MAX_RESTART_ATTEMPTS),
             child: None,
             client: None,
@@ -65,15 +80,19 @@ impl WorkerTranslator {
 
     fn spawn_and_connect(&mut self) -> Result<(), TranslationError> {
         self.clear_runtime();
-        let child = Command::new(&self.executable)
+        let mut command = Command::new(&self.executable);
+        command
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|_| {
-                self.lifecycle.fail();
-                TranslationError::Failed
-            })?;
+            .stderr(Stdio::null());
+        if let Some(model_pack) = &self.model_pack {
+            command.env("CLIPLINGO_MODEL_PACK", model_pack);
+        }
+
+        let child = command.spawn().map_err(|_| {
+            self.lifecycle.fail();
+            TranslationError::Failed
+        })?;
         self.child = Some(child);
 
         let deadline = Instant::now() + CONNECT_TIMEOUT;
@@ -132,6 +151,14 @@ impl WorkerTranslator {
         &mut self,
         request: &TranslationRequest,
     ) -> Result<Translation, TranslationError> {
+        if self
+            .model_pack
+            .as_deref()
+            .is_some_and(|directory| !model_pack::is_complete(directory))
+        {
+            return Err(TranslationError::ModelUnavailable);
+        }
+
         self.ensure_ready()?;
         self.lifecycle
             .begin_request()
@@ -172,6 +199,9 @@ impl Translator for WorkerTranslator {
         for _ in 0..=MAX_RESTART_ATTEMPTS {
             match self.translate_once(request) {
                 Ok(translation) => return Ok(translation),
+                Err(TranslationError::ModelUnavailable) => {
+                    return Err(TranslationError::ModelUnavailable)
+                }
                 Err(error) if self.lifecycle.state() == WorkerState::Failed => {
                     if self.lifecycle.restart_attempts() >= self.lifecycle.max_restart_attempts() {
                         return Err(error);
@@ -201,6 +231,8 @@ fn default_worker_executable() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn missing_worker_fails_without_panicking() {
@@ -217,11 +249,38 @@ mod tests {
     }
 
     #[test]
+    fn missing_model_is_reported_before_worker_start() {
+        let model = temporary_directory("missing-model");
+        let mut translator = WorkerTranslator::with_executable_and_model(
+            r"Z:\cliplingo-definitely-missing\cliplingo-worker.exe",
+            &model,
+        );
+
+        assert_eq!(
+            translator.translate(&TranslationRequest {
+                text: "private text".into(),
+            }),
+            Err(TranslationError::ModelUnavailable)
+        );
+        assert!(!model.exists());
+    }
+
+    #[test]
     fn default_worker_path_is_sibling_executable() {
         let path = default_worker_executable();
         assert_eq!(
             path.file_name().and_then(|value| value.to_str()),
             Some(WORKER_EXE_NAME)
         );
+    }
+
+    fn temporary_directory(label: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = env::temp_dir().join(format!("cliplingo-{label}-{nonce}"));
+        let _ = fs::remove_dir_all(&path);
+        path
     }
 }

@@ -9,6 +9,7 @@ pub enum PopupErrorCode {
     NoSelection,
     ClipboardPreservationUnsupported,
     CaptureUnavailable,
+    ModelUnavailable,
     TranslationFailed,
 }
 
@@ -18,6 +19,7 @@ impl PopupErrorCode {
             Self::NoSelection => "no_selection",
             Self::ClipboardPreservationUnsupported => "clipboard_preservation_unsupported",
             Self::CaptureUnavailable => "capture_unavailable",
+            Self::ModelUnavailable => "model_unavailable",
             Self::TranslationFailed => "translation_failed",
         }
     }

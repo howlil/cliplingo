@@ -1,0 +1,8 @@
+{
+  "version": "0.1.0-alpha.1",
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "resources": ["cliplingo-worker.exe"]
+  }
+}

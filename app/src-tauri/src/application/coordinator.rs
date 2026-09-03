@@ -242,7 +242,7 @@ impl InteractionCoordinator {
             text: selection.text,
         });
         eprintln!(
-            "event=interaction_timing request_id={request_id} metric=fake_translation duration_us={} status={}",
+            "event=interaction_timing request_id={request_id} metric=translation duration_us={} status={}",
             translation_started.elapsed().as_micros(),
             if translation.is_ok() { "ok" } else { "error" }
         );
@@ -253,7 +253,12 @@ impl InteractionCoordinator {
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             match translation {
                 Ok(value) => session.complete(request_id, value),
-                Err(_) => session.fail(request_id, PopupErrorCode::TranslationFailed),
+                Err(TranslationError::ModelUnavailable) => {
+                    session.fail(request_id, PopupErrorCode::ModelUnavailable)
+                }
+                Err(TranslationError::Failed) => {
+                    session.fail(request_id, PopupErrorCode::TranslationFailed)
+                }
             }
         };
         if let ApplyResult::Applied(state) = state {

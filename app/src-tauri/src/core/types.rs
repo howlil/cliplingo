@@ -64,5 +64,6 @@ pub enum CaptureError {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TranslationError {
+    ModelUnavailable,
     Failed,
 }

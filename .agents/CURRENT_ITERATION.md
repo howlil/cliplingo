@@ -1,84 +1,101 @@
 # Current Milestone — Real Offline Translation Alpha
 
-**Status:** active; the native translation runtime foundation is blocked at MSVC link-time runtime-library consistency.
+**Status:** active; the coherent product capability is implemented on PR #23 and is now in qualification. The previous MSVC CRT link blocker is resolved; the remaining native gate is bounded runtime execution evidence.
 
-**Goal:** replace deterministic worker translation with a real distributable offline Japanese-to-Indonesian path while preserving the isolated worker, privacy, popup, and request-correlation contracts.
+**Goal:** ship a distributable Windows alpha where selected Japanese text is translated locally through the pinned OPUS `ja -> en -> id` route and returned through the existing ClipLingo popup, with a fresh-install model acquisition path and no cloud translation dependency.
 
-**Why:** the shell-to-worker path is already proven. The highest-value remaining alpha capability is real local translation through that established path.
+**Why:** shell capture, popup behavior, request correlation, worker isolation, and model-pack definition already exist. This milestone turns those foundations into the first user-usable real offline translation capability.
 
 ## Feature Compass
 
-**Shape:** selected Japanese text -> local `ja -> en` OPUS stage -> local `en -> id` OPUS stage -> existing popup, with no cloud translation.
+**Shape:** select Japanese text -> `Ctrl+Shift+T` -> Windows selection capture -> local SentencePiece/CTranslate2 `ja -> en` -> local SentencePiece/CTranslate2 `en -> id` -> Indonesian popup result. If the model pack is absent, the popup offers a verified one-time install action.
 
-**Position:** model-pack foundation is merged. PR #16 is the active prerequisite slice. Its latest Windows CI now configures the native CTranslate2/SentencePiece graph successfully with C++17, but fails while linking the runtime probe because the MSVC runtime library is inconsistent across worker/runtime-probe and SentencePiece-bundled Abseil dependencies. PR #19 already contains the downstream worker OPUS runtime work and is stacked on #16; it remains downstream until the native runtime foundation is green and integrated.
+**Position:** PR #23 (`feat: ship real offline translation alpha`) contains the native runtime fix, real worker OPUS execution, verified model-pack lifecycle, popup install state, real translation smoke, NSIS release configuration, release automation, README, and release notes. The native C++ graph now configures and links successfully on Windows after aligning CTranslate2/SentencePiece/bundled Abseil on one static MSVC CRT policy. The earlier unbounded runtime probe exposed a hang, so the capability branch now uses a single-thread/greedy diagnostic probe with an explicit CI timeout rather than allowing verification to stall indefinitely.
 
-**Delta:** establish one consistent MSVC runtime-library policy across the native dependency graph, prove the native runtime probe and existing worker regressions, then integrate the already-defined worker OPUS runtime and continue toward the real offline user path.
+**Delta:** get PR #23 through Rust/native qualification, prove the real production model path in the release workflow, merge to `master`, create the gated `v0.1.0-alpha.1` GitHub prerelease, then submit that exact installer asset and SHA256 to WinGet.
 
-**Next Move:** fix the `/MD` versus `/MT` propagation at the native dependency/configuration boundary in PR #16, run only the targeted native build/probe plus affected worker-boundary regressions during iteration, use CI as integration evidence, then merge the coherent prerequisite slice and continue directly to the worker OPUS runtime.
+**Next Move:** qualify the latest PR #23 head. Fix only evidence-backed failures. When its integration checks are green, merge the coherent milestone implementation and trigger the gated alpha release branch.
 
 ## Milestone scope
 
 ### In
 
-- pinned native CTranslate2 + SentencePiece runtime for the isolated worker;
-- committed `ja -> en -> id` OPUS model-pack contract;
-- production worker execution through the real local model stages;
-- preserve protocol v1, process isolation, privacy, and latest-request-wins behavior;
-- prove the smallest credible offline selected-text -> translated-popup path for the alpha milestone.
+- pinned native CTranslate2 4.8.2 + SentencePiece 0.2.2 runtime;
+- OPUS-MT `ja -> en -> id` CPU INT8 production route;
+- real production inference inside the isolated C++ worker;
+- existing protocol v1, request correlation, latest-request-wins, popup, and Windows capture path;
+- installed/missing model-pack state;
+- explicit model download/install with SHA256 verification and staged activation;
+- model removal and stable local model-pack location;
+- missing/corrupt model behavior that does not crash the shell;
+- real non-deterministic worker smoke and measured cold/warm translation timing during release qualification;
+- Windows x64 NSIS alpha installer containing the worker;
+- README + release documentation;
+- immutable GitHub prerelease/tag `v0.1.0-alpha.1` only after qualification succeeds;
+- downstream WinGet submission using the canonical GitHub Release installer and SHA256.
 
 ### Out
 
-- new language families or routing expansion;
-- cloud fallback;
+- additional language routes;
 - OCR;
+- cloud fallback;
+- GPU inference;
 - accounts/sync;
-- broad UI polish unrelated to the real translation path;
-- release/signing/package-manager work not required to prove this alpha capability.
+- broad unrelated UI redesign;
+- advanced model marketplace/automatic route selection;
+- stable-grade signing or compatibility certification.
+
+WinGet/release packaging entered this milestone because the user explicitly requested distribution after the product capability is complete. That scope amendment does not add unrelated product functionality.
 
 ## Milestone slices
 
-- [x] **Model-pack foundation** — catalog, pinned source revisions, build/manifest intent, license/integrity metadata.
-- [ ] **Native translation runtime foundation** — CTranslate2/SentencePiece builds and executes behind the worker boundary. **ACTIVE / BLOCKED**
-- [ ] **Worker OPUS runtime** — real `ja -> en -> id` execution in the production worker. PR #19 already contains this downstream slice.
-- [ ] **End-to-end offline translation** — real selected text reaches the popup through the existing shell/worker path.
-- [ ] **Alpha milestone gate** — focused correctness/privacy/native evidence for the advertised alpha behavior.
+- [x] **Model-pack foundation** — catalog, pinned revisions, manifest/license/integrity intent.
+- [~] **Native translation runtime** — configure + compile + link are proven after coherent MSVC CRT propagation; bounded runtime execution is still being qualified.
+- [~] **Worker OPUS runtime** — real two-stage SentencePiece/CTranslate2 execution is implemented on PR #23; production smoke still gates release.
+- [~] **Model-pack lifecycle** — installed/missing detection, verified download, staged activation, removal, worker path injection, and popup install action are implemented; Rust qualification is in progress.
+- [~] **End-to-end offline translation** — existing selected-text/popup path is wired to the real worker; automated production model smoke and release packaging evidence remain.
+- [ ] **Alpha release gate** — merge verified capability, build production model pack, run real translation smoke, build NSIS installer, publish `v0.1.0-alpha.1` prerelease/tag.
+- [ ] **WinGet distribution** — submit the released installer URL + SHA256 to `microsoft/winget-pkgs`; publication remains pending until upstream validation/merge.
 
-A foundation slice is a prerequisite, not a completed user feature. Do not expand this milestone with nice-to-have work while the core offline translation path is incomplete.
+A technical slice is not reported as a completed user feature until the required user path has credible evidence.
 
 ## Current decisions
 
-- Preserve the existing Rust application authority, Svelte presentation boundary, Windows adapters, worker process isolation, Named Pipe transport, and worker protocol v1.
-- First real distributable route remains OPUS-MT `ja -> en -> id`, CPU INT8, as recorded in `DECISIONS.md`.
-- Native dependency/toolchain work is verified at the boundary it changes. Do not turn every implementation loop into a full repository test ladder.
-- Integrate at coherent slice/logical-change boundaries. Do not create additional planning state or branch-per-tweak workflow around this blocker.
+- Rust remains application authority; Svelte remains presentation only.
+- Inference remains isolated in `cliplingo-worker.exe` over Windows Named Pipe protocol v1.
+- First production route remains OPUS-MT `ja -> en -> id`, CPU INT8.
+- CTranslate2/SentencePiece are source-pinned and linked into the worker; the native graph uses one static MSVC CRT policy.
+- Deterministic worker output exists only under explicit `CLIPLINGO_WORKER_TEST_MODE=deterministic` for protocol/regression CI.
+- Production model weights are built only for release qualification, not downloaded by ordinary CI.
+- Release binary source is GitHub Releases. WinGet references that immutable asset; it does not rebuild ClipLingo.
+- Alpha may be unsigned; signing is not allowed to silently become a stable-grade blocker for this alpha.
 
 ## Current evidence
 
 - Model-pack foundation is already merged on `master`.
-- PR #16 (`feat: prove native translation runtime foundation`) is open and remains the active prerequisite.
-- Latest observed PR #16 Windows CI: run #109 (`33676446605`) failed.
-- Frontend checks/tests/build, model-pack dry-run, Rust formatting/Clippy/tests, and native CMake configure passed in that run.
-- Abseil's C++17 configure probe passed, so the previous language-standard configure blocker is no longer current.
-- Native runtime probe linking failed with repeated `LNK2038` runtime-library mismatches: `MD_DynamicRelease` versus `MT_StaticRelease`, followed by CRT/default-library conflicts and unresolved externals.
-- Because native linking failed, the runtime probe and downstream Rust-to-worker integration checks did not execute in that run.
-- PR #19 (`feat: run OPUS translation in isolated worker`) is open and intentionally stacked on PR #16.
+- PR #16's latest native build reached successful CMake configure and successful C++ worker/runtime-probe linking after `ABSL_MSVC_STATIC_RUNTIME` and related CRT propagation were aligned. This proves the previous `/MD` vs `/MT` link blocker is resolved.
+- The old PR #16 runtime probe then remained in progress abnormally long; it is not accepted as pass evidence.
+- PR #23 is the coherent replacement/integration branch for the complete alpha capability.
+- Observed PR #23 CI #119: frontend check, frontend tests, frontend build, and model-pack dry-run all passed. Rust formatting failed only on two mechanical formatting diffs; those diffs were corrected on the branch before continuing qualification.
+- The runtime probe on PR #23 now emits component/phase markers, uses one computation thread and greedy decode, and has a 3-minute CI timeout so a native hang becomes an actionable failure instead of an indefinite gate.
+- Release workflow requires a pinned production model pack, native runtime probe, real non-deterministic translation smoke, NSIS installer build, and emitted model/installer SHA256 before it can create `v0.1.0-alpha.1`.
 
 ## Blockers / risks
 
 ### Current blocker
 
-The native dependency graph mixes MSVC CRT modes. The fix must make runtime-library selection consistent across ClipLingo targets and dependencies configured by CTranslate2/SentencePiece/Abseil; suppressing linker diagnostics or forcing conflicting default libraries is not acceptable evidence.
+No known source-level linker blocker remains. The immediate gate is the latest PR #23 qualification, especially Rust compile/tests and bounded native runtime execution.
 
-### Follow-on risks
+### Follow-on release risks
 
-After the native runtime foundation is green:
+- production OPUS conversion/model loading may expose incompatibility not visible in the tiny native fixture;
+- real two-stage latency may be higher than target hypotheses and must be measured rather than guessed;
+- NSIS/Tauri resource packaging must prove the worker is present at the runtime resource location;
+- the alpha is unsigned and may trigger SmartScreen;
+- WinGet submission can be prepared and opened after the GitHub Release exists, but final catalog availability depends on upstream validation/merge.
 
-- real OPUS tokenization/model loading can still expose model/runtime compatibility defects;
-- the full local route can expose latency/memory issues that are invisible in deterministic worker regressions;
-- model acquisition/install lifecycle remains necessary before a distributable user-facing alpha is complete.
-
-Treat these as follow-on slice risks, not reasons to widen the current blocker fix.
+Do not widen the milestone for these risks. Fix only failures that block the advertised alpha path or its requested distribution.
 
 ## Single next action
 
-Make PR #16 use one coherent MSVC runtime-library policy through the complete native dependency graph, prove the runtime probe and affected worker-boundary regressions, integrate the slice, then continue directly with the already-defined worker OPUS runtime.
+Run the latest PR #23 qualification to completion; resolve any concrete Rust/native failure, merge the coherent capability when green, then trigger the gated alpha release and use its actual installer URL/SHA256 for WinGet submission.
