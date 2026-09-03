@@ -10,7 +10,11 @@ use application::{InteractionCoordinator, ModelPackStatus, WorkerTranslator};
 use core::PopupViewModel;
 use platform::windows::{cursor_anchor, WindowsSelectionProvider, TRANSLATE_SHORTCUT};
 use presentation::TauriPopupPort;
-use tauri::{Manager, State};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Emitter, Manager, State, WindowEvent,
+};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 #[tauri::command]
@@ -30,12 +34,33 @@ fn get_model_pack_status(app: tauri::AppHandle) -> Result<ModelPackStatus, Strin
 
 #[tauri::command]
 async fn install_model_pack(app: tauri::AppHandle) -> Result<ModelPackStatus, String> {
-    application::install_model_pack(app).await
+    let status = application::install_model_pack(app.clone()).await?;
+    if let Err(error) = app.emit("model-pack-state", status.clone()) {
+        eprintln!("event=model_pack_state status=emit_error error={error}");
+    }
+    Ok(status)
 }
 
 #[tauri::command]
 async fn remove_model_pack(app: tauri::AppHandle) -> Result<ModelPackStatus, String> {
-    application::remove_model_pack(app).await
+    let status = application::remove_model_pack(app.clone()).await?;
+    if let Err(error) = app.emit("model-pack-state", status.clone()) {
+        eprintln!("event=model_pack_state status=emit_error error={error}");
+    }
+    Ok(status)
+}
+
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+fn show_settings(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 pub fn run() {
@@ -70,7 +95,8 @@ pub fn run() {
             dismiss_popup,
             get_model_pack_status,
             install_model_pack,
-            remove_model_pack
+            remove_model_pack,
+            quit_app
         ])
         .setup(|app| {
             let popup = Arc::new(TauriPopupPort::new(app.handle().clone()));
@@ -90,6 +116,44 @@ pub fn run() {
                     );
                     error
                 })?;
+
+            if let Some(settings) = app.get_webview_window("settings") {
+                let settings_to_hide = settings.clone();
+                settings.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = settings_to_hide.hide();
+                    }
+                });
+            }
+
+            let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit ClipLingo", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&settings_item, &quit_item])?;
+
+            let mut tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "settings" => show_settings(app),
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        show_settings(tray.app_handle());
+                    }
+                });
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+            tray.build(app)?;
+
             Ok(())
         })
         .run(tauri::generate_context!())

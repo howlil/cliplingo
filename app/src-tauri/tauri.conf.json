@@ -22,6 +22,17 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "focus": false
+      },
+      {
+        "label": "settings",
+        "title": "ClipLingo Settings",
+        "width": 440,
+        "height": 380,
+        "visible": false,
+        "resizable": false,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": false
       }
     ],
     "security": {

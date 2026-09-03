@@ -9,25 +9,21 @@ const base = {
 } as const;
 
 describe('PopupView', () => {
-  it('shows capture feedback immediately', () => {
-    render(PopupView, { model: { ...base, status: 'capturing' } });
-    expect(screen.getByText('Capturing…')).toBeInTheDocument();
-  });
-
-  it('shows a ready translation', () => {
+  it('shows the direct EN to ID route and ready translation', () => {
     render(PopupView, {
       model: {
         status: 'ready',
-        sourceText: 'こんにちは',
-        translatedText: '[FAKE] こんにちは',
+        sourceText: 'The deployment failed yesterday.',
+        translatedText: 'Deployment gagal kemarin.',
         errorCode: null,
       },
     });
 
-    expect(screen.getByText('[FAKE] こんにちは')).toBeInTheDocument();
+    expect(screen.getByText('EN → ID')).toBeInTheDocument();
+    expect(screen.getByText('Deployment gagal kemarin.')).toBeInTheDocument();
   });
 
-  it('offers explicit model installation when the offline pack is missing', async () => {
+  it('offers explicit model installation when the EN to ID pack is missing', async () => {
     const onInstallModel = vi.fn();
     render(PopupView, {
       model: {
@@ -38,13 +34,22 @@ describe('PopupView', () => {
       onInstallModel,
     });
 
+    expect(screen.getByText('The English → Indonesian offline model is not installed.')).toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: 'Install offline model' }));
     expect(onInstallModel).toHaveBeenCalledOnce();
   });
 
   it('emits dismiss intent from the close action', async () => {
     const onDismiss = vi.fn();
-    render(PopupView, { model: { ...base, status: 'capturing' }, onDismiss });
+    render(PopupView, {
+      model: {
+        status: 'ready',
+        sourceText: 'hello',
+        translatedText: 'halo',
+        errorCode: null,
+      },
+      onDismiss,
+    });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Close translation' }));
     expect(onDismiss).toHaveBeenCalledOnce();
