@@ -1,6 +1,8 @@
 # Release Strategy
 
-ClipLingo releases by product maturity. Release requirements are project-specific; ordinary alpha development must not inherit stable-grade packaging/signing/manual gates.
+ClipLingo releases by product maturity. Release requirements are project-specific; ordinary alpha development must not inherit stable-grade packaging/signing gates.
+
+Manual acceptance testing, black-box browser/native testing, and human visual-review gates are not required release criteria. Release confidence comes from deterministic repository tests, automated native/runtime probes, packaging checks, integrity validation, and CI appropriate to the changed release boundary.
 
 ## Channels
 
@@ -8,7 +10,7 @@ ClipLingo releases by product maturity. Release requirements are project-specifi
 - **Alpha (`v0.x.y-alpha.N`):** core path is proven by the automated evidence required for the advertised alpha behavior; compatibility may remain narrow and documented.
 - **Beta (`v0.x.y-beta.N`):** intended feature set exists; broaden compatibility, performance, reliability, update, and migration evidence.
 - **RC (`v0.x.y-rc.N`):** production-shaped candidate; only release blockers change.
-- **Stable (`v0.x.y`, later `v1.x.y`):** supported-platform, signing, install/update/uninstall, and regression guarantees are enforced.
+- **Stable (`v0.x.y`, later `v1.x.y`):** supported-platform, signing, install/update/uninstall, and regression guarantees are enforced through reproducible automated checks where repository-owned automation can observe them.
 
 ## Release rules
 
@@ -18,7 +20,7 @@ ClipLingo releases by product maturity. Release requirements are project-specifi
 4. A failed release becomes a bounded fix and a new patch/prerelease version.
 5. Release automation/signing/package-manager work is implemented only when the current maturity stage requires it.
 6. WinGet/Chocolatey are downstream distribution; they do not replace or rebuild the canonical GitHub Release asset.
-7. ARM64 or another platform requires a real test target before publication.
+7. A new platform requires an executable CI/runtime target before publication; do not substitute manual acceptance as the release gate.
 
 ## Canonical binary source
 
@@ -36,21 +38,21 @@ Do not create duplicate independently-built distribution channels.
 
 The first requested distributable release is `v0.1.0-alpha.1`.
 
-The release is intentionally gated rather than created by a manual source-only tag:
+The release is intentionally automated rather than created by a manual source-only tag:
 
 1. merge the verified Real Offline Translation Alpha capability to `master`;
 2. create `release/v0.1.0-alpha.1` from that exact verified `master` commit;
 3. `.github/workflows/release-alpha.yml` builds the pinned `ja-id-opus-v1` production model pack;
 4. validate required model-pack files and compute its SHA256;
 5. build the source-pinned Windows C++ worker/runtime probe;
-6. execute the bounded native runtime probe;
+6. execute the bounded automated native runtime probe;
 7. execute a real non-deterministic Japanese translation through the production OPUS pack;
 8. stage `cliplingo-worker.exe` into the Tauri resource directory;
 9. build the x64 NSIS installer with the immutable GitHub Release model URL and model SHA256 compiled into the model lifecycle;
 10. compute the installer SHA256;
 11. only then create the immutable GitHub prerelease/tag and upload installer, model pack, checksums, and release notes.
 
-If any prerequisite fails, no release tag is created. Fix the concrete failure and rerun qualification rather than publishing an unqualified artifact.
+If any prerequisite fails, no release tag is created. Fix the concrete failure and rerun automated qualification rather than publishing an unqualified artifact.
 
 ### Alpha 1 canonical assets
 
@@ -80,35 +82,34 @@ Windows code signing and Tauri updater signing are separate trust mechanisms. Pr
 
 The first alpha may therefore be unsigned and can trigger Windows SmartScreen. This must be documented, not bypassed by weakening Windows security behavior.
 
-## Release acceptance by maturity
+## Release evidence by maturity
 
 ### Alpha
 
 - required repository integration evidence is green for the advertised alpha behavior;
 - the advertised alpha path is proven by the smallest credible automated/native evidence available;
 - no known privacy/correctness blocker exists for the advertised behavior;
-- a distributed alpha installer must contain the runtime components required by the advertised path;
-- a model-dependent alpha must prove model acquisition/integrity and a real production inference smoke before publication;
-- manual Windows interaction is not a default blocker and is required only when the release/slice explicitly declares it necessary because the behavior cannot be credibly verified otherwise.
+- a distributed alpha installer contains the runtime components required by the advertised path;
+- a model-dependent alpha proves model acquisition/integrity and production inference through automated release/runtime probes.
 
 ### Beta
 
-- broader representative application/DPI/monitor compatibility;
+- broader representative compatibility through reproducible automated targets where available;
 - latency/resource measurements where user experience depends on them;
-- installer/update path if beta is distributed as installed software;
-- regression coverage for accumulated product behaviors;
-- targeted manual/native evidence only for behavior that remains impractical to automate.
+- installer/update automation if beta is distributed as installed software;
+- regression coverage for accumulated product behaviors.
 
 ### Stable
 
-- clean supported Windows VM fresh install;
-- launch and primary workflow;
-- upgrade from previous supported stable version;
-- uninstall/data-retention behavior;
+- reproducible installer/package build;
+- automated launch/startup and primary contract probes available to the repository;
+- upgrade/migration tests for supported prior versions when implemented;
+- uninstall/data-retention contract verification where it can be automated;
 - signature/checksum validation;
 - updater/package metadata when enabled;
-- release notes and rollback/fix-forward path;
-- any required manual release acceptance must be explicit in the release work, not inherited as a generic development gate.
+- release notes and rollback/fix-forward path.
+
+Environment-specific limitations that cannot be automated are documented as residual risk; they do not create a manual acceptance gate.
 
 ## Rollback
 
