@@ -1,18 +1,18 @@
 # Current Milestone — EN→ID Native Tray Translation Experience
 
-**Status:** the product slices and proportional CI architecture are implemented on branch `feat/en-id-native-tray-experience`. A PowerShell latest-release bootstrap has now been added as the requested distribution path. Previous full CI self-validation passed; the new PowerShell distribution lane still needs exact-head CI evidence before merge. Do not call the native UX completely accepted until explicit Windows interaction acceptance is observed where automation cannot credibly prove shell behavior.
+**Status:** implemented, verified, and merged to `master` in commit `a0d30205dfacb4ed9f15f493a95a7acbd2945135`. PR #25 is closed and merged. The next remaining milestone action is Alpha 2 automated release qualification/publication; no merge blocker remains for this feature milestone.
 
 **Goal:** make ClipLingo behave as a focused Windows background utility: run from the system tray, translate selected English directly to Indonesian offline, show nothing when no valid selection exists, present the result in a compact draggable utility popup, and provide a safe one-command Windows PowerShell installation route to the newest published release.
 
 ## Feature Compass
 
-**Shape:** system tray -> select English text -> `Ctrl+Alt+T` -> validate/capture selection -> direct local OPUS `en -> id` -> compact draggable Indonesian popup. Installation can start from PowerShell and resolves the newest published GitHub Release automatically. No selection means no visible translation UI.
+**Shape:** system tray -> select English text -> `Ctrl+Alt+T` -> validate/capture selection -> direct local OPUS `en -> id` -> compact draggable Indonesian popup. PowerShell installation resolves the newest published GitHub Release automatically. No selection means no visible translation UI.
 
-**Position:** the branch contains the one-stage EN -> ID model/runtime, selection-before-popup ordering, silent no-selection regression, native Tauri tray + Settings lifecycle, restrained draggable popup UI, risk-routed CI, and `scripts/install.ps1`. The bootstrap resolves the newest published non-draft release including prereleases, requires the x64 installer asset, verifies SHA256 from GitHub release metadata or its checksum sidecar, and only then executes the installer. CI run `33793098041` previously proved the frontend/Rust/model/native risk lanes and aggregate `required`; the new distribution lane is awaiting exact-head evidence.
+**Position:** the complete EN -> ID/tray milestone is integrated on `master`: one-stage EN -> ID model/runtime, selection-before-popup ordering, silent no-selection regression, Tauri tray + Settings lifecycle, restrained draggable popup UI, risk-routed CI, and `scripts/install.ps1`.
 
-**Delta:** validate the PowerShell bootstrap parser + `-ResolveOnly` release/checksum resolution together with the workflow change, merge PR #25, then run gated `v0.1.0-alpha.2` release qualification. Native Windows interaction acceptance remains explicit evidence for calling the shell UX fully accepted.
+**Delta:** source integration is complete. Only the separate `v0.1.0-alpha.2` release qualification/publication path remains for this milestone.
 
-**Next Move:** complete exact-head CI for the PowerShell distribution change. Fix only evidence-backed failures, then merge the coherent milestone.
+**Next Move:** run the gated Alpha 2 release workflow from verified `master`. Fix only concrete release failures; if qualification passes, publish immutable `v0.1.0-alpha.2` assets and checksums.
 
 ## Milestone scope
 
@@ -50,78 +50,67 @@
 - package mirroring or a separate distribution backend;
 - test-framework expansion or E2E ceremony unrelated to changed risk.
 
-## Slices
+## Slice status
 
-- [x] **Direct EN→ID Runtime** — source implementation complete and applicable PR CI green; release qualification still owns real production weights.
-- [x] **Selection-Gated Interaction** — capture occurs before `popup.show`; capture failures cancel invisibly; regression proves no popup and zero translator calls for `NoSelection`.
-- [~] **Windows Tray + Settings Shell** — source implementation and Windows compile evidence complete; native shell interaction acceptance remains.
-- [~] **Movable Translation Surface + UI Quality** — source implementation and frontend verification complete; manual drag behavior remains part of native interaction acceptance.
-- [x] **Fast Accurate CI Contract** — classifier, parallel frontend/Rust/model/native lanes, stable aggregate `required`, bounded timeouts, cancellation of superseded runs, release-only real-model cost, and no aggressive opaque CMake cache. Baseline full self-validation passed in run `33793098041`.
-- [~] **PowerShell Latest-Release Installer** — `scripts/install.ps1`, README usage, release contract, SHA256 verification, optional `-Silent`, `-ResolveOnly`, and a dedicated fast CI distribution lane are implemented; exact-head CI evidence pending.
-- [ ] **Alpha 2 qualification/release** — after merge from verified `master`, build real EN -> ID pack, execute real production inference smoke, build NSIS installer, emit hashes, and publish immutable `v0.1.0-alpha.2` only if release gates pass.
+- [x] **Direct EN→ID Runtime** — merged; active production worker/model-pack contract is direct EN -> ID. Real production weights remain a release-qualification concern.
+- [x] **Selection-Gated Interaction** — merged; capture occurs before popup visibility and regression proves no popup/translator call for no-selection.
+- [x] **Windows Tray + Settings Shell** — merged and covered by Windows compilation/application evidence. Manual shell observation may be useful for debugging but is not a mandatory milestone gate.
+- [x] **Movable Translation Surface + UI Quality** — merged; draggable Tauri surface and restrained UI contract are implemented and frontend verification is green.
+- [x] **Fast Accurate CI Contract** — merged; classifier, parallel risk lanes, stable `required` aggregate, bounded timeouts, cancellation, and release-only real-model cost are active.
+- [x] **PowerShell Latest-Release Installer** — merged; parser + `-ResolveOnly` distribution CI passed, SHA256 verification is enforced before installer execution, and the bootstrap resolves published releases only.
+- [ ] **Alpha 2 qualification/release** — build real EN -> ID pack, execute real production inference smoke, build NSIS installer, emit hashes, and publish immutable `v0.1.0-alpha.2` only if automated release gates pass.
 
-## Existing CI evidence — run 33793098041
+## Integration evidence
 
-The prior CI workflow change intentionally forced every existing lane to run once because the verification mechanism itself changed.
+Exact-head PR CI run `33797782476` passed before merge:
 
-Passed:
+1. `classify risk` — success;
+2. `frontend` — Svelte static check, component tests, production build — success;
+3. `rust core` — format, production-target Clippy, unit/application tests — success;
+4. `model contract` — EN -> ID model-pack dry-run without production weights — success;
+5. `native boundary` — C++ configure/build, native runtime probe, Rust -> C++ protocol regression, WorkerTranslator regression, real-production smoke harness compile — success;
+6. `powershell installer` — PowerShell parser + newest-release/checksum `-ResolveOnly` contract — success;
+7. `required` — aggregate success.
 
-1. `classify risk` — changed-file risk routing;
-2. `frontend` — install, Svelte static check, component tests, production build;
-3. `rust core` — format, production-target Clippy, unit/application tests;
-4. `model contract` — EN -> ID model-pack dry-run without production weights;
-5. `native boundary` — C++ configure/build, runtime probe, Rust -> C++ protocol regression, WorkerTranslator regression, real-production smoke harness compile;
-6. `required` — aggregate accepted all applicable lane results.
-
-The PowerShell bootstrap change adds one small distribution lane and therefore requires a new exact-head run before merge.
+The milestone was then merged to `master` as `a0d30205dfacb4ed9f15f493a95a7acbd2945135`.
 
 ## Implementation decisions
 
 - Rust remains application/workflow authority; Svelte remains presentation/control-surface code.
 - System tray uses Tauri native tray support; no separate tray framework is introduced.
-- Settings is a hidden Tauri window loaded with the same frontend bundle and selected by window label.
-- Closing Settings is intercepted and hides the window instead of terminating the tray process.
-- Popup remains frameless/always-on-top and uses a Tauri drag region instead of restoring decorative native chrome.
-- No-selection is not represented as an error UI. Capture failures are logged without raw source content and cancel the current request invisibly.
-- The active production worker loads only `stages/en-id`; the former JA -> EN stage is removed from the active catalog and pack completeness contract.
-- Alpha 2 is the next prerelease because published Alpha 1 artifacts are immutable and must not be replaced.
-- PR CI proves changed contracts/boundaries with the cheapest credible evidence; real production model inference and packaging remain release qualification concerns.
-- The PowerShell bootstrap installs only published non-draft GitHub Release assets, including prereleases, and never installs unmerged branch code.
-- Installer integrity is checked before execution using GitHub asset SHA256 metadata with the release `.sha256` asset as a fallback.
+- Settings is a hidden Tauri window loaded from the same frontend bundle and selected by window label.
+- Closing Settings hides the window instead of terminating the tray process.
+- Popup remains frameless/always-on-top and uses a Tauri drag region instead of decorative native chrome.
+- No-selection is not represented as error UI. Capture failures cancel invisibly and diagnostics must not contain raw source content.
+- The active production worker loads only `stages/en-id`; the former JA -> EN stage is historical and not part of the active pack.
+- Alpha 2 is the next prerelease because published Alpha 1 artifacts are immutable.
+- PR CI proves changed contracts/boundaries with the cheapest credible evidence; real production model inference and packaging belong to release qualification.
+- The PowerShell bootstrap installs only published non-draft GitHub Release assets, including prereleases, and never installs development code directly from `master`.
+- Installer integrity is checked before execution using GitHub asset SHA256 metadata with the release `.sha256` asset as fallback.
 - The bootstrap does not bypass SmartScreen, code-signing, architecture, or checksum protections.
+- Manual Windows acceptance is not a mandatory merge, milestone, or release gate. Environment-specific behavior that automation cannot credibly prove is documented as residual risk.
 
-## Required evidence
+## Verification contract
 
-### PR / integration
+Use `.agents/QUALITY.md` as the canonical implementation/CI verification contract. Relevant risk lanes are:
 
-Use the risk-routed CI contract from `.agents/QUALITY.md`:
+- **frontend** for Svelte/tooling changes;
+- **rust core** for `app/src-tauri/**` changes;
+- **model contract** for model catalog/build/pack changes;
+- **native boundary** for worker/protocol/native changes;
+- **powershell installer** for `scripts/install.ps1` changes;
+- **required** as the stable aggregate.
 
-- **frontend lane** when frontend/tooling changes: Svelte check, component tests, production build;
-- **Rust lane** when `app/src-tauri/**` changes: fmt, production-target Clippy, library/application tests including no-selection regression;
-- **model-contract lane** when model catalog/build/pack contract changes: EN -> ID dry-run only, no production weights;
-- **native boundary lane** only when worker/protocol/native boundary changes: C++ configure/build/runtime probe, deterministic Rust <-> C++ regressions, real-smoke harness compile;
-- **distribution lane** when `scripts/install.ps1` changes: PowerShell parser + `-ResolveOnly` newest-release/checksum resolution, with no installer execution;
-- **required aggregate**: all applicable lanes must succeed; irrelevant lanes may be skipped.
+Documentation-only updates do not justify recompiling unrelated product lanes.
 
-### Release qualification
+## Release qualification
+
+Alpha 2 remains unpublished until automated release qualification succeeds:
 
 - build pinned production `en-id-opus-v1` pack;
 - validate required single-stage files and SHA256;
-- execute real non-deterministic English -> Indonesian worker smoke;
+- build and execute the native worker runtime probe;
+- execute real non-deterministic English -> Indonesian worker inference;
 - build tray-enabled Windows x64 NSIS installer;
-- publish checksums and immutable prerelease only after prior steps pass.
-
-### Native interaction acceptance
-
-Automation does not fully prove Windows shell interaction. Before calling the native UX completely accepted, verify on Windows:
-
-1. launch ClipLingo and observe its notification-area/system-tray icon;
-2. left-click tray -> Settings opens;
-3. close Settings -> ClipLingo remains in tray;
-4. invoke `Ctrl+Alt+T` without selection -> nothing visible;
-5. select `The deployment failed yesterday.` -> invoke shortcut -> Indonesian result popup;
-6. drag popup by `EN → ID` header;
-7. dismiss result without terminating ClipLingo;
-8. tray menu Quit terminates the app.
-
-Do not substitute this manual interaction evidence with source-inspection claims. Conversely, do not block independently automatable implementation/CI work while waiting for the manual interaction check.
+- compute installer/model checksums;
+- publish immutable prerelease assets only after all prior gates pass.

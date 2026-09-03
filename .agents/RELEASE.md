@@ -54,11 +54,13 @@ CI validates PowerShell syntax and `-ResolveOnly` release/checksum resolution wh
 
 ## Current release candidate — Alpha 2
 
-The EN→ID Native Tray Translation Experience qualifies as `v0.1.0-alpha.2` because `v0.1.0-alpha.1` is already published and immutable.
+The EN→ID Native Tray Translation Experience is integrated and verified on `master` at commit `a0d30205dfacb4ed9f15f493a95a7acbd2945135`. PR #25 is merged. The remaining work is release qualification/publication, not feature integration.
 
-The automated gated route is:
+`v0.1.0-alpha.2` is **not published yet**. `v0.1.0-alpha.1` remains the newest published release until the Alpha 2 workflow completes successfully.
 
-1. merge the verified EN→ID/tray capability to `master`;
+The automated gated route is now:
+
+1. start from a verified `master` commit containing the EN -> ID/tray capability;
 2. create `release/v0.1.0-alpha.2` from that exact verified commit;
 3. `.github/workflows/release-alpha.yml` builds pinned `en-id-opus-v1`;
 4. validate required EN -> ID model files and compute model SHA256;

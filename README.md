@@ -10,7 +10,7 @@ From Windows PowerShell 5.1 or PowerShell 7, run:
 $p = Join-Path $env:TEMP 'cliplingo-install.ps1'; Invoke-WebRequest 'https://raw.githubusercontent.com/howlil/cliplingo/master/scripts/install.ps1' -UseBasicParsing -OutFile $p; & $p
 ```
 
-The bootstrap resolves the newest **published, non-draft GitHub Release**, including alpha/beta prereleases, selects the Windows x64 NSIS installer, verifies its SHA256 from GitHub release metadata (with the release checksum sidecar as fallback), and only then runs the installer. The command is version-independent, so a future `alpha.2`, `alpha.3`, or stable release is picked automatically once it is published.
+The bootstrap resolves the newest **published, non-draft GitHub Release**, including alpha/beta prereleases, selects the Windows x64 NSIS installer, verifies its SHA256 from GitHub release metadata (with the release checksum sidecar as fallback), and only then runs the installer. The command is version-independent, so future prereleases or stable releases are picked automatically once published.
 
 Optional silent install:
 
@@ -18,11 +18,11 @@ Optional silent install:
 & $p -Silent
 ```
 
-This installs the newest **published release**, not unmerged development code. Until Alpha 2 is actually published, the bootstrap resolves the current Alpha 1 release.
+This installs the newest **published release**, not development code from `master`. Until Alpha 2 is published, the bootstrap continues to resolve the current Alpha 1 release.
 
-## Current development experience — EN → ID
+## Current master experience — EN → ID
 
-The active product path is direct English -> Indonesian translation through a local OPUS-MT model:
+`master` now contains the complete EN→ID Native Tray Translation Experience. The primary path is direct English -> Indonesian translation through a local OPUS-MT model:
 
 ```text
 ClipLingo in Windows system tray
@@ -35,7 +35,9 @@ ClipLingo in Windows system tray
 
 ClipLingo does **not** show a translation window just because the shortcut was pressed. The current selection must be valid and non-empty first. If there is no valid selection, the interaction stops silently and no translation request is started.
 
-The system tray/notification area is ClipLingo's persistent application home. Left-click the tray icon opens Settings. The tray menu exposes Settings and Quit ClipLingo. Closing Settings leaves ClipLingo running in the tray.
+The Windows system tray/notification area is ClipLingo's persistent application home. Left-click the tray icon opens Settings. The tray menu exposes Settings and Quit ClipLingo. Closing Settings leaves ClipLingo running in the tray.
+
+The merged `master` capability also includes proportional risk-routed CI and the PowerShell latest-release bootstrap. The verified milestone merge commit is `a0d30205dfacb4ed9f15f493a95a7acbd2945135`.
 
 ## Settings
 
@@ -61,7 +63,7 @@ ClipLingo uses restrained Windows utility styling: compact spacing, semantic typ
 
 ## Published Alpha 1
 
-`v0.1.0-alpha.1` remains available as the first historical offline alpha. It used the earlier JA -> EN -> ID route and must not be confused with the current EN -> ID development milestone. Published Alpha 1 binaries and checksums remain immutable.
+`v0.1.0-alpha.1` remains available as the first historical offline alpha. It used the earlier JA -> EN -> ID route and must not be confused with the EN -> ID capability now integrated into `master`. Published Alpha 1 binaries and checksums remain immutable.
 
 - release: https://github.com/howlil/cliplingo/releases/tag/v0.1.0-alpha.1
 - installer: `ClipLingo_0.1.0-alpha.1_x64-setup.exe`
@@ -69,16 +71,20 @@ ClipLingo uses restrained Windows utility styling: compact spacing, semantic typ
 
 The actual Alpha 1 shortcut is `Ctrl+Alt+T`; earlier documentation that said `Ctrl+Shift+T` was incorrect.
 
-## Alpha 2 qualification
+## Alpha 2 status
 
-The next gated prerelease is `v0.1.0-alpha.2`. It is not considered published until the release workflow successfully:
+The EN→ID/tray milestone is merged and verified on `master`, but `v0.1.0-alpha.2` is **not published yet**. Publication remains a separate automated release qualification step.
 
-- builds/validates the pinned `en-id-opus-v1` production pack;
-- builds and executes the native runtime probe;
-- performs a real non-deterministic English -> Indonesian translation through the isolated worker;
-- builds the tray-enabled Windows x64 NSIS installer;
-- emits installer/model SHA256 checksums;
-- publishes the immutable prerelease only after all prior steps pass.
+The release workflow must successfully:
+
+- build/validate the pinned `en-id-opus-v1` production pack;
+- build and execute the native runtime probe;
+- perform a real non-deterministic English -> Indonesian translation through the isolated worker;
+- build the tray-enabled Windows x64 NSIS installer;
+- emit installer/model SHA256 checksums;
+- publish the immutable prerelease only after all prior steps pass.
+
+Manual Windows acceptance is not a mandatory merge or release gate. Environment-specific behavior that automation cannot credibly prove is treated as residual risk rather than a blocking ceremony.
 
 ## Current architecture
 
