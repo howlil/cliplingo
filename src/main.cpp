@@ -622,9 +622,28 @@ private:
   std::jthread worker_;
 };
 
+// Headless native release acceptance: uses the SAME C++ inference entrypoint as
+// the hotkey worker. No web runtime, no model download, no UI or raw-text logs.
+// Exit 0 only when the bundled EN->ID model really produces Indonesian output.
+int native_model_probe() {
+  int argc = 0;
+  LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+  if (!argv) return -1;
+  const bool probe = argc > 1 && wcscmp(argv[1], L"--verify-model") == 0;
+  if (!probe) { LocalFree(argv); return -1; }
+  if (argc != 3) { LocalFree(argv); return 2; }
+  const std::filesystem::path model(argv[2]);
+  LocalFree(argv);
+  const auto translated = translate_en_id(L"Hello world!", model);
+  const bool valid = translated && translated.text.find(L"dunia") != std::wstring::npos;
+  unload_translation_model();
+  return valid ? 0 : 3;
+}
+
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
   int child_exit = 1;
   if (maybe_run_capture_helper(child_exit)) return child_exit;
+  if (const int diagnostic = native_model_probe(); diagnostic >= 0) return diagnostic;
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   if (FAILED(com)) return 1;
