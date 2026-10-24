@@ -1,6 +1,7 @@
 #include "region_selector.h"
 #include "region_geometry.h"
 #include <algorithm>
+#include <windowsx.h>
 #include <utility>
 
 bool RegionSelector::Start(HINSTANCE instance, HWND restore_focus, Done done) {
