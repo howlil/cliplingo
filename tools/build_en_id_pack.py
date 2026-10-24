@@ -20,9 +20,10 @@ def main() -> None:
     ap.add_argument("--revision", required=True, help="Immutable Hugging Face commit SHA")
     args = ap.parse_args()
     folder = args.output.resolve()
-    if folder.exists() and any(folder.iterdir()):
-        ap.error("output must be an empty or new directory")
-    folder.mkdir(parents=True, exist_ok=True)
+    # CT2's converter requires the output directory to NOT EXIST, even if empty.
+    if folder.exists():
+        ap.error("output directory must not exist")
+    folder.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run([
         "ct2-transformers-converter", "--model", MODEL,
         "--revision", args.revision, "--output_dir", str(folder),
