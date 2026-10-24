@@ -71,11 +71,23 @@ CaptureResult capture_hover_text(HWND expected_foreground, POINT cursor, Capture
   if (FAILED(automation->ElementFromPoint(cursor, element.GetAddressOf())) || !element)
     return {Failure::Unsupported, {}};
 
-  ComPtr<IUnknown> raw;
-  if (FAILED(element->GetCurrentPattern(UIA_TextPatternId, raw.GetAddressOf())) || !raw)
-    return {Failure::Unsupported, {}};
+  // Chrome/editor providers often expose TextPattern on a document/container
+  // parent, while ElementFromPoint returns a leaf text element.
   ComPtr<IUIAutomationTextPattern> pattern;
-  if (FAILED(raw.As(&pattern))) return {Failure::Unsupported, {}};
+  ComPtr<IUIAutomationTreeWalker> walker;
+  if (FAILED(automation->get_ControlViewWalker(walker.GetAddressOf())) || !walker)
+    return {Failure::Unsupported, {}};
+  for (int depth = 0; depth < 8 && element; ++depth) {
+    ComPtr<IUnknown> raw;
+    if (SUCCEEDED(element->GetCurrentPattern(UIA_TextPatternId, raw.GetAddressOf())) && raw &&
+        SUCCEEDED(raw.As(&pattern)) && pattern)
+      break;
+    ComPtr<IUIAutomationElement> parent;
+    if (FAILED(walker->GetParentElement(element.Get(), parent.GetAddressOf())) || !parent)
+      break;
+    element = std::move(parent);
+  }
+  if (!pattern) return {Failure::Unsupported, {}};
 
   ComPtr<IUIAutomationTextRange> caret;
   if (FAILED(pattern->RangeFromPoint(cursor, caret.GetAddressOf())) || !caret)
@@ -141,7 +153,6 @@ CaptureResult capture_with_hover(HWND foreground, POINT cursor, CaptureScope sco
   if (selected || scope == CaptureScope::SelectionOnly) return selected;
   // Real selected text must never be overridden by hover. Fatal, invalid or
   // oversized selection failures must not turn into another text target.
-  if (selected.failure != Failure::NoSelection &&
-      selected.failure != Failure::Unsupported) return selected;
+  if (selected.failure != Failure::NoSelection) return selected;
   return capture_hover_text(foreground, cursor, scope);
 }
