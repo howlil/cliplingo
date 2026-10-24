@@ -23,6 +23,8 @@ struct Request {
 struct Preferences {
   int max_width_dip{420};
   int max_height_dip{300};
+  int theme{0}; // 0 light, 1 dark
+  int popup_style{0}; // 0 solid, 1 tinted (glass deferred)
   std::filesystem::path model_path;
 };
 
