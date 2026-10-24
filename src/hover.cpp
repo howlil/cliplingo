@@ -31,16 +31,21 @@ bool hit_test(IUIAutomationTextRange* word, POINT cursor) {
   const auto cleanup = [&] { SafeArrayDestroy(array); };
   if (SafeArrayGetDim(array) != 1) { cleanup(); return false; }
   LONG low = 0, high = -1;
-  if (FAILED(SafeArrayGetLBound(array, 1, &low)) ||
-      FAILED(SafeArrayGetUBound(array, 1, &high)) ||
-      high < low || (high - low + 1) % 4 != 0 ||
-      high - low + 1 > 4096) { cleanup(); return false; }
+  VARTYPE type = VT_EMPTY;
+  if (FAILED(SafeArrayGetVartype(array, &type)) || type != VT_R8 ||
+      FAILED(SafeArrayGetLBound(array, 1, &low)) ||
+      FAILED(SafeArrayGetUBound(array, 1, &high))) { cleanup(); return false; }
+  // Use wide arithmetic on provider-controlled SAFEARRAY bounds.
+  const std::int64_t count = static_cast<std::int64_t>(high) - low + 1;
+  if (count <= 0 || count > 4096 || count % 4 != 0) {
+    cleanup(); return false;
+  }
   double* rectangles = nullptr;
   if (FAILED(SafeArrayAccessData(array, reinterpret_cast<void**>(&rectangles)))) {
     cleanup(); return false;
   }
   bool found = false;
-  for (LONG i = 0; i + 3 < high - low + 1; i += 4) {
+  for (std::int64_t i = 0; i + 3 < count; i += 4) {
     const scope_text::Rect bounds{rectangles[i], rectangles[i+1],
                                   rectangles[i+2], rectangles[i+3]};
     if (scope_text::contains(bounds, cursor.x, cursor.y)) { found = true; break; }
@@ -102,8 +107,18 @@ CaptureResult capture_hover_text(HWND expected_foreground, POINT cursor, Capture
   if (!hit_test(word.Get(), cursor)) return {Failure::NoSelection, {}};
   const auto hovered_word = text_from_range(word.Get());
   if (!hovered_word) return hovered_word;
+  // UIA may substitute a larger supported TextUnit instead of Word. Reject a
+  // suspiciously long or multi-token range rather than translating a paragraph
+  // or mistaking its full-line bounds for the actual word at the pointer.
+  if (hovered_word.text.size() > 128 ||
+      std::any_of(hovered_word.text.begin(), hovered_word.text.end(),
+                  [](wchar_t ch) { return std::iswspace(ch) != 0; }))
+    return {Failure::Unsupported, {}};
 
-  if (scope == CaptureScope::Word) return hovered_word;
+  if (scope == CaptureScope::Word) {
+    if (GetForegroundWindow() != expected_foreground) return {Failure::NoSelection, {}};
+    return hovered_word;
+  }
   if (scope != CaptureScope::Sentence && scope != CaptureScope::Paragraph)
     return {Failure::Unsupported, {}};
 
