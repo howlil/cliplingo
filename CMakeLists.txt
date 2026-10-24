@@ -24,6 +24,7 @@ add_executable(${CLIPLINGO_TARGET} WIN32
   src/popup.cpp
   ${CLIPLINGO_TRANSLATION_SOURCE}
 )
+target_include_directories(${CLIPLINGO_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_definitions(${CLIPLINGO_TARGET} PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(${CLIPLINGO_TARGET} PRIVATE /W4 /permissive- /EHsc /utf-8 /sdl)
 target_link_libraries(${CLIPLINGO_TARGET} PRIVATE
