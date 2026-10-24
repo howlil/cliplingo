@@ -26,7 +26,16 @@ struct Preferences {
   std::filesystem::path model_path;
 };
 
+struct ModelInstallResult {
+  bool success{false};
+  std::filesystem::path path;
+  std::wstring message;
+};
+bool verify_model_pack(const std::filesystem::path& folder);
+ModelInstallResult install_model_pack(const std::filesystem::path& source);
 CaptureResult capture_selected_text(HWND expected_foreground);
+CaptureResult capture_isolated(HWND expected_foreground);
+bool maybe_run_capture_helper(int& exit_code);
 void unload_translation_model(); // call only on inference worker thread
 TranslationResult translate_en_id(const std::wstring& selected, const std::filesystem::path& model_dir);
 std::wstring failure_label(Failure failure);
