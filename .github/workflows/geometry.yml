@@ -1,0 +1,16 @@
+name: Geometry smoke test
+on:
+  push:
+    branches: [master, 'feat/**']
+  pull_request:
+jobs:
+  geometry:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run Windows geometry test
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products '*' -property installationPath
+          $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
+          cmd /c "`"$vcvars`" && cl /nologo /std:c++20 /W4 /WX /EHsc /Isrc tests\geometry_test.cpp /Fe:geometry_test.exe && geometry_test.exe"
