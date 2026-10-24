@@ -8,17 +8,27 @@ if(NOT MSVC)
 endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-find_package(ctranslate2 CONFIG REQUIRED)
-find_package(sentencepiece CONFIG REQUIRED)
-add_executable(ClipLingo WIN32
+option(CLIPLINGO_HOST_SMOKE "Build a Windows API compile-only target with no inference dependency" OFF)
+if(CLIPLINGO_HOST_SMOKE)
+  set(CLIPLINGO_TARGET ClipLingoHostSmoke)
+  set(CLIPLINGO_TRANSLATION_SOURCE tests/translation_smoke.cpp)
+else()
+  set(CLIPLINGO_TARGET ClipLingo)
+  set(CLIPLINGO_TRANSLATION_SOURCE src/translation.cpp)
+  find_package(ctranslate2 CONFIG REQUIRED)
+  find_package(sentencepiece CONFIG REQUIRED)
+endif()
+add_executable(${CLIPLINGO_TARGET} WIN32
   src/main.cpp
   src/capture.cpp
   src/popup.cpp
-  src/translation.cpp
+  ${CLIPLINGO_TRANSLATION_SOURCE}
 )
-target_compile_definitions(ClipLingo PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_compile_options(ClipLingo PRIVATE /W4 /permissive- /EHsc /utf-8 /sdl)
-target_link_libraries(ClipLingo PRIVATE
-  CTranslate2::ctranslate2 sentencepiece::sentencepiece
+target_compile_definitions(${CLIPLINGO_TARGET} PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(${CLIPLINGO_TARGET} PRIVATE /W4 /permissive- /EHsc /utf-8 /sdl)
+target_link_libraries(${CLIPLINGO_TARGET} PRIVATE
   ole32 oleaut32 uiautomationcore user32 shell32 shlwapi comctl32 d2d1 dwrite dwmapi shcore)
-set_property(TARGET ClipLingo PROPERTY VS_DPI_AWARE "PerMonitor")
+if(NOT CLIPLINGO_HOST_SMOKE)
+  target_link_libraries(${CLIPLINGO_TARGET} PRIVATE CTranslate2::ctranslate2 sentencepiece::sentencepiece)
+endif()
+set_property(TARGET ${CLIPLINGO_TARGET} PROPERTY VS_DPI_AWARE "PerMonitor")
