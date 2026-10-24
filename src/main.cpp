@@ -383,7 +383,7 @@ private:
       CaptureResult captured;
       try {
         captured = current.kind == RequestKind::ManualOcr ?
-            capture_ocr_region(current.region) :
+            capture_ocr_isolated(current.region) :
             capture_isolated(current.foreground, current.cursor, scope);
       } catch (const std::exception&) {
         // Recoverable native library/allocator errors must not unwind out of
