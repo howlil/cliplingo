@@ -1,6 +1,6 @@
 #include "core.h"
-#include <UIAutomation.h>
 #include <wrl/client.h>
+#include <UIAutomation.h>
 #include <algorithm>
 #include <string>
 
