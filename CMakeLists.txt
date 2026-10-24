@@ -9,6 +9,7 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(CLIPLINGO_HOST_SMOKE "Build a Windows API compile-only target with no inference dependency" OFF)
+option(CLIPLINGO_WITH_TESSERACT "Enable optional on-demand CPU OCR with locally installed English traineddata" OFF)
 if(CLIPLINGO_HOST_SMOKE)
   set(CLIPLINGO_TARGET ClipLingoHostSmoke)
   set(CLIPLINGO_TRANSLATION_SOURCE tests/translation_smoke.cpp)
@@ -34,6 +35,8 @@ add_executable(${CLIPLINGO_TARGET} WIN32
   src/hover.cpp
   src/capture_helper.cpp
   src/model_package.cpp
+  src/ocr.cpp
+  src/region_selector.cpp
   src/popup.cpp
   ${CLIPLINGO_TRANSLATION_SOURCE}
 )
@@ -41,9 +44,17 @@ target_include_directories(${CLIPLINGO_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DI
 target_compile_definitions(${CLIPLINGO_TARGET} PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(${CLIPLINGO_TARGET} PRIVATE /W4 /permissive- /EHsc /utf-8 /sdl)
 target_link_libraries(${CLIPLINGO_TARGET} PRIVATE
-  ole32 oleaut32 uiautomationcore user32 shell32 shlwapi comctl32 d2d1 dwrite dwmapi shcore bcrypt)
+  ole32 oleaut32 uiautomationcore user32 shell32 shlwapi comctl32 d2d1 dwrite dwmapi shcore bcrypt gdi32)
 if(NOT CLIPLINGO_HOST_SMOKE)
   target_link_libraries(${CLIPLINGO_TARGET} PRIVATE CTranslate2::ctranslate2 sentencepiece::sentencepiece)
+endif()
+if(CLIPLINGO_WITH_TESSERACT)
+  find_package(Tesseract CONFIG REQUIRED)
+  if(NOT TARGET Tesseract::libtesseract)
+    message(FATAL_ERROR "Expected Tesseract::libtesseract. Use a pinned vcpkg Tesseract package.")
+  endif()
+  target_compile_definitions(${CLIPLINGO_TARGET} PRIVATE CLIPLINGO_WITH_TESSERACT=1)
+  target_link_libraries(${CLIPLINGO_TARGET} PRIVATE Tesseract::libtesseract)
 endif()
 set_property(TARGET ${CLIPLINGO_TARGET} PROPERTY VS_DPI_AWARE "PerMonitor")
 
@@ -59,4 +70,8 @@ if(CLIPLINGO_HOST_SMOKE)
   enable_testing()
   add_test(NAME model_pack_integrity COMMAND ClipLingoModelPackTest)
   add_test(NAME scope_text COMMAND ClipLingoScopeTextTest)
+  add_executable(ClipLingoRegionTest tests/region_geometry_test.cpp)
+  target_include_directories(ClipLingoRegionTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_compile_options(ClipLingoRegionTest PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+  add_test(NAME region_geometry COMMAND ClipLingoRegionTest)
 endif()
