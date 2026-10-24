@@ -6,6 +6,7 @@
 #include <wrl/client.h>
 #include <algorithm>
 #include <condition_variable>
+#include <chrono>
 #include <filesystem>
 #include <mutex>
 #include <optional>
@@ -129,6 +130,12 @@ public:
     jobs_cv_.notify_all();
     // Caution: join may wait for a blocked third-party UIA call. Address with process isolation after M1.
     if (worker_.joinable()) worker_.join();
+    // The message pump has stopped, so reclaim any result messages queued by the worker.
+    MSG undelivered{};
+    while (host_ && PeekMessageW(&undelivered, host_, kResultMessage,
+                                 kResultMessage, PM_REMOVE)) {
+      delete reinterpret_cast<JobResult*>(undelivered.lParam);
+    }
     if (settings_) DestroyWindow(settings_);
     if (popup_.handle()) DestroyWindow(popup_.handle());
     if (host_) DestroyWindow(host_);
