@@ -18,8 +18,10 @@ Branch: `feat/m1-native-translation` · C++20 · Win32 · DirectWrite/Direct2D �
 Conversion requires Python >=3.11, `ctranslate2`, `sentencepiece`, `huggingface_hub`, `transformers<5`, and PyTorch on a **builder machine**, never on the resident Windows app. Choose and pin an immutable commit from [Helsinki-NLP/opus-mt-en-id](https://huggingface.co/Helsinki-NLP/opus-mt-en-id/tree/main). Then:
 
 ```powershell
-python -m pip install "ctranslate2" "sentencepiece" "huggingface_hub" "transformers<5" "torch"
-python tools/build_en_id_pack.py .\pack\en-id --revision <pinned-huggingface-commit-sha>
+python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.6.0"
+python -m pip install "ctranslate2==4.8.3" "sentencepiece==0.2.1" "transformers==4.57.3" "huggingface_hub>=0.25,<1"
+python tools/build_en_id_pack.py .\pack\en-id --revision 052fd659487dd0d1a655969050e97950f83dc903
+python tools/verify_en_id_pack.py .\pack\en-id
 ```
 
 The tool converts to CPU INT8-FP32, copies source/target SentencePiece files, and creates `cliplingo-model.sha256` covering **every** file. Check the model license (Apache-2.0), tokenizer assets, third-party notices and model provenance before redistributing packs. Keep pack files together in one directory; no ZIP extraction is required in the app.
