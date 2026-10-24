@@ -25,6 +25,10 @@ For a suitable model, convert an EN→ID Marian/OPUS model with CTranslate2's tr
 
 On launch, look at the tray icon (or the hidden `^` menu) → Settings → Language Models → choose folder. In any application exposing an accessible text-selection pattern, highlight English text and press `Ctrl+Alt+T`. Popup contains only Indonesian translation. Closing Settings does not quit the tray app.
 
+## Native Windows host compile smoke
+
+The CI workflow builds **all Win32 host/UI/capture sources** with a deliberately nonfunctional inference stub using `-DCLIPLINGO_HOST_SMOKE=ON`. This checks Windows SDK/MSVC symbols and linking without bundling model/toolkit dependencies. The normal `ClipLingo` build uses real CTranslate2. **A green smoke build does not prove offline translation or runtime compatibility.**
+
 ## M1 limitations, not silent promises
 
 - Native build/runtime **not verified yet on Windows in this session**. UI Automation compatibility needs real-application tests.
