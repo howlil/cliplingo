@@ -55,6 +55,7 @@ TranslationResult translate_en_id(const std::wstring& selected, const std::files
         !std::filesystem::is_regular_file(model_dir / L"target.spm"))
       return {Failure::ModelMissing, {}};
     if (!session || session->path != model_dir) {
+      if (!verify_model_pack(model_dir)) return {Failure::ModelInvalid, {}};
       // Make a new complete session before switching. No half-initialized model published.
       auto next = std::make_unique<Session>();
       next->path = model_dir;
