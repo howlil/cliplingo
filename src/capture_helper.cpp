@@ -97,7 +97,9 @@ CaptureResult capture_in_child(HWND expected_foreground, POINT cursor,
                                             is_ocr ? kOcrTimeoutMs : kCaptureTimeoutMs);
   if (waited != WAIT_OBJECT_0) {
     TerminateProcess(child.info.hProcess, ERROR_TIMEOUT);
-    WaitForSingleObject(child.info.hProcess, INFINITE);
+    // Native/driver calls can delay even a requested process termination.
+    // Never turn the OCR/UIA watchdog into an unbounded shutdown wait.
+    WaitForSingleObject(child.info.hProcess, 1000);
     return {Failure::CaptureFailed, {}};
   }
   DWORD exit_code = 0;
