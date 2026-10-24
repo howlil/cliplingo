@@ -131,7 +131,10 @@ public:
       wchar_t path[32768]{};
       GetPrivateProfileStringW(L"translation", L"model_path", L"", path, 32768, cfg.c_str());
       prefs_.model_path = path;
-      if (!prefs_.model_path.empty() && !verify_model_pack(prefs_.model_path)) {
+      // Do not hash the whole model on every app startup; integrity is
+      // checked on import and on first translation model load.
+      if (!prefs_.model_path.empty() &&
+          !std::filesystem::exists(prefs_.model_path / L"cliplingo-model.sha256")) {
         prefs_.model_path.clear();
         failure_ = Failure::ModelInvalid;
       }
@@ -553,7 +556,7 @@ private:
         Label(L"Language Models", 32);
         Label(L"Offline EN → ID model: verified CTranslate2 package with SentencePiece.", 80);
         Label(installing_ ? L"Model: Verifying and installing..." :
-          (prefs_.model_path.empty() ? L"Model: Not installed" : L"Model: Installed (verified manifest)"), 136);
+          (prefs_.model_path.empty() ? L"Model: Not installed" : L"Model: Configured (verified on load)"), 136);
         Label(install_status_.c_str(), 169);
         Control(L"BUTTON", L"Install verified model pack...", WS_CHILD | WS_VISIBLE |
                 (installing_ ? WS_DISABLED : 0) | BS_PUSHBUTTON,
