@@ -49,7 +49,9 @@ bypassed.
 
 Unlike the Windows NPU OCR APIs, M3 uses optional **Tesseract CPU** so the
 current unpackaged Win32 host remains usable on hardware without an NPU.
-Tesseract is NOT loaded when the application is idle and must be provided by
+The OCR inference engine runs only in the short-lived capture helper, but linked
+Tesseract DLLs may be mapped at host startup; measure the real idle footprint.
+The optional OCR package must be provided by
 the distributor. Ordinary builds intentionally keep OCR unavailable and
 show a meaningful status in Settings rather than silently claiming it works.
 
