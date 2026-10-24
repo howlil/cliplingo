@@ -6,9 +6,72 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <atomic>
+#include <UIAutomationCoreApi.h>
+#include <oleauto.h>
 
 using Microsoft::WRL::ComPtr;
 namespace {
+// Non-activating UIA live-region provider. Exposes full text as an accessible
+// name so long paragraphs aren't limited to the visible DirectWrite clip.
+class PopupAccessibility final : public IRawElementProviderSimple {
+ public:
+  explicit PopupAccessibility(HWND hwnd) : hwnd_(hwnd) {}
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
+    if (!out) return E_POINTER;
+    *out = nullptr;
+    if (iid == __uuidof(IUnknown) || iid == __uuidof(IRawElementProviderSimple)) {
+      *out = static_cast<IRawElementProviderSimple*>(this);
+      AddRef(); return S_OK;
+    }
+    return E_NOINTERFACE;
+  }
+  ULONG STDMETHODCALLTYPE AddRef() override { return ++refs_; }
+  ULONG STDMETHODCALLTYPE Release() override {
+    const auto refs = --refs_;
+    if (!refs) delete this;
+    return refs;
+  }
+  HRESULT STDMETHODCALLTYPE get_ProviderOptions(ProviderOptions* out) override {
+    if (!out) return E_POINTER;
+    *out = ProviderOptions_ServerSideProvider;
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE GetPatternProvider(PATTERNID, IUnknown** out) override {
+    if (!out) return E_POINTER;
+    *out = nullptr;
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE GetPropertyValue(PROPERTYID id, VARIANT* out) override {
+    if (!out) return E_POINTER;
+    VariantInit(out);
+    if (id == UIA_ControlTypePropertyId) {
+      out->vt = VT_I4; out->lVal = UIA_TextControlTypeId;
+    } else if (id == UIA_NamePropertyId) {
+      if (!IsWindow(hwnd_)) return UIA_E_ELEMENTNOTAVAILABLE;
+      const auto count = GetWindowTextLengthW(hwnd_);
+      std::wstring text(static_cast<size_t>(count) + 1, L'\0');
+      GetWindowTextW(hwnd_, text.data(), count + 1);
+      out->vt = VT_BSTR;
+      out->bstrVal = SysAllocStringLen(text.data(), static_cast<UINT>(count));
+      if (!out->bstrVal) return E_OUTOFMEMORY;
+    } else if (id == UIA_LiveSettingPropertyId) {
+      out->vt = VT_I4; out->lVal = 2; // Assertive
+    } else if (id == UIA_IsContentElementPropertyId || id == UIA_IsControlElementPropertyId) {
+      out->vt = VT_BOOL; out->boolVal = VARIANT_TRUE;
+    }
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE get_HostRawElementProvider(IRawElementProviderSimple** out) override {
+    if (!out) return E_POINTER;
+    *out = nullptr;
+    return IsWindow(hwnd_) ? UiaHostProviderFromHwnd(hwnd_, out) : UIA_E_ELEMENTNOTAVAILABLE;
+  }
+ private:
+  ~PopupAccessibility() = default;
+  std::atomic<ULONG> refs_{1};
+  HWND hwnd_;
+};
 constexpr float kPad = 14.f;
 constexpr float kGap = 12.f;
 constexpr float kFont = 15.f;
@@ -34,6 +97,7 @@ bool TextPopup::Create(HINSTANCE instance) {
   hwnd_ = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
     wc.lpszClassName, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, instance, this);
   if (!hwnd_) return false;
+  accessibility_.Attach(new PopupAccessibility(hwnd_));
   const DWM_WINDOW_CORNER_PREFERENCE corners = DWMWCP_ROUND;
   DwmSetWindowAttribute(hwnd_, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
   return true;
@@ -41,6 +105,7 @@ bool TextPopup::Create(HINSTANCE instance) {
 
 void TextPopup::ShowText(const std::wstring& text, POINT anchor, const Preferences& prefs) {
   if (!hwnd_ || text.empty()) return;
+  SetWindowTextW(hwnd_, text.c_str());
   const HMONITOR monitor = MonitorFromPoint(anchor, MONITOR_DEFAULTTONEAREST);
   MONITORINFO monitor_info{sizeof(monitor_info)};
   if (!GetMonitorInfoW(monitor, &monitor_info)) return;
@@ -82,6 +147,14 @@ void TextPopup::ShowText(const std::wstring& text, POINT anchor, const Preferenc
   }
   SetWindowPos(hwnd_, HWND_TOPMOST, placed.left, placed.top, width_px, height_px,
                SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+  InvalidateRect(hwnd_, nullptr, FALSE);
+  if (accessibility_) UiaRaiseAutomationEvent(accessibility_.Get(), UIA_LiveRegionChangedEventId);
+}
+
+void TextPopup::ScrollBy(float delta_dip) {
+  if (!hwnd_ || !IsWindowVisible(hwnd_)) return;
+  const float max_scroll = std::max(0.f, content_height_dip_ - (height_dip_ - 2.f * kPad));
+  scroll_dip_ = std::clamp(scroll_dip_ + delta_dip, 0.f, max_scroll);
   InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -131,11 +204,13 @@ LRESULT CALLBACK TextPopup::Proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 LRESULT TextPopup::Handle(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
   switch (msg) {
     case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
+    case WM_GETOBJECT:
+      if (static_cast<LONG>(lparam) == UiaRootObjectId && accessibility_)
+        return UiaReturnRawElementProvider(hwnd, wparam, lparam, accessibility_.Get());
+      break;
     case WM_ERASEBKGND: return 1;
     case WM_MOUSEWHEEL: {
-      const float max_scroll = std::max(0.f, content_height_dip_ - (height_dip_ - 2.f * kPad));
-      scroll_dip_ = std::clamp(scroll_dip_ - GET_WHEEL_DELTA_WPARAM(wparam) / 120.f * 32.f, 0.f, max_scroll);
-      InvalidateRect(hwnd_, nullptr, FALSE);
+      ScrollBy(-GET_WHEEL_DELTA_WPARAM(wparam) / 120.f * 32.f);
       return 0;
     }
     case WM_PAINT: {
@@ -151,7 +226,7 @@ LRESULT TextPopup::Handle(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
       }
       return 0;
     }
-    case WM_DESTROY: { brush_.Reset(); target_.Reset(); layout_.Reset(); hwnd_ = nullptr; return 0; }
+    case WM_DESTROY: { UiaReturnRawElementProvider(hwnd, 0, 0, nullptr); accessibility_.Reset(); brush_.Reset(); target_.Reset(); layout_.Reset(); hwnd_ = nullptr; return 0; }
   }
   return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
