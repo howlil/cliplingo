@@ -34,6 +34,8 @@ constexpr int kStartupToggle = 107;
 constexpr int kThemeCombo = 108;
 constexpr int kSurfaceCombo = 109;
 constexpr int kPreviewPopup = 110;
+constexpr int kHoverEnabled = 111;
+constexpr int kHoverScope = 112;
 constexpr int kTrayPause = 201;
 constexpr int kTraySettings = 202;
 constexpr int kTrayQuit = 203;
@@ -144,6 +146,9 @@ public:
          L"popup", L"max_height", 300, cfg.c_str())), 80, 900);
       prefs_.theme = std::clamp(static_cast<int>(GetPrivateProfileIntW(L"appearance", L"theme", 0, cfg.c_str())), 0, 1);
       prefs_.popup_style = std::clamp(static_cast<int>(GetPrivateProfileIntW(L"appearance", L"surface", 0, cfg.c_str())), 0, 1);
+      prefs_.hover_enabled = GetPrivateProfileIntW(L"capture", L"hover_enabled", 1, cfg.c_str()) != 0;
+      prefs_.hover_scope = std::clamp(static_cast<int>(GetPrivateProfileIntW(
+          L"capture", L"hover_scope", 0, cfg.c_str())), 0, 2);
     }
     WNDCLASSEXW wc{sizeof(wc)};
     wc.hInstance = instance;
@@ -333,9 +338,20 @@ private:
       auto result = std::make_unique<JobResult>();
       result->generation = current.generation;
       result->cursor = current.cursor;
-      const auto captured = capture_isolated(current.foreground);
+      const auto scope = !settings.hover_enabled ? CaptureScope::SelectionOnly :
+          static_cast<CaptureScope>(settings.hover_scope + 1);
+      const auto captured = capture_isolated(current.foreground, current.cursor, scope);
       result->failure = captured.failure;
       if (captured) {
+        // A newer hotkey may have arrived while the bounded UIA helper ran.
+        // Avoid wasting model inference on a request that can no longer render.
+        bool superseded = false;
+        {
+          std::lock_guard lock(jobs_mutex_);
+          superseded = pending_.has_value() &&
+                        pending_->generation > current.generation;
+        }
+        if (superseded) continue;
         const auto translated = translate_en_id(captured.text, settings.model_path);
         result->failure = translated.failure;
         if (translated) result->translated = translated.text;
@@ -358,6 +374,8 @@ private:
     WritePrivateProfileStringW(L"popup", L"max_height", std::to_wstring(prefs_.max_height_dip).c_str(), path.c_str());
     WritePrivateProfileStringW(L"appearance", L"theme", std::to_wstring(prefs_.theme).c_str(), path.c_str());
     WritePrivateProfileStringW(L"appearance", L"surface", std::to_wstring(prefs_.popup_style).c_str(), path.c_str());
+    WritePrivateProfileStringW(L"capture", L"hover_enabled", prefs_.hover_enabled ? L"1" : L"0", path.c_str());
+    WritePrivateProfileStringW(L"capture", L"hover_scope", std::to_wstring(prefs_.hover_scope).c_str(), path.c_str());
   }
 
   static LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -423,6 +441,17 @@ private:
       if (id == kSurfaceCombo && HIWORD(wp) == CBN_SELCHANGE) {
         prefs_.popup_style = static_cast<int>(SendMessageW(surface_combo_, CB_GETCURSEL, 0, 0));
         SaveSettings(); return 0;
+      }
+      if (id == kHoverEnabled && HIWORD(wp) == BN_CLICKED) {
+        prefs_.hover_enabled = SendMessageW(reinterpret_cast<HWND>(lp), BM_GETCHECK, 0, 0) == BST_CHECKED;
+        SaveSettings();
+        DrawSettingsSection();
+        return 0;
+      }
+      if (id == kHoverScope && HIWORD(wp) == CBN_SELCHANGE) {
+        const int scope = static_cast<int>(SendMessageW(reinterpret_cast<HWND>(lp), CB_GETCURSEL, 0, 0));
+        if (scope >= 0 && scope <= 2) { prefs_.hover_scope = scope; SaveSettings(); }
+        return 0;
       }
       if (id == kPreviewPopup && HIWORD(wp) == BN_CLICKED) {
         POINT anchor{}; GetCursorPos(&anchor);
@@ -515,8 +544,22 @@ private:
         break;
       case 1:
         Label(L"Text Capture", 32);
-        Label(L"M1 uses selection from Windows UI Automation text patterns.", 78);
-        Label(L"Hover, clipboard fallback, and region OCR are not implemented in M1.", 125);
+        Label(L"Selected text is always translated exactly, before hover fallback.", 78);
+        {
+          const auto checkbox = Control(L"BUTTON", L"Enable hover fallback on shortcut",
+              WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+              246, 139, 350, 28, kHoverEnabled);
+          SendMessageW(checkbox, BM_SETCHECK, prefs_.hover_enabled ? BST_CHECKED : BST_UNCHECKED, 0);
+          Label(L"Hover text scope", 190, 230);
+          const auto combo = Control(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE |
+              WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL, 490, 184, 180, 120, kHoverScope);
+          for (const auto label : {L"Word", L"Sentence", L"Paragraph"})
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
+          SendMessageW(combo, CB_SETCURSEL, prefs_.hover_scope, 0);
+          EnableWindow(combo, prefs_.hover_enabled);
+        }
+        Label(L"No background tracking. Hover is read only after Ctrl+Alt+T.", 251);
+        Label(L"Clipboard fallback and OCR are intentionally excluded from M2.", 304);
         break;
       case 2:
         Label(L"Translation Popup", 32);

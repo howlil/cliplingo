@@ -31,6 +31,7 @@ endif()
 add_executable(${CLIPLINGO_TARGET} WIN32
   src/main.cpp
   src/capture.cpp
+  src/hover.cpp
   src/capture_helper.cpp
   src/model_package.cpp
   src/popup.cpp
@@ -52,6 +53,10 @@ if(CLIPLINGO_HOST_SMOKE)
   target_compile_definitions(ClipLingoModelPackTest PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
   target_compile_options(ClipLingoModelPackTest PRIVATE /W4 /permissive- /EHsc /utf-8 /sdl)
   target_link_libraries(ClipLingoModelPackTest PRIVATE bcrypt)
+  add_executable(ClipLingoScopeTextTest tests/scope_text_test.cpp)
+  target_include_directories(ClipLingoScopeTextTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_compile_options(ClipLingoScopeTextTest PRIVATE /W4 /permissive- /EHsc /utf-8)
   enable_testing()
   add_test(NAME model_pack_integrity COMMAND ClipLingoModelPackTest)
+  add_test(NAME scope_text COMMAND ClipLingoScopeTextTest)
 endif()
