@@ -31,6 +31,9 @@ constexpr int kMaxWidthEdit = 104;
 constexpr int kMaxHeightEdit = 105;
 constexpr int kPauseButton = 106;
 constexpr int kStartupToggle = 107;
+constexpr int kThemeCombo = 108;
+constexpr int kSurfaceCombo = 109;
+constexpr int kPreviewPopup = 110;
 constexpr int kTrayPause = 201;
 constexpr int kTraySettings = 202;
 constexpr int kTrayQuit = 203;
@@ -136,6 +139,8 @@ public:
          L"popup", L"max_width", 420, cfg.c_str())), 180, 1200);
       prefs_.max_height_dip = std::clamp(static_cast<int>(GetPrivateProfileIntW(
          L"popup", L"max_height", 300, cfg.c_str())), 80, 900);
+      prefs_.theme = std::clamp(static_cast<int>(GetPrivateProfileIntW(L"appearance", L"theme", 0, cfg.c_str())), 0, 1);
+      prefs_.popup_style = std::clamp(static_cast<int>(GetPrivateProfileIntW(L"appearance", L"surface", 0, cfg.c_str())), 0, 1);
     }
     WNDCLASSEXW wc{sizeof(wc)};
     wc.hInstance = instance;
@@ -348,6 +353,8 @@ private:
     WritePrivateProfileStringW(L"translation", L"model_path", prefs_.model_path.c_str(), path.c_str());
     WritePrivateProfileStringW(L"popup", L"max_width", std::to_wstring(prefs_.max_width_dip).c_str(), path.c_str());
     WritePrivateProfileStringW(L"popup", L"max_height", std::to_wstring(prefs_.max_height_dip).c_str(), path.c_str());
+    WritePrivateProfileStringW(L"appearance", L"theme", std::to_wstring(prefs_.theme).c_str(), path.c_str());
+    WritePrivateProfileStringW(L"appearance", L"surface", std::to_wstring(prefs_.popup_style).c_str(), path.c_str());
   }
 
   static LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -406,6 +413,21 @@ private:
       const int id = LOWORD(wp);
       if (id == kSidebar && HIWORD(wp) == LBN_SELCHANGE) { DrawSettingsSection(); return 0; }
       if (id == kChooseModel && HIWORD(wp) == BN_CLICKED) { ChooseModel(); return 0; }
+      if (id == kThemeCombo && HIWORD(wp) == CBN_SELCHANGE) {
+        prefs_.theme = static_cast<int>(SendMessageW(theme_combo_, CB_GETCURSEL, 0, 0));
+        SaveSettings(); return 0;
+      }
+      if (id == kSurfaceCombo && HIWORD(wp) == CBN_SELCHANGE) {
+        prefs_.popup_style = static_cast<int>(SendMessageW(surface_combo_, CB_GETCURSEL, 0, 0));
+        SaveSettings(); return 0;
+      }
+      if (id == kPreviewPopup && HIWORD(wp) == BN_CLICKED) {
+        POINT anchor{}; GetCursorPos(&anchor);
+        popup_.ShowText(L"Terjemahan muncul di atas kursor, dengan ukuran sesuai isi teks.", anchor, prefs_);
+        KillTimer(host_, kDismissTimer);
+        SetTimer(host_, kDismissTimer, 10000, nullptr);
+        return 0;
+      }
       if (id == kStartupToggle && HIWORD(wp) == BN_CLICKED) {
         if (!set_startup(!startup_enabled()))
           MessageBoxW(hwnd, L"Couldn't update Windows startup preference.", L"ClipLingo", MB_ICONWARNING);
@@ -474,7 +496,7 @@ private:
       if (child != sidebar_) DestroyWindow(child);
       child = next;
     }
-    width_edit_ = height_edit_ = nullptr;
+    width_edit_ = height_edit_ = theme_combo_ = surface_combo_ = nullptr;
     const int section = static_cast<int>(SendMessageW(sidebar_, LB_GETCURSEL, 0, 0));
     switch (section) {
       case 0:
@@ -505,11 +527,27 @@ private:
                 WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER, 490, 194, 110, 30, kMaxHeightEdit);
         Control(L"BUTTON", L"Apply", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                 490, 244, 110, 33, kApplySize);
+        Control(L"BUTTON", L"Preview translation", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                246, 316, 185, 33, kPreviewPopup);
         break;
       case 3:
         Label(L"Appearance", 32);
-        Label(L"Native Windows typography: Segoe UI Variable.", 78);
-        Label(L"M1 ships the approved Solid light surface. Glass/tinted/theme controls require native visual testing.", 124);
+        Label(L"Native typography: Segoe UI Variable, with accessible color fallback.", 80);
+        Label(L"Theme", 147, 230);
+        theme_combo_ = Control(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
+                               490, 140, 160, 130, kThemeCombo);
+        SendMessageW(theme_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Light"));
+        SendMessageW(theme_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Dark"));
+        SendMessageW(theme_combo_, CB_SETCURSEL, prefs_.theme, 0);
+        Label(L"Popup surface", 200, 230);
+        surface_combo_ = Control(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
+                                 490, 193, 160, 130, kSurfaceCombo);
+        SendMessageW(surface_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Solid"));
+        SendMessageW(surface_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Tinted"));
+        SendMessageW(surface_combo_, CB_SETCURSEL, prefs_.popup_style, 0);
+        Label(L"Glass remains unavailable until compositor/contrast validation.", 267);
+        Control(L"BUTTON", L"Preview translation", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                246, 337, 185, 33, kPreviewPopup);
         break;
       case 4:
         Label(L"Language Models", 32);
@@ -562,6 +600,7 @@ private:
   HINSTANCE instance_{nullptr};
   HANDLE single_instance_{nullptr};
   HWND host_{nullptr}, settings_{nullptr}, sidebar_{nullptr}, width_edit_{nullptr}, height_edit_{nullptr};
+  HWND theme_combo_{nullptr}, surface_combo_{nullptr};
   HFONT font_{nullptr}; HICON icon_{nullptr};
   HBRUSH sidebar_brush_{nullptr};
   UINT taskbar_created_{0};
