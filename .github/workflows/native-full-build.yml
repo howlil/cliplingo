@@ -1,0 +1,47 @@
+name: M1 full native C++ dependency build
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/native-full-build.yml'
+      - 'CMakeLists.txt'
+      - 'src/translation.cpp'
+  workflow_dispatch:
+jobs:
+  real-windows-link:
+    runs-on: windows-2022
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone pinned C++ dependencies and submodules
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git clone --quiet --depth 1 --recurse-submodules --shallow-submodules --branch v4.8.3 https://github.com/OpenNMT/CTranslate2.git "$env:RUNNER_TEMP/ctranslate2"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git clone --quiet --depth 1 --recurse-submodules --shallow-submodules --branch v0.2.1 https://github.com/google/sentencepiece.git "$env:RUNNER_TEMP/sentencepiece"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build and install SentencePiece 0.2.1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake -S "$env:RUNNER_TEMP/sentencepiece" -B "$env:RUNNER_TEMP/sp-build" -A x64 -DCMAKE_INSTALL_PREFIX="$env:RUNNER_TEMP/deps" -DSPM_BUILD_TEST=OFF -DSPM_ENABLE_SHARED=ON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build "$env:RUNNER_TEMP/sp-build" --config Release --parallel 2 --target INSTALL
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build and install CPU-only CTranslate2 4.8.3 (Ruy)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake -S "$env:RUNNER_TEMP/ctranslate2" -B "$env:RUNNER_TEMP/ct2-build" -A x64 -DCMAKE_INSTALL_PREFIX="$env:RUNNER_TEMP/deps" -DBUILD_SHARED_LIBS=ON -DWITH_MKL=OFF -DWITH_DNNL=OFF -DWITH_OPENBLAS=OFF -DWITH_CUDA=OFF -DWITH_RUY=ON -DOPENMP_RUNTIME=NONE -DBUILD_TESTS=OFF -DBUILD_CLI=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build "$env:RUNNER_TEMP/ct2-build" --config Release --parallel 2 --target INSTALL
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Link actual native ClipLingo host and translation engine
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake -S . -B build-full -A x64 -DCMAKE_PREFIX_PATH="$env:RUNNER_TEMP/deps" -DCLIPLINGO_HOST_SMOKE=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-full --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Test-Path 'build-full/Release/ClipLingo.exe')) { throw 'Native app missing' }

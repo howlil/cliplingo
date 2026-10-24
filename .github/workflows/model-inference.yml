@@ -1,0 +1,32 @@
+name: M1 real EN-ID model integration
+on:
+  push:
+    branches: ['feat/m1-native-translation']
+    paths:
+      - 'tools/**'
+      - '.github/workflows/model-inference.yml'
+  pull_request:
+    paths:
+      - 'tools/**'
+      - '.github/workflows/model-inference.yml'
+  workflow_dispatch:
+jobs:
+  real-model:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned CPU model-conversion tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu 'torch==2.6.0'
+          python -m pip install 'ctranslate2==4.8.3' 'sentencepiece==0.2.1' 'transformers==4.57.3' 'huggingface_hub>=0.25,<1.0' 'safetensors>=0.4'
+      - name: Convert immutable OPUS-MT EN-ID revision (builder only)
+        run: |
+          python tools/build_en_id_pack.py "${RUNNER_TEMP}/en-id" --revision 052fd659487dd0d1a655969050e97950f83dc903
+      - name: Decode three examples with actual CTranslate2
+        run: |
+          python tools/verify_en_id_pack.py "${RUNNER_TEMP}/en-id"
