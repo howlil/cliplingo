@@ -1,5 +1,6 @@
 #include "core.h"
 #include "popup.h"
+#include "region_selector.h"
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <commctrl.h>
@@ -179,6 +180,7 @@ public:
     return static_cast<int>(message.wParam);
   }
   ~App() {
+    selector_.Cancel();
     if (host_) {
       if (shortcut_registered_) UnregisterHotKey(host_, kHotkeyId);
       if (scroll_up_registered_) UnregisterHotKey(host_, kScrollUpHotkeyId);
@@ -268,7 +270,7 @@ private:
           case kTraySettings: ShowSettings(); break;
           case kTrayPause: paused_ = !paused_; ++generation_; popup_.Hide(); RefreshSettings(); break;
           case kTrayQuit: PostQuitMessage(0); break;
-          case kTrayCapture: ShowSettings(1); break; // OCR is intentionally not implemented in M1
+          case kTrayCapture: BeginRegionSelection(); break;
         }
         return 0;
       }
@@ -291,17 +293,54 @@ private:
     HMENU menu = CreatePopupMenu();
     if (!menu) return;
     AppendMenuW(menu, MF_STRING, kTrayPause, paused_ ? L"Resume" : L"Pause");
-    AppendMenuW(menu, MF_STRING | MF_GRAYED, kTrayCapture, L"Capture screen text (later milestone)");
+    AppendMenuW(menu, MF_STRING | (paused_ ? MF_GRAYED : 0), kTrayCapture,
+                L"Capture screen text (select area)...");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kTraySettings, L"Settings...");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kTrayQuit, L"Quit ClipLingo");
+    tray_previous_foreground_ = GetForegroundWindow();
     POINT where{}; GetCursorPos(&where);
     SetForegroundWindow(host_);
     TrackPopupMenu(menu, TPM_RIGHTBUTTON, where.x, where.y, 0, host_, nullptr);
     PostMessageW(host_, WM_NULL, 0, 0);
     DestroyMenu(menu);
   }
+  void BeginRegionSelection() {
+    if (paused_ || selector_.active()) return;
+    if (!ocr_available()) {
+      failure_ = Failure::OcrUnavailable;
+      ShowSettings(1);
+      return;
+    }
+    popup_.Hide();
+    KillTimer(host_, kDismissTimer);
+    ++generation_; // invalidate in-flight translation before region selection
+    {
+      std::lock_guard lock(jobs_mutex_);
+      pending_.reset();
+    }
+    if (!selector_.Start(instance_, tray_previous_foreground_,
+          [this](std::optional<RECT> chosen) {
+            if (!chosen || paused_) return;
+            Request req{};
+            req.kind = RequestKind::ManualOcr;
+            req.region = *chosen;
+            req.cursor = {(chosen->left + chosen->right)/2,
+                          (chosen->top + chosen->bottom)/2};
+            req.generation = ++generation_;
+            {
+              std::lock_guard lock(jobs_mutex_);
+              pending_ = req;
+              worker_prefs_ = prefs_;
+            }
+            jobs_cv_.notify_one();
+          })) {
+      failure_ = Failure::CaptureFailed;
+      RefreshSettings();
+    }
+  }
+
   void BeginTranslation() {
     if (paused_ || !shortcut_registered_) return;
     popup_.Hide();
@@ -340,7 +379,9 @@ private:
       result->cursor = current.cursor;
       const auto scope = !settings.hover_enabled ? CaptureScope::SelectionOnly :
           static_cast<CaptureScope>(settings.hover_scope + 1);
-      const auto captured = capture_isolated(current.foreground, current.cursor, scope);
+      const auto captured = current.kind == RequestKind::ManualOcr ?
+          capture_ocr_region(current.region) :
+          capture_isolated(current.foreground, current.cursor, scope);
       result->failure = captured.failure;
       if (captured) {
         // A newer hotkey may have arrived while the bounded UIA helper ran.
@@ -559,7 +600,10 @@ private:
           EnableWindow(combo, prefs_.hover_enabled);
         }
         Label(L"No background tracking. Hover is read only after Ctrl+Alt+T.", 251);
-        Label(L"Clipboard fallback and OCR are intentionally excluded from M2.", 304);
+        Label(ocr_available() ?
+              L"Region OCR: available. Choose Capture screen text from the tray." :
+              L"Region OCR unavailable: install optional Tesseract OCR + eng.traineddata.", 304);
+        Label(L"OCR is manual only. No clipboard monitoring or saved screenshots.", 348);
         break;
       case 2:
         Label(L"Translation Popup", 32);
@@ -655,6 +699,8 @@ private:
   Failure failure_{Failure::None};
   Preferences prefs_, worker_prefs_;
   TextPopup popup_;
+  RegionSelector selector_;
+  HWND tray_previous_foreground_{nullptr};
   std::jthread installer_;
   bool installing_{false};
   std::wstring install_status_{L"Install a locally prepared EN-ID pack; no account needed."};
