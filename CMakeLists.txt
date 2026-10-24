@@ -21,6 +21,8 @@ endif()
 add_executable(${CLIPLINGO_TARGET} WIN32
   src/main.cpp
   src/capture.cpp
+  src/capture_helper.cpp
+  src/model_package.cpp
   src/popup.cpp
   ${CLIPLINGO_TRANSLATION_SOURCE}
 )
@@ -28,8 +30,18 @@ target_include_directories(${CLIPLINGO_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DI
 target_compile_definitions(${CLIPLINGO_TARGET} PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(${CLIPLINGO_TARGET} PRIVATE /W4 /permissive- /EHsc /utf-8 /sdl)
 target_link_libraries(${CLIPLINGO_TARGET} PRIVATE
-  ole32 oleaut32 uiautomationcore user32 shell32 shlwapi comctl32 d2d1 dwrite dwmapi shcore)
+  ole32 oleaut32 uiautomationcore user32 shell32 shlwapi comctl32 d2d1 dwrite dwmapi shcore bcrypt)
 if(NOT CLIPLINGO_HOST_SMOKE)
   target_link_libraries(${CLIPLINGO_TARGET} PRIVATE CTranslate2::ctranslate2 sentencepiece::sentencepiece)
 endif()
 set_property(TARGET ${CLIPLINGO_TARGET} PROPERTY VS_DPI_AWARE "PerMonitor")
+
+if(CLIPLINGO_HOST_SMOKE)
+  add_executable(ClipLingoModelPackTest tests/model_pack_test.cpp src/model_package.cpp)
+  target_include_directories(ClipLingoModelPackTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_compile_definitions(ClipLingoModelPackTest PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+  target_compile_options(ClipLingoModelPackTest PRIVATE /W4 /permissive- /EHsc /utf-8 /sdl)
+  target_link_libraries(ClipLingoModelPackTest PRIVATE bcrypt)
+  enable_testing()
+  add_test(NAME model_pack_integrity COMMAND ClipLingoModelPackTest)
+endif()
