@@ -9,7 +9,7 @@ Branch: `feat/m1-native-translation` · C++20 · Win32 · DirectWrite/Direct2D �
 - The capture helper shares **one bounded memory mapping handle** with the host, runs UIA on COM MTA, exits after capture, and is forcibly terminated after 1.8 s when blocked. This adds a per-request process-startup cost; profile before deciding whether to add a persistent child process.
 - Native content-fit popup (DirectWrite/Direct2D), 420×300-DIP maximum by default, placed above cursor without focus. Translation text **only**: no popup controls or header.
 - Long results are readable by mouse wheel or `Ctrl+Alt+Up/Down` without activating the popup. Exposes full target text via a native UI Automation live-region *Name* property; actual NVDA/Narrator behavior must be checked on Windows.
-- Native six-section Settings shell (General, Text Capture, Translation Popup, Appearance, Language Models, Privacy). Functional: Pause, model pack import, max popup bounds. Unimplemented settings are explicitly labeled instead of pretending to work.
+- Native six-section Settings shell (General, Text Capture, Translation Popup, Appearance, Language Models, Privacy). Functional: Pause/Resume, launch at login, verified model pack import, max popup bounds, light/dark, solid/tinted, and interactive popup preview. Unimplemented hover/OCR/Glass settings are explicitly labeled or disabled.
 - EN→ID model is prepared by a separate developer-side conversion tool and imported into `%LOCALAPPDATA%\ClipLingo\models`. SHA-256 file manifest validates source and staged content. Versioned rename activates pack atomically. Model stays warm between uses and can be unloaded after about two minutes idle.
 - No browser processes, network on translation path, account, OCR, hover or clipboard hook.
 
@@ -52,7 +52,7 @@ Windows CI runs geometry test, model-package integrity regression test, and an M
 
 - The per-request UIA helper introduces process launch/exit overhead; its benefit is bounded hang/crash containment. Measure hotkey-to-visible-result before optimization.
 - Inference still runs inside the main process on a dedicated worker: an unrecoverable native CTranslate2 crash may bring down the app. A persistent *inference* helper requires a separate measured reliability decision.
-- Settings are native Windows controls with the approved six-section structure but are **not yet full visual parity** with `DESIGN.md` (color, spacing, theme variants, keyboard-focus and UIA evaluation required).
+- Settings have a native accent sidebar and some functional Appearance controls but **not yet complete pixel parity** with `DESIGN.md` (full glass material, responsive DPI/window layout and screen-reader acceptance require Windows validation).
 - Importing a local pack is implemented; automatic network model downloading, installer/updater, and signature distribution are separate release concerns.
 - Win32 window/UIA contracts may differ by target app, elevated UI, OS version and DPI. M1 supports selected text only, not universal OCR/hover capture.
 - An accessible live-region name is provided, but a full `TextPattern` provider and assistive technology acceptance remain unverified.
