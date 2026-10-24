@@ -30,6 +30,7 @@ constexpr int kApplySize = 103;
 constexpr int kMaxWidthEdit = 104;
 constexpr int kMaxHeightEdit = 105;
 constexpr int kPauseButton = 106;
+constexpr int kStartupToggle = 107;
 constexpr int kTrayPause = 201;
 constexpr int kTraySettings = 202;
 constexpr int kTrayQuit = 203;
@@ -48,6 +49,40 @@ std::filesystem::path config_file() {
   const DWORD len = GetEnvironmentVariableW(L"LOCALAPPDATA", path, 32768);
   if (!len || len >= 32768) return {};
   return std::filesystem::path(path) / L"ClipLingo" / L"settings.ini";
+}
+
+bool startup_enabled() {
+  HKEY key = nullptr;
+  if (RegOpenKeyExW(HKEY_CURRENT_USER,
+      L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS)
+    return false;
+  DWORD size = 0;
+  const auto status = RegQueryValueExW(key, L"ClipLingo", nullptr, nullptr, nullptr, &size);
+  RegCloseKey(key);
+  return status == ERROR_SUCCESS;
+}
+bool set_startup(bool enabled) {
+  HKEY key = nullptr;
+  if (RegCreateKeyExW(HKEY_CURRENT_USER,
+      L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, nullptr, 0,
+      KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS) return false;
+  LONG code = ERROR_SUCCESS;
+  if (enabled) {
+    wchar_t exe[MAX_PATH]{};
+    const auto n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    if (!n || n >= MAX_PATH) code = ERROR_INVALID_PARAMETER;
+    else {
+      const std::wstring command = L"\"" + std::wstring(exe) + L"\"";
+      code = RegSetValueExW(key, L"ClipLingo", 0, REG_SZ,
+          reinterpret_cast<const BYTE*>(command.c_str()),
+          static_cast<DWORD>((command.size() + 1) * sizeof(wchar_t)));
+    }
+  } else {
+    code = RegDeleteValueW(key, L"ClipLingo");
+    if (code == ERROR_FILE_NOT_FOUND) code = ERROR_SUCCESS;
+  }
+  RegCloseKey(key);
+  return code == ERROR_SUCCESS;
 }
 
 std::optional<int> parse_positive_int(const std::wstring& input, int lo, int hi) {
@@ -158,6 +193,7 @@ public:
     if (host_) DestroyWindow(host_);
     if (icon_) DestroyIcon(icon_);
     if (font_) DeleteObject(font_);
+    if (sidebar_brush_) DeleteObject(sidebar_brush_);
     if (single_instance_) CloseHandle(single_instance_);
   }
 private:
@@ -326,10 +362,55 @@ private:
   }
   LRESULT SettingsMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_CLOSE) { ShowWindow(hwnd, SW_HIDE); return 0; }
+    if (msg == WM_ERASEBKGND) {
+      RECT r{}; GetClientRect(hwnd, &r);
+      FillRect(reinterpret_cast<HDC>(wp), &r, reinterpret_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
+      RECT sidebar_panel{0, 0, 226, r.bottom};
+      if (sidebar_brush_) FillRect(reinterpret_cast<HDC>(wp), &sidebar_panel, sidebar_brush_);
+      return 1;
+    }
+    if (msg == WM_MEASUREITEM && wp == kSidebar) {
+      auto* measure = reinterpret_cast<MEASUREITEMSTRUCT*>(lp);
+      measure->itemHeight = 48;
+      return TRUE;
+    }
+    if (msg == WM_DRAWITEM && wp == kSidebar) {
+      auto* draw = reinterpret_cast<DRAWITEMSTRUCT*>(lp);
+      if (draw->itemID == static_cast<UINT>(-1)) return TRUE;
+      wchar_t name[80]{};
+      SendMessageW(sidebar_, LB_GETTEXT, draw->itemID, reinterpret_cast<LPARAM>(name));
+      RECT rect = draw->rcItem;
+      RECT highlight{rect.left + 4, rect.top + 2, rect.right - 4, rect.bottom - 2};
+      HIGHCONTRASTW contrast{sizeof(contrast)};
+      SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0);
+      const bool hc = (contrast.dwFlags & HCF_HIGHCONTRASTON) != 0;
+      const bool selected = (draw->itemState & ODS_SELECTED) != 0;
+      HBRUSH fill = CreateSolidBrush(hc ? GetSysColor(selected ? COLOR_HIGHLIGHT : COLOR_WINDOW) :
+                        (selected ? RGB(232,242,255) : RGB(245,247,250)));
+      FillRect(draw->hDC, &highlight, fill); DeleteObject(fill);
+      SetBkMode(draw->hDC, TRANSPARENT);
+      SetTextColor(draw->hDC, hc ? GetSysColor(selected ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT) :
+                              (selected ? RGB(0,122,255) : RGB(29,36,48)));
+      RECT text = highlight; text.left += 16;
+      const auto old_font = SelectObject(draw->hDC, font_);
+      DrawTextW(draw->hDC, name, -1, &text, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
+      SelectObject(draw->hDC, old_font);
+      if (draw->itemState & ODS_FOCUS) DrawFocusRect(draw->hDC, &highlight);
+      return TRUE;
+    }
+    if (msg == WM_CTLCOLORLISTBOX) {
+      SetBkMode(reinterpret_cast<HDC>(wp), TRANSPARENT);
+      return reinterpret_cast<LRESULT>(sidebar_brush_);
+    }
     if (msg == WM_COMMAND) {
       const int id = LOWORD(wp);
       if (id == kSidebar && HIWORD(wp) == LBN_SELCHANGE) { DrawSettingsSection(); return 0; }
       if (id == kChooseModel && HIWORD(wp) == BN_CLICKED) { ChooseModel(); return 0; }
+      if (id == kStartupToggle && HIWORD(wp) == BN_CLICKED) {
+        if (!set_startup(!startup_enabled()))
+          MessageBoxW(hwnd, L"Couldn't update Windows startup preference.", L"ClipLingo", MB_ICONWARNING);
+        DrawSettingsSection(); return 0;
+      }
       if (id == kPauseButton && HIWORD(wp) == BN_CLICKED) {
         paused_ = !paused_; ++generation_; popup_.Hide(); DrawSettingsSection(); return 0;
       }
@@ -365,7 +446,8 @@ private:
       font_ = CreateFontW(-17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                  OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                  DEFAULT_PITCH, L"Segoe UI Variable");
-      sidebar_ = Control(L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_NOTIFY | LBS_HASSTRINGS,
+      sidebar_brush_ = CreateSolidBrush(RGB(245,247,250));
+      sidebar_ = Control(L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | LBS_NOTIFY | LBS_HASSTRINGS | LBS_OWNERDRAWFIXED | LBS_NOINTEGRALHEIGHT,
                          20, 35, 192, 498, kSidebar);
       for (const auto label : {L"General", L"Text Capture", L"Translation Popup", L"Appearance", L"Language Models", L"Privacy"})
         SendMessageW(sidebar_, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
@@ -401,6 +483,10 @@ private:
               L"Shortcut: Ctrl + Alt + T  —  Unavailable (conflict)", 126);
         Control(L"BUTTON", paused_ ? L"Resume translation" : L"Pause translation",
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 246, 193, 185, 33, kPauseButton);
+        Label(startup_enabled() ? L"Launch at Windows sign-in: enabled" :
+              L"Launch at Windows sign-in: disabled", 255);
+        Control(L"BUTTON", startup_enabled() ? L"Disable launch at sign-in" : L"Enable launch at sign-in",
+                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 246, 303, 220, 33, kStartupToggle);
         break;
       case 1:
         Label(L"Text Capture", 32);
@@ -477,6 +563,7 @@ private:
   HANDLE single_instance_{nullptr};
   HWND host_{nullptr}, settings_{nullptr}, sidebar_{nullptr}, width_edit_{nullptr}, height_edit_{nullptr};
   HFONT font_{nullptr}; HICON icon_{nullptr};
+  HBRUSH sidebar_brush_{nullptr};
   UINT taskbar_created_{0};
   bool shortcut_registered_{false}, paused_{false};
   bool scroll_up_registered_{false}, scroll_down_registered_{false};
