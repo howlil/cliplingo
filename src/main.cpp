@@ -380,9 +380,16 @@ private:
       result->cursor = current.cursor;
       const auto scope = !settings.hover_enabled ? CaptureScope::SelectionOnly :
           static_cast<CaptureScope>(settings.hover_scope + 1);
-      const auto captured = current.kind == RequestKind::ManualOcr ?
-          capture_ocr_region(current.region) :
-          capture_isolated(current.foreground, current.cursor, scope);
+      CaptureResult captured;
+      try {
+        captured = current.kind == RequestKind::ManualOcr ?
+            capture_ocr_region(current.region) :
+            capture_isolated(current.foreground, current.cursor, scope);
+      } catch (const std::exception&) {
+        // Recoverable native library/allocator errors must not unwind out of
+        // the jthread entrypoint or terminate the tray application.
+        captured = {Failure::CaptureFailed, {}};
+      }
       result->failure = captured.failure;
       if (captured) {
         // A newer hotkey may have arrived while the bounded UIA helper ran.
