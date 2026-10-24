@@ -1,6 +1,6 @@
-# ClipLingo M1 — Native Windows Selection Translation
+# ClipLingo — Native Windows Selection & Hover Translation
 
-Branch: `feat/m1-native-translation` · C++20 · Win32 · DirectWrite/Direct2D · UI Automation · CTranslate2 · SentencePiece.
+Milestones: M1 merged to master; M2 hover extension on `feat/m2-hover-text-capture` · C++20 · Win32 · DirectWrite/Direct2D · UI Automation · CTranslate2 · SentencePiece.
 
 ## What M1 actually implements
 
@@ -11,7 +11,29 @@ Branch: `feat/m1-native-translation` · C++20 · Win32 · DirectWrite/Direct2D �
 - Long results are readable by mouse wheel or `Ctrl+Alt+Up/Down` without activating the popup. Exposes full target text via a native UI Automation live-region *Name* property; actual NVDA/Narrator behavior must be checked on Windows.
 - Native six-section Settings shell (General, Text Capture, Translation Popup, Appearance, Language Models, Privacy). Functional: Pause/Resume, launch at login, verified model pack import, max popup bounds, light/dark, solid/tinted, and interactive popup preview. Unimplemented hover/OCR/Glass settings are explicitly labeled or disabled.
 - EN→ID model is prepared by a separate developer-side conversion tool and imported into `%LOCALAPPDATA%\ClipLingo\models`. SHA-256 file manifest validates source and staged content. Versioned rename activates pack atomically. Model stays warm between uses and can be unloaded after about two minutes idle.
-- No browser processes, network on translation path, account, OCR, hover or clipboard hook.
+- No browser processes, network on translation path, account, OCR or clipboard hook. M2 adds shortcut-only hover fallback.
+
+## M2 — Hover fallback (branch: feat/m2-hover-text-capture)
+
+When Ctrl+Alt+T is pressed, ClipLingo still translates a valid selection **exactly**.
+If the UI Automation selection is confirmed empty and hover fallback is enabled,
+it reads the word directly under the cursor; Settings → Text Capture allows
+Word, Sentence or Paragraph scope. Hover is **on-demand**, not continuous tracking.
+The UIA helper uses the existing 1.8-second isolation watchdog and IPC mapping
+with CLU2 versioned message fields (frozen cursor + scope). A nearest-word range
+without a visible rectangle containing the cursor is rejected. A parent
+TextPattern may be used when the element under the cursor is a leaf.
+Sentence is a conservative English punctuation/abbreviation segmentation
+of a bounded paragraph; it is not a semantic language model.
+
+Default: hover enabled, Word scope; change or disable it in Text Capture.
+No clipboard fallback or OCR. Capture limits (8192 UTF-16 units), source-app
+foreground checks, latest-request wins, offline inference and popup visual
+baseline remain unchanged.
+
+Run hover tests using the existing smoke build and `ctest`; a **real Windows
+desktop** compatibility matrix remains mandatory before release, especially
+for browser/PDF providers whose UIA text patterns are incomplete.
 
 ## Prepare a trusted model pack (developer / release packager)
 
@@ -69,7 +91,7 @@ Windows CI runs geometry test, model-package integrity regression test, and an M
 - Inference still runs inside the main process on a dedicated worker: an unrecoverable native CTranslate2 crash may bring down the app. A persistent *inference* helper requires a separate measured reliability decision.
 - Settings have a native accent sidebar and some functional Appearance controls but **not yet complete pixel parity** with `DESIGN.md` (full glass material, responsive DPI/window layout and screen-reader acceptance require Windows validation).
 - Importing a local pack is implemented; automatic network model downloading, installer/updater, and signature distribution are separate release concerns.
-- Win32 window/UIA contracts may differ by target app, elevated UI, OS version and DPI. M1 supports selected text only, not universal OCR/hover capture.
+- Win32 window/UIA contracts differ by target app, elevated UI, OS version and DPI. M2 adds geometry-checked hover but does not claim universal capture.
 - An accessible live-region name is provided, but a full `TextPattern` provider and assistive technology acceptance remain unverified.
 - The offline pack generator and complete CTranslate2 link/run were not executed in this environment; model conversion may require adjustments for the selected library revision.
 
@@ -79,6 +101,8 @@ Windows CI runs geometry test, model-package integrity regression test, and an M
 | --- | --- |
 | `src/main.cpp` | event loop, tray, settings projection, serialized requests, lifecycle |
 | `src/capture.cpp` | UI Automation selection and input validation |
+| `src/hover.cpp` | on-demand UIA hover hit-testing and Word/Sentence/Paragraph acquisition |
+| `src/scope_text.h` | pure bounds validation and sentence segmentation |
 | `src/capture_helper.cpp` | bounded helper process, IPC memory mapping, timeout and crash containment |
 | `src/translation.cpp` | local model/tokenizer loading, inference and warm lifecycle |
 | `src/model_package.cpp` | SHA-256 package validation, staging and atomic activation |
