@@ -5,6 +5,10 @@ on:
     paths:
       - 'tools/**'
       - '.github/workflows/model-inference.yml'
+  pull_request:
+    paths:
+      - 'tools/**'
+      - '.github/workflows/model-inference.yml'
   workflow_dispatch:
 jobs:
   real-model:
