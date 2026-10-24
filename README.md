@@ -36,6 +36,19 @@ cmake --build build --config Release
 .\build\Release\ClipLingo.exe
 ```
 
+With a validated imported pack, execute the production C++ inference path without a
+desktop session (returns exit code 0 only if EN->ID output contains the expected
+Indonesian word; nonzero otherwise):
+
+```powershell
+.\build\Release\ClipLingo.exe --verify-model "C:\path\to\en-id-pack"
+if ($LASTEXITCODE -ne 0) { throw "Native C++ EN-ID model acceptance failed" }
+```
+
+This command loads and validates the pack using the actual SentencePiece/CTranslate2
+C++ implementation and keeps all selected text offline. It is a targeted probe,
+not a full screenshot/UIA/GUI acceptance test.
+
 Real model integration is enabled by default. `CLIPLINGO_HOST_SMOKE=ON` **replaces inference with a test stub** to validate Win32 host/capture/popup/model package code on GitHub Actions without downloading heavy libraries; never distribute or benchmark this target as a translator.
 
 ## Tests
