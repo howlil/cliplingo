@@ -46,6 +46,7 @@ bool verify_model_pack(const std::filesystem::path& folder);
 ModelInstallResult install_model_pack(const std::filesystem::path& source);
 bool ocr_available();
 CaptureResult capture_ocr_region(RECT selected);
+CaptureResult capture_ocr_isolated(RECT selected);
 CaptureResult capture_selected_text(HWND expected_foreground);
 CaptureResult capture_hover_text(HWND expected_foreground, POINT cursor, CaptureScope scope);
 CaptureResult capture_with_hover(HWND expected_foreground, POINT cursor, CaptureScope scope);
