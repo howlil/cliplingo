@@ -19,9 +19,11 @@ using Microsoft::WRL::ComPtr;
 namespace {
 constexpr UINT kTrayMessage = WM_APP + 1;
 constexpr UINT kResultMessage = WM_APP + 2;
-constexpr UINT kTaskbarMessage = WM_APP + 3;
+constexpr UINT kModelInstalledMessage = WM_APP + 4;
 constexpr UINT_PTR kTrayId = 1;
 constexpr int kHotkeyId = 10;
+constexpr int kScrollUpHotkeyId = 11;
+constexpr int kScrollDownHotkeyId = 12;
 constexpr int kSidebar = 101;
 constexpr int kChooseModel = 102;
 constexpr int kApplySize = 103;
@@ -84,11 +86,17 @@ class App {
 public:
   bool Start(HINSTANCE instance) {
     instance_ = instance;
+    single_instance_ = CreateMutexW(nullptr, TRUE, L"Local\\ClipLingoWindowsNativeM1");
+    if (!single_instance_ || GetLastError() == ERROR_ALREADY_EXISTS) return false;
     const auto cfg = config_file();
     if (!cfg.empty()) {
       wchar_t path[32768]{};
       GetPrivateProfileStringW(L"translation", L"model_path", L"", path, 32768, cfg.c_str());
       prefs_.model_path = path;
+      if (!prefs_.model_path.empty() && !verify_model_pack(prefs_.model_path)) {
+        prefs_.model_path.clear();
+        failure_ = Failure::ModelInvalid;
+      }
       prefs_.max_width_dip = std::clamp(static_cast<int>(GetPrivateProfileIntW(
          L"popup", L"max_width", 420, cfg.c_str())), 180, 1200);
       prefs_.max_height_dip = std::clamp(static_cast<int>(GetPrivateProfileIntW(
@@ -108,6 +116,8 @@ public:
     icon_ = make_tray_icon();
     AddTray();
     shortcut_registered_ = RegisterHotKey(host_, kHotkeyId, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'T') != 0;
+    scroll_up_registered_ = RegisterHotKey(host_, kScrollUpHotkeyId, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_UP) != 0;
+    scroll_down_registered_ = RegisterHotKey(host_, kScrollDownHotkeyId, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_DOWN) != 0;
     worker_ = std::jthread([this](std::stop_token stop) { Work(stop); });
     return true;
   }
@@ -123,11 +133,14 @@ public:
   ~App() {
     if (host_) {
       if (shortcut_registered_) UnregisterHotKey(host_, kHotkeyId);
+      if (scroll_up_registered_) UnregisterHotKey(host_, kScrollUpHotkeyId);
+      if (scroll_down_registered_) UnregisterHotKey(host_, kScrollDownHotkeyId);
       NOTIFYICONDATAW nid{sizeof(nid)}; nid.hWnd = host_; nid.uID = kTrayId;
       Shell_NotifyIconW(NIM_DELETE, &nid);
     }
     worker_.request_stop();
     jobs_cv_.notify_all();
+    if (installer_.joinable()) installer_.join();
     // Caution: join may wait for a blocked third-party UIA call. Address with process isolation after M1.
     if (worker_.joinable()) worker_.join();
     // The message pump has stopped, so reclaim any result messages queued by the worker.
@@ -136,11 +149,16 @@ public:
                                  kResultMessage, PM_REMOVE)) {
       delete reinterpret_cast<JobResult*>(undelivered.lParam);
     }
+    while (host_ && PeekMessageW(&undelivered, host_, kModelInstalledMessage,
+                                 kModelInstalledMessage, PM_REMOVE)) {
+      delete reinterpret_cast<ModelInstallResult*>(undelivered.lParam);
+    }
     if (settings_) DestroyWindow(settings_);
     if (popup_.handle()) DestroyWindow(popup_.handle());
     if (host_) DestroyWindow(host_);
     if (icon_) DestroyIcon(icon_);
     if (font_) DeleteObject(font_);
+    if (single_instance_) CloseHandle(single_instance_);
   }
 private:
   static LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -157,7 +175,25 @@ private:
   }
   LRESULT HostMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
-      case WM_HOTKEY: if (wp == kHotkeyId) BeginTranslation(); return 0;
+      case WM_HOTKEY:
+        if (wp == kHotkeyId) BeginTranslation();
+        else if (wp == kScrollUpHotkeyId) popup_.ScrollBy(-64.f);
+        else if (wp == kScrollDownHotkeyId) popup_.ScrollBy(64.f);
+        return 0;
+      case kModelInstalledMessage: {
+        std::unique_ptr<ModelInstallResult> installed(reinterpret_cast<ModelInstallResult*>(lp));
+        installing_ = false;
+        if (installed && installed->success) {
+          prefs_.model_path = installed->path;
+          failure_ = Failure::None;
+          SaveSettings();
+        } else {
+          failure_ = Failure::ModelInvalid;
+        }
+        if (installed) install_status_ = installed->message;
+        RefreshSettings();
+        return 0;
+      }
       case kResultMessage: {
         std::unique_ptr<JobResult> answer(reinterpret_cast<JobResult*>(lp));
         if (answer && answer->generation == generation_ && !paused_) {
@@ -233,8 +269,7 @@ private:
     jobs_cv_.notify_one();
   }
   void Work(std::stop_token stop) {
-    const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    if (FAILED(com)) return;
+    // UI Automation runs only in a time-bounded helper process.
     while (!stop.stop_requested()) {
       Request current;
       Preferences settings;
@@ -254,7 +289,7 @@ private:
       auto result = std::make_unique<JobResult>();
       result->generation = current.generation;
       result->cursor = current.cursor;
-      const auto captured = capture_selected_text(current.foreground);
+      const auto captured = capture_isolated(current.foreground);
       result->failure = captured.failure;
       if (captured) {
         const auto translated = translate_en_id(captured.text, settings.model_path);
@@ -266,7 +301,6 @@ private:
         result.release();
     }
     unload_translation_model();
-    CoUninitialize();
   }
 
   void SaveSettings() {
@@ -376,6 +410,7 @@ private:
       case 2:
         Label(L"Translation Popup", 32);
         Label(L"Text only • above trigger cursor • automatic content sizing", 80);
+        Label(L"Scroll long text: Ctrl+Alt+Up / Ctrl+Alt+Down", 118);
         Label(L"Maximum width (DIPs)", 153, 240);
         width_edit_ = Control(L"EDIT", std::to_wstring(prefs_.max_width_dip).c_str(),
                 WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER, 490, 148, 110, 30, kMaxWidthEdit);
@@ -392,10 +427,13 @@ private:
         break;
       case 4:
         Label(L"Language Models", 32);
-        Label(L"Direct English → Indonesian; local CTranslate2 model + SentencePiece tokenizers.", 80);
-        Label(prefs_.model_path.empty() ? L"Model: Not configured" : L"Model: Configured (validated on translate)", 136);
-        Control(L"BUTTON", L"Choose converted model folder...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                246, 193, 265, 33, kChooseModel);
+        Label(L"Offline EN → ID model: verified CTranslate2 package with SentencePiece.", 80);
+        Label(installing_ ? L"Model: Verifying and installing..." :
+          (prefs_.model_path.empty() ? L"Model: Not installed" : L"Model: Installed (verified manifest)"), 136);
+        Label(install_status_.c_str(), 169);
+        Control(L"BUTTON", L"Install verified model pack...", WS_CHILD | WS_VISIBLE |
+                (installing_ ? WS_DISABLED : 0) | BS_PUSHBUTTON,
+                246, 219, 265, 33, kChooseModel);
         break;
       case 5:
         Label(L"Privacy", 32);
@@ -408,6 +446,7 @@ private:
             WS_CHILD | WS_VISIBLE | SS_LEFT, 246, 475, 540, 48);
   }
   void ChooseModel() {
+    if (installing_) return;
     ComPtr<IFileOpenDialog> picker;
     if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
                                 IID_PPV_ARGS(picker.GetAddressOf())))) return;
@@ -422,27 +461,31 @@ private:
     std::filesystem::path candidate(folder);
     CoTaskMemFree(folder);
     std::error_code ec;
-    if (!std::filesystem::is_regular_file(candidate / L"model.bin", ec) || ec ||
-        !std::filesystem::is_regular_file(candidate / L"source.spm", ec) || ec ||
-        !std::filesystem::is_regular_file(candidate / L"target.spm", ec) || ec) {
-      MessageBoxW(settings_, L"Expected model.bin, source.spm, target.spm in the selected folder.",
-                  L"Invalid model folder", MB_ICONWARNING);
-      return;
-    }
-    prefs_.model_path = candidate;
-    failure_ = Failure::None;
-    SaveSettings(); DrawSettingsSection();
+    if (installer_.joinable()) installer_.join(); // completed previous install
+    installing_ = true;
+    install_status_ = L"Checking package hashes, then copying to private model storage.";
+    DrawSettingsSection();
+    installer_ = std::jthread([this, candidate]() {
+      auto result = std::make_unique<ModelInstallResult>(install_model_pack(candidate));
+      if (PostMessageW(host_, kModelInstalledMessage, 0,
+                       reinterpret_cast<LPARAM>(result.get()))) result.release();
+    });
   }
   void RefreshSettings() { if (settings_ && IsWindowVisible(settings_)) DrawSettingsSection(); }
 
   HINSTANCE instance_{nullptr};
+  HANDLE single_instance_{nullptr};
   HWND host_{nullptr}, settings_{nullptr}, sidebar_{nullptr}, width_edit_{nullptr}, height_edit_{nullptr};
   HFONT font_{nullptr}; HICON icon_{nullptr};
   UINT taskbar_created_{0};
   bool shortcut_registered_{false}, paused_{false};
+  bool scroll_up_registered_{false}, scroll_down_registered_{false};
   Failure failure_{Failure::None};
   Preferences prefs_, worker_prefs_;
   TextPopup popup_;
+  std::jthread installer_;
+  bool installing_{false};
+  std::wstring install_status_{L"Install a locally prepared EN-ID pack; no account needed."};
   std::uint64_t generation_{0};
   std::mutex jobs_mutex_;
   std::condition_variable_any jobs_cv_;
@@ -451,6 +494,8 @@ private:
 };
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+  int child_exit = 1;
+  if (maybe_run_capture_helper(child_exit)) return child_exit;
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   if (FAILED(com)) return 1;
