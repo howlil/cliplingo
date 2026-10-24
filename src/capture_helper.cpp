@@ -9,12 +9,14 @@
 #include <algorithm>
 
 namespace {
-constexpr std::uint32_t kMagic = 0x434C5531; // CLU1
+constexpr std::uint32_t kMagic = 0x434C5532; // CLU2, versioned shared capture
 constexpr DWORD kCaptureTimeoutMs = 1800;
 struct SharedCapture {
   std::uint32_t magic;
   std::uint32_t failure;
   std::uint32_t length;
+  POINT cursor{};
+  std::uint32_t scope{};
   wchar_t text[8193];
 };
 struct UniqueHandle {
@@ -43,7 +45,7 @@ struct ChildProcess {
 // A crash, COM provider deadlock, or hard timeout only kills the capture helper.
 // This is intentionally per-request (bounded resource lifetime). Benchmark before
 // considering a persistent helper: never replace a safety property speculatively.
-CaptureResult capture_isolated(HWND expected_foreground) {
+CaptureResult capture_isolated(HWND expected_foreground, POINT cursor, CaptureScope scope) {
   if (!expected_foreground) return {Failure::NoSelection, {}};
   SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
   UniqueHandle mapping(CreateFileMappingW(INVALID_HANDLE_VALUE, &security, PAGE_READWRITE,
@@ -52,6 +54,8 @@ CaptureResult capture_isolated(HWND expected_foreground) {
   MappedCapture shared(mapping.get());
   if (!shared.ptr) return {Failure::CaptureFailed, {}};
   *shared.ptr = SharedCapture{};
+  shared.ptr->cursor = cursor;
+  shared.ptr->scope = static_cast<std::uint32_t>(scope);
 
   wchar_t executable[MAX_PATH]{};
   const DWORD length = GetModuleFileNameW(nullptr, executable, MAX_PATH);
@@ -115,10 +119,12 @@ bool maybe_run_capture_helper(int& exit_code) {
     const auto shared_handle = _wcstoui64(argv[3], &map_end, 10);
     if (*target_end == 0 && *map_end == 0 && target != 0 && shared_handle != 0) {
       MappedCapture shared(reinterpret_cast<HANDLE>(static_cast<std::uintptr_t>(shared_handle)));
-      if (shared.ptr) {
+      if (shared.ptr && shared.ptr->scope <= static_cast<std::uint32_t>(CaptureScope::Paragraph)) {
         const HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         if (SUCCEEDED(hr)) {
-          auto result = capture_selected_text(reinterpret_cast<HWND>(static_cast<std::uintptr_t>(target)));
+          auto result = capture_with_hover(reinterpret_cast<HWND>(static_cast<std::uintptr_t>(target)),
+                                           shared.ptr->cursor,
+                                           static_cast<CaptureScope>(shared.ptr->scope));
           shared.ptr->failure = static_cast<std::uint32_t>(result.failure);
           if (result && result.text.size() <= 8192) {
             shared.ptr->length = static_cast<std::uint32_t>(result.text.size());
