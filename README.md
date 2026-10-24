@@ -1,19 +1,34 @@
-# ClipLingo M1 — Windows-native reading loop
+# ClipLingo M1 — Native Windows Selection Translation
 
-**Branch:** `feat/m1-native-translation`. C++20 / Win32 / DirectWrite / Direct2D / UI Automation / CTranslate2 / SentencePiece. No Tauri, WebView2, external server, account or internet call during inference.
+Branch: `feat/m1-native-translation` · C++20 · Win32 · DirectWrite/Direct2D · UI Automation · CTranslate2 · SentencePiece.
 
-## Implemented in M1
+## What M1 actually implements
 
-1. Windows notification-area icon/menu (Pause, Settings, Quit); hotkey `Ctrl+Alt+T` with registration-conflict status.
-2. UI Automation selection capture on worker COM MTA thread. No selected text -> no popup or inference.
-3. Select an existing **converted EN→ID CTranslate2 model folder** from Settings → Language Models. Model must contain `model.bin`, `source.spm`, `target.spm` (SentencePiece files manually added to converted folder). M1 does **not** download models.
-4. On-demand local inference via CTranslate2 C++ API and SentencePiece; result is returned to the UI message pump with generation ordering.
-5. Native no-activation popup: DirectWrite measurement + Direct2D rendering, content-fit until configurable width/height, anchor captured at hotkey, flip/clamp to monitor work area.
-6. Native six-section Settings shell. Currently functional: pause/resume, model directory selection, maximum popup dimensions. Other rows are labeled as M1-limited instead of pretending unavailable features work.
+- Windows tray icon (including Explorer taskbar recreation), Settings, Pause/Resume, Quit and a single-instance mutex.
+- `Ctrl+Alt+T` request: freeze foreground window/cursor, capture selected text via a *short-lived isolated helper process*, validate selection, run offline EN→ID, update only the latest request's popup.
+- The capture helper shares **one bounded memory mapping handle** with the host, runs UIA on COM MTA, exits after capture, and is forcibly terminated after 1.8 s when blocked. This adds a per-request process-startup cost; profile before deciding whether to add a persistent child process.
+- Native content-fit popup (DirectWrite/Direct2D), 420×300-DIP maximum by default, placed above cursor without focus. Translation text **only**: no popup controls or header.
+- Long results are readable by mouse wheel or `Ctrl+Alt+Up/Down` without activating the popup. Exposes full target text via a native UI Automation live-region *Name* property; actual NVDA/Narrator behavior must be checked on Windows.
+- Native six-section Settings shell (General, Text Capture, Translation Popup, Appearance, Language Models, Privacy). Functional: Pause, model pack import, max popup bounds. Unimplemented settings are explicitly labeled instead of pretending to work.
+- EN→ID model is prepared by a separate developer-side conversion tool and imported into `%LOCALAPPDATA%\ClipLingo\models`. SHA-256 file manifest validates source and staged content. Versioned rename activates pack atomically. Model stays warm between uses and can be unloaded after about two minutes idle.
+- No browser processes, network on translation path, account, OCR, hover or clipboard hook.
 
-## Build (Windows 11 x64, Visual Studio 2022, CMake)
+## Prepare a trusted model pack (developer / release packager)
 
-**Requirements:** Visual Studio 2022 with C++ Desktop Development and Windows SDK; x64 binaries/headers for CTranslate2 and SentencePiece discoverable via `CMAKE_PREFIX_PATH` or a package manager exporting `ctranslate2` and `sentencepiece` CMake config targets. The package manager and exact binary distribution are not yet pinned.
+Conversion requires Python >=3.11, `ctranslate2`, `sentencepiece`, `huggingface_hub`, `transformers<5`, and PyTorch on a **builder machine**, never on the resident Windows app. Choose and pin an immutable commit from [Helsinki-NLP/opus-mt-en-id](https://huggingface.co/Helsinki-NLP/opus-mt-en-id/tree/main). Then:
+
+```powershell
+python -m pip install "ctranslate2" "sentencepiece" "huggingface_hub" "transformers<5" "torch"
+python tools/build_en_id_pack.py .\pack\en-id --revision <pinned-huggingface-commit-sha>
+```
+
+The tool converts to CPU INT8-FP32, copies source/target SentencePiece files, and creates `cliplingo-model.sha256` covering **every** file. Check the model license (Apache-2.0), tokenizer assets, third-party notices and model provenance before redistributing packs. Keep pack files together in one directory; no ZIP extraction is required in the app.
+
+Run ClipLingo, open Windows tray → Settings → Language Models → **Install verified model pack…** → choose the folder. File hashing/copy is offloaded from the UI thread; only successfully validated/staged packs become the active model. A pack generated with a newer converter might not work with an older inference library; actual inference compatibility is a release acceptance gate.
+
+## Build native application
+
+Requirements: Windows 11 x64 (initial support target), Visual Studio 2022 C++ Desktop workload, CMake >= 3.25, Windows SDK, CTranslate2 **C++ installed package**, SentencePiece installed package. CTranslate2 is not an official vcpkg port in the baseline registry, so build/install its C++ library from an audited pinned tag and point CMake to the install prefix. The CMake config exported targets must include `CTranslate2::ctranslate2` and `sentencepiece::sentencepiece`. Native dependency DLL/CRT distribution must also be verified on a clean VM.
 
 ```powershell
 cmake -S . -B build -A x64 -DCMAKE_PREFIX_PATH='C:\deps\installed'
@@ -21,30 +36,38 @@ cmake --build build --config Release
 .\build\Release\ClipLingo.exe
 ```
 
-For a suitable model, convert an EN→ID Marian/OPUS model with CTranslate2's transformer conversion utility and stage **matching** SentencePiece source/target tokenizers in that folder. Do not assume a download/conversion script has been validated by this M1. Check model licensing and supported tokenizer format before distribution.
+Real model integration is enabled by default. `CLIPLINGO_HOST_SMOKE=ON` **replaces inference with a test stub** to validate Win32 host/capture/popup/model package code on GitHub Actions without downloading heavy libraries; never distribute or benchmark this target as a translator.
 
-On launch, look at the tray icon (or the hidden `^` menu) → Settings → Language Models → choose folder. In any application exposing an accessible text-selection pattern, highlight English text and press `Ctrl+Alt+T`. Popup contains only Indonesian translation. Closing Settings does not quit the tray app.
+## Tests
 
-## Native Windows host compile smoke
+```powershell
+cmake -S . -B build-smoke -A x64 -DCLIPLINGO_HOST_SMOKE=ON
+cmake --build build-smoke --config Release
+ctest --test-dir build-smoke -C Release --output-on-failure
+```
 
-The CI workflow builds **all Win32 host/UI/capture sources** with a deliberately nonfunctional inference stub using `-DCLIPLINGO_HOST_SMOKE=ON`. This checks Windows SDK/MSVC symbols and linking without bundling model/toolkit dependencies. The normal `ClipLingo` build uses real CTranslate2. **A green smoke build does not prove offline translation or runtime compatibility.**
+Windows CI runs geometry test, model-package integrity regression test, and an MSVC host build. Production acceptance additionally requires a real CTranslate2 build, real offline EN→ID output, foreground-app UIA experiments, stress tests (rapid hotkeys, repeated model reload, explorer restart, multi-monitor/DPI), no focus stealing, NVDA/Narrator, and native power/idle profiling. **CI smoke success is not proof of production readiness.**
 
-## M1 limitations, not silent promises
+## Known constraints and deliberate M1 scope
 
-- Native build/runtime **not verified yet on Windows in this session**. UI Automation compatibility needs real-application tests.
-- The single worker keeps one model warm between requests and unloads it after approximately 2 minutes idle. The memory/latency trade-off still needs real benchmarking.
-- UIA calls can still hang; host/UI thread stays responsive, but worker shutdown can block until provider returns. A separate capture helper process is an open production decision.
-- Standard Settings controls are functionally native but are not yet visually parity-tested against the approved `DESIGN.md` reference. App startup, configurable hotkey, installer, excluded apps, ID→EN and polished model status are not implemented.
-- Only manual text selection; hover, OCR and clipboard fallback are deferred; some rich text controls do not expose UIA selection.
-- Solid light UI only. Native accessibility provider/keyboard reading for custom popup and richer scrollbar behavior require real Windows acceptance. Wheel scroll is supported when popup text exceeds configured height.
-- Incomplete runtime lifecycle handling (Explorer restart, single-instance, power/session notifications) is a release gate, not evidence M1 is production-ready.
+- The per-request UIA helper introduces process launch/exit overhead; its benefit is bounded hang/crash containment. Measure hotkey-to-visible-result before optimization.
+- Inference still runs inside the main process on a dedicated worker: an unrecoverable native CTranslate2 crash may bring down the app. A persistent *inference* helper requires a separate measured reliability decision.
+- Settings are native Windows controls with the approved six-section structure but are **not yet full visual parity** with `DESIGN.md` (color, spacing, theme variants, keyboard-focus and UIA evaluation required).
+- Importing a local pack is implemented; automatic network model downloading, installer/updater, and signature distribution are separate release concerns.
+- Win32 window/UIA contracts may differ by target app, elevated UI, OS version and DPI. M1 supports selected text only, not universal OCR/hover capture.
+- An accessible live-region name is provided, but a full `TextPattern` provider and assistive technology acceptance remain unverified.
+- The offline pack generator and complete CTranslate2 link/run were not executed in this environment; model conversion may require adjustments for the selected library revision.
 
-## Source boundaries
+## Source ownership
 
-- `src/main.cpp`: Win32 host, tray, lifecycle, native Settings, request generation and single MTA worker.
-- `src/capture.cpp`: UIA selection capture only.
-- `src/translation.cpp`: CTranslate2 + SentencePiece integration only.
-- `src/popup.cpp`: native popup text layout, rendering and placement only.
-- `src/core.h`: smallest contracts crossing boundaries.
+| Source | Responsibility |
+| --- | --- |
+| `src/main.cpp` | event loop, tray, settings projection, serialized requests, lifecycle |
+| `src/capture.cpp` | UI Automation selection and input validation |
+| `src/capture_helper.cpp` | bounded helper process, IPC memory mapping, timeout and crash containment |
+| `src/translation.cpp` | local model/tokenizer loading, inference and warm lifecycle |
+| `src/model_package.cpp` | SHA-256 package validation, staging and atomic activation |
+| `src/popup.cpp` | native DirectWrite text renderer, placement, accessible name |
+| `src/core.h` | shared types/contracts, no speculative dependency hierarchy |
 
-Do not introduce generic service/interface trees, a browser shell, multi-process supervision or any plugin framework without demonstrated need. See `AGENTS.md`, `DESIGN.md` and `.agents/{product,engineering-design}.md`.
+Other product/engineering decisions live in `DESIGN.md`, `.agents/product.md`, `.agents/engineering-design.md`, and `AGENTS.md`.
