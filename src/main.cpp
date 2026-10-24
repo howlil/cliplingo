@@ -326,8 +326,9 @@ private:
             Request req{};
             req.kind = RequestKind::ManualOcr;
             req.region = *chosen;
-            req.cursor = {(chosen->left + chosen->right)/2,
-                          (chosen->top + chosen->bottom)/2};
+            // The drag-release cursor is the interaction anchor. Freeze it
+            // before OCR/inference; never chase subsequent pointer movement.
+            GetCursorPos(&req.cursor);
             req.generation = ++generation_;
             {
               std::lock_guard lock(jobs_mutex_);
