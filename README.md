@@ -35,6 +35,45 @@ Run hover tests using the existing smoke build and `ctest`; a **real Windows
 desktop** compatibility matrix remains mandatory before release, especially
 for browser/PDF providers whose UIA text patterns are incomplete.
 
+## M3 — Manual screen region OCR (optional native component)
+
+Choose **ClipLingo tray → Capture screen text (select area)…**, drag a
+rectangle across the Windows desktop and release. Press Escape or right-click
+to cancel. The temporary selection overlay closes before the screenshot is
+captured. ClipLingo OCRs **only the selected rectangle**, forwards its text to
+the same offline EN→ID inference worker, and displays the same target-text-only
+popup near the selected region. There is no continuous OCR, remote upload,
+screenshot cache or image file written to disk. ROI must be at least 8×8 pixels
+and no more than **12 megapixels**; protected/secure desktop content is not
+bypassed.
+
+Unlike the Windows NPU OCR APIs, M3 uses optional **Tesseract CPU** so the
+current unpackaged Win32 host remains usable on hardware without an NPU.
+Tesseract is NOT loaded when the application is idle and must be provided by
+the distributor. Ordinary builds intentionally keep OCR unavailable and
+show a meaningful status in Settings rather than silently claiming it works.
+
+**Build the optional OCR-enabled host (MSVC + vcpkg):**
+
+```powershell
+vcpkg install tesseract:x64-windows
+cmake -S . -B build-ocr -A x64 -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" -DCLIPLINGO_WITH_TESSERACT=ON
+cmake --build build-ocr --config Release
+```
+
+Install the official `eng.traineddata` (from the audited **tessdata_fast**
+release) in **`tessdata/eng.traineddata` beside ClipLingo.exe**. Package the
+Tesseract, Leptonica, image-codec and CTranslate2/SentencePiece DLLs and their
+required licenses/notices appropriately. Never search arbitrary PATH entries
+for OCR executables. The traineddata license and hash must be pinned as part
+of the release manifest. This setup is **not yet an automated installer**.
+
+M3 testing needs real-Windows interactive region capture, display/DPI edges,
+screen-reader workflow, OCR accuracy, idle RAM and translation latency.
+The CI job `M3 optional native Tesseract OCR build` validates compilation
+and links of the real C++ OCR library but cannot verify those user interactions
+in a headless runner.
+
 ## Prepare a trusted model pack (developer / release packager)
 
 Conversion requires Python >=3.11, `ctranslate2`, `sentencepiece`, `huggingface_hub`, `transformers<5`, and PyTorch on a **builder machine**, never on the resident Windows app. Choose and pin an immutable commit from [Helsinki-NLP/opus-mt-en-id](https://huggingface.co/Helsinki-NLP/opus-mt-en-id/tree/main). Then:
@@ -101,6 +140,9 @@ Windows CI runs geometry test, model-package integrity regression test, and an M
 | --- | --- |
 | `src/main.cpp` | event loop, tray, settings projection, serialized requests, lifecycle |
 | `src/capture.cpp` | UI Automation selection and input validation |
+| `src/ocr.cpp` | bounded on-demand screen ROI → optional local Tesseract OCR |
+| `src/region_selector.cpp` | transient drag overlay, cancel/dismiss lifecycle |
+| `src/region_geometry.h` | pure ROI bounds and allocation budget |
 | `src/hover.cpp` | on-demand UIA hover hit-testing and Word/Sentence/Paragraph acquisition |
 | `src/scope_text.h` | pure bounds validation and sentence segmentation |
 | `src/capture_helper.cpp` | bounded helper process, IPC memory mapping, timeout and crash containment |
