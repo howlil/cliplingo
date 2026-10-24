@@ -20,3 +20,6 @@ jobs:
       - name: Compile native Win32 host (no CTranslate2)
         shell: pwsh
         run: cmake --build build-smoke --config Release --parallel 2
+      - name: Test model pack integrity
+        shell: pwsh
+        run: ctest --test-dir build-smoke -C Release --output-on-failure
