@@ -6,7 +6,6 @@
 #include <filesystem>
 #include <memory>
 #include <string>
-#include <vector>
 #include <dwmapi.h>
 #if defined(CLIPLINGO_WITH_TESSERACT)
 #include <tesseract/baseapi.h>
@@ -86,11 +85,12 @@ CaptureResult capture_ocr_region(RECT selected) {
   if (!ok) return {Failure::CaptureFailed, {}};
 
   // GDI 32-bit BI_RGB is byte-ordered BGRA; Tesseract SetImage takes RGBA.
-  std::vector<unsigned char> rgba(bytes);
-  const auto* src = static_cast<const unsigned char*>(buffer);
+  // Reuse the DIB buffer in place. Avoid allocating another potentially
+  // 48 MB temporary buffer for the same ROI.
+  auto* rgba = static_cast<unsigned char*>(buffer);
   for (std::size_t i = 0; i < bytes; i += 4) {
-    rgba[i] = src[i+2]; rgba[i+1] = src[i+1];
-    rgba[i+2] = src[i]; rgba[i+3] = 255;
+    std::swap(rgba[i], rgba[i+2]);
+    rgba[i+3] = 255;
   }
   tesseract::TessBaseAPI engine;
   const auto u8 = data_folder().u8string();
@@ -98,7 +98,7 @@ CaptureResult capture_ocr_region(RECT selected) {
   if (engine.Init(tessdata.c_str(), "eng", tesseract::OEM_LSTM_ONLY) != 0)
     return {Failure::OcrUnavailable, {}};
   engine.SetPageSegMode(tesseract::PSM_AUTO);
-  engine.SetImage(rgba.data(), width, height, 4, width*4);
+  engine.SetImage(rgba, width, height, 4, width*4);
   std::unique_ptr<char[]> raw(engine.GetUTF8Text());
   if (!raw) return {Failure::CaptureFailed, {}};
   // Explicit cap: no huge OCR output may reach CTranslate2.
