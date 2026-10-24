@@ -106,6 +106,18 @@ bool TextPopup::Create(HINSTANCE instance) {
 void TextPopup::ShowText(const std::wstring& text, POINT anchor, const Preferences& prefs) {
   if (!hwnd_ || text.empty()) return;
   SetWindowTextW(hwnd_, text.c_str());
+  HIGHCONTRASTW contrast{sizeof(contrast)};
+  SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0);
+  if (contrast.dwFlags & HCF_HIGHCONTRASTON) {
+    const COLORREF bg = GetSysColor(COLOR_WINDOW), fg = GetSysColor(COLOR_WINDOWTEXT);
+    background_ = D2D1::ColorF(GetRValue(bg) / 255.f, GetGValue(bg) / 255.f, GetBValue(bg) / 255.f);
+    foreground_ = D2D1::ColorF(GetRValue(fg) / 255.f, GetGValue(fg) / 255.f, GetBValue(fg) / 255.f);
+  } else {
+    const bool dark = prefs.theme == 1;
+    background_ = D2D1::ColorF(dark ? (prefs.popup_style == 1 ? 0x173451 : 0x202631) :
+                               (prefs.popup_style == 1 ? 0xE8F2FF : 0xFFFFFF));
+    foreground_ = D2D1::ColorF(dark ? 0xF5F7FC : 0x1D2430);
+  }
   const HMONITOR monitor = MonitorFromPoint(anchor, MONITOR_DEFAULTTONEAREST);
   MONITORINFO monitor_info{sizeof(monitor_info)};
   if (!GetMonitorInfoW(monitor, &monitor_info)) return;
@@ -179,7 +191,8 @@ bool TextPopup::EnsureTarget() {
 void TextPopup::Paint() {
   if (!EnsureTarget()) return;
   target_->BeginDraw();
-  target_->Clear(D2D1::ColorF(0xFFFFFF));
+  target_->Clear(background_);
+  if (brush_) brush_->SetColor(foreground_);
   if (layout_) {
     target_->PushAxisAlignedClip(D2D1::RectF(kPad, kPad, width_dip_ - kPad,
                             height_dip_ - kPad), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
