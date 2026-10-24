@@ -214,8 +214,8 @@ Record an ADR under `.agents/decisions/` only when a consequential alternative i
 
 ## M3 consequential OCR implementation decision (candidate)
 
-To preserve an **unpackaged Win32 host, CPU-only compatibility and zero OCR
-idle footprint**, M3 introduces an **optional build-time Tesseract +
+To preserve an **unpackaged Win32 host, CPU-only compatibility and no
+long-lived OCR inference session**, M3 introduces an **optional build-time Tesseract +
 Leptonica** native dependency (`CLIPLINGO_WITH_TESSERACT=ON`).
 Current Windows AI OCR can require NPU/package identity; the choice avoids
 changing app distribution topology or requiring NPU merely for manual OCR.
