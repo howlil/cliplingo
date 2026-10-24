@@ -211,3 +211,32 @@ Links are reference material, not claims of completed platform compatibility tes
 | Windows minimum version | **Windows 11 x64 candidate** | app audience and compatibility tests |
 
 Record an ADR under `.agents/decisions/` only when a consequential alternative is actually chosen with evidence. Do not implement all candidates or pre-create folders/modules because they appear in this document.
+
+## M3 consequential OCR implementation decision (candidate)
+
+To preserve an **unpackaged Win32 host, CPU-only compatibility and zero OCR
+idle footprint**, M3 introduces an **optional build-time Tesseract +
+Leptonica** native dependency (`CLIPLINGO_WITH_TESSERACT=ON`).
+Current Windows AI OCR can require NPU/package identity; the choice avoids
+changing app distribution topology or requiring NPU merely for manual OCR.
+
+Boundary ownership:
+- `RegionSelector`: temporary selection HWND, transient mouse/keyboard
+  interaction, cancellation, no persistent screenshot.
+- `ocr.cpp`: screenshot of bounded ROI via top-down Win32 DIB, in-place
+  BGRA→RGBA conversion, local English OCR with a short-lived TessBaseAPI
+  instance; no disk persistence.
+- `RequestCoordinator`: reuse existing bounded pending request and
+  stale-generation gate; center of source is not used as an artificial anchor;
+  snapshot pointer on release.
+- `TranslationEngine` and `TextPopup`: unchanged.
+
+Guarantees: only user-initiated OCR; no background screen polling; ROI capped
+at 12MP/48MB DIB; empty/unavailable results cannot become success popup.
+No private image capture data is logged or persisted.
+
+Open deployment and verification gates: pinned/signed Tesseract DLL dependencies
+and tessdata_fast `eng.traineddata`; enabled MSVC build; real text OCR on
+Windows desktop; mixed-DPI capture accuracy; privacy/protected content;
+keyboard-only and screen reader UX; raw working set/latency measurement.
+This build-time choice is not evidence that the fully packaged app is ready.
