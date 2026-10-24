@@ -343,6 +343,15 @@ private:
       const auto captured = capture_isolated(current.foreground, current.cursor, scope);
       result->failure = captured.failure;
       if (captured) {
+        // A newer hotkey may have arrived while the bounded UIA helper ran.
+        // Avoid wasting model inference on a request that can no longer render.
+        bool superseded = false;
+        {
+          std::lock_guard lock(jobs_mutex_);
+          superseded = pending_.has_value() &&
+                        pending_->generation > current.generation;
+        }
+        if (superseded) continue;
         const auto translated = translate_en_id(captured.text, settings.model_path);
         result->failure = translated.failure;
         if (translated) result->translated = translated.text;
