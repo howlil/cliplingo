@@ -16,7 +16,17 @@ else()
   set(CLIPLINGO_TARGET ClipLingo)
   set(CLIPLINGO_TRANSLATION_SOURCE src/translation.cpp)
   find_package(ctranslate2 CONFIG REQUIRED)
-  find_package(sentencepiece CONFIG REQUIRED)
+  # Prefer the official/exported CMake target (e.g. vcpkg). Older native
+  # SentencePiece source installs may only provide a header and a library.
+  find_package(sentencepiece CONFIG QUIET)
+  if(NOT TARGET sentencepiece::sentencepiece)
+    find_path(CLIPLINGO_SENTENCEPIECE_INCLUDE sentencepiece_processor.h REQUIRED)
+    find_library(CLIPLINGO_SENTENCEPIECE_LIB NAMES sentencepiece REQUIRED)
+    add_library(sentencepiece::sentencepiece UNKNOWN IMPORTED)
+    set_target_properties(sentencepiece::sentencepiece PROPERTIES
+      IMPORTED_LOCATION "${CLIPLINGO_SENTENCEPIECE_LIB}"
+      INTERFACE_INCLUDE_DIRECTORIES "${CLIPLINGO_SENTENCEPIECE_INCLUDE}")
+  endif()
 endif()
 add_executable(${CLIPLINGO_TARGET} WIN32
   src/main.cpp
