@@ -2,6 +2,7 @@
 #include "region_geometry.h"
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <string>
