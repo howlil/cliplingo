@@ -3,6 +3,7 @@
 #include <d2d1.h>
 #include <dwrite.h>
 #include <wrl/client.h>
+#include <UIAutomation.h>
 
 class TextPopup {
 public:
@@ -10,6 +11,7 @@ public:
   void ShowText(const std::wstring& text, POINT anchor, const Preferences& prefs);
   void Hide();
   HWND handle() const { return hwnd_; }
+  void ScrollBy(float delta_dip);
 private:
   static LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
   LRESULT Handle(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
@@ -24,4 +26,5 @@ private:
   Microsoft::WRL::ComPtr<ID2D1Factory> drawing_;
   Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> target_;
   Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_;
+  Microsoft::WRL::ComPtr<IRawElementProviderSimple> accessibility_;
 };
