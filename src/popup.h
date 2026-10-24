@@ -1,6 +1,7 @@
 #pragma once
 #include "core.h"
 #include <d2d1.h>
+#include <d2d1helper.h>
 #include <dwrite.h>
 #include <wrl/client.h>
 #include <UIAutomation.h>
@@ -19,6 +20,8 @@ private:
   bool EnsureTarget();
   HWND hwnd_{nullptr};
   float dpi_{96.f};
+  D2D1_COLOR_F background_{D2D1::ColorF(0xFFFFFF)};
+  D2D1_COLOR_F foreground_{D2D1::ColorF(0x1D2430)};
   float width_dip_{0}, height_dip_{0}, scroll_dip_{0}, content_height_dip_{0};
   Microsoft::WRL::ComPtr<IDWriteFactory> writing_;
   Microsoft::WRL::ComPtr<IDWriteTextFormat> format_;
