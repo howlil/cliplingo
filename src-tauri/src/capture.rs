@@ -5,9 +5,8 @@
 
 use std::{
     sync::{
-        atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering},
         mpsc::{self, SyncSender, TrySendError},
-        Arc,
+        Arc, Mutex,
     },
     thread,
 };
@@ -48,18 +47,6 @@ pub enum CaptureState {
 }
 
 impl CaptureState {
-    fn from_u8(code: u8) -> Self {
-        match code {
-            1 => Self::Queued,
-            2 => Self::Verified,
-            3 => Self::Empty,
-            4 => Self::Denied,
-            5 => Self::Unsupported,
-            6 => Self::Busy,
-            7 => Self::ProviderFailure,
-            _ => Self::Idle,
-        }
-    }
     pub fn label(self) -> &'static str {
         match self {
             Self::Idle => "idle",
@@ -74,17 +61,37 @@ impl CaptureState {
     }
 }
 
+#[derive(Default)]
 struct Telemetry {
-    state: AtomicU8,
-    selection_units: AtomicUsize,
-    verified_count: AtomicU64,
+    generation: u64,
+    state: CaptureState,
+    selection_units: usize,
+    verified_count: u64,
 }
-impl Default for Telemetry {
-    fn default() -> Self {
-        Self {
-            state: AtomicU8::new(CaptureState::Idle as u8),
-            selection_units: AtomicUsize::new(0),
-            verified_count: AtomicU64::new(0),
+
+impl Default for CaptureState {
+    fn default() -> Self { Self::Idle }
+}
+
+impl Telemetry {
+    fn next_request(&mut self) -> u64 {
+        self.generation = self.generation.wrapping_add(1);
+        self.state = CaptureState::Queued;
+        self.selection_units = 0;
+        self.generation
+    }
+    fn complete(&mut self, generation: u64, result: Result<String, CaptureDenied>) {
+        if self.generation != generation { return; }
+        match result {
+            Ok(text) => {
+                self.selection_units = text.encode_utf16().count();
+                self.verified_count += 1;
+                self.state = CaptureState::Verified;
+            }
+            Err(reason) => {
+                self.selection_units = 0;
+                self.state = state_for_error(reason);
+            }
         }
     }
 }
@@ -160,23 +167,19 @@ impl Drop for ComApartment {
 
 pub struct CaptureCoordinator {
     sender: SyncSender<Request>,
-    generation: Arc<AtomicU64>,
-    telemetry: Arc<Telemetry>,
+    telemetry: Arc<Mutex<Telemetry>>,
 }
 impl CaptureCoordinator {
     pub fn start() -> Result<Self, String> {
         let (sender, receiver) = mpsc::sync_channel::<Request>(1);
-        let generation = Arc::new(AtomicU64::new(0));
-        let telemetry = Arc::new(Telemetry::default());
-        let current = generation.clone();
+        let telemetry = Arc::new(Mutex::new(Telemetry::default()));
         let status = telemetry.clone();
         thread::Builder::new().name("cliplingo-uia-mta".into()).spawn(move || {
-            // A provider call may hang; unlike async timeouts this worker does
-            // not pretend to interrupt COM. The queue stays bounded at 1.
+            // A provider call can hang; the bounded queue limits pending work.
             let _apartment = match ComApartment::init() {
                 Ok(value) => value,
                 Err(_) => {
-                    status.state.store(CaptureState::ProviderFailure as u8, Ordering::Release);
+                    status.lock().unwrap().state = CaptureState::ProviderFailure;
                     return;
                 }
             };
@@ -185,38 +188,24 @@ impl CaptureCoordinator {
             } {
                 Ok(value) => value,
                 Err(_) => {
-                    status.state.store(CaptureState::ProviderFailure as u8, Ordering::Release);
+                    status.lock().unwrap().state = CaptureState::ProviderFailure;
                     return;
                 }
             };
             while let Ok(request) = receiver.recv() {
-                if !is_current(&current, request.generation) { continue; }
+                if status.lock().unwrap().generation != request.generation { continue; }
                 let result = read_selection(&automation, &request.source);
-                // Results from an older request cannot change UI or status.
-                if !is_current(&current, request.generation) { continue; }
-                match result {
-                    Ok(text) => {
-                        // F1 verifies that real UIA selection exists; drop immediately.
-                        // F2 will add an explicitly approved inference handoff.
-                        status.selection_units.store(text.encode_utf16().count(), Ordering::Release);
-                        status.verified_count.fetch_add(1, Ordering::Relaxed);
-                        status.state.store(CaptureState::Verified as u8, Ordering::Release);
-                    }
-                    Err(reason) => {
-                        status.selection_units.store(0, Ordering::Release);
-                        status.state.store(state_for_error(reason) as u8, Ordering::Release);
-                    }
-                }
+                // Serialized status owner: a late result cannot win between
+                // a generation check and the final status write.
+                status.lock().unwrap().complete(request.generation, result);
             }
         }).map_err(|e| format!("Could not start UIA thread: {e}"))?;
-        Ok(Self { sender, generation, telemetry })
+        Ok(Self { sender, telemetry })
     }
 
     pub fn capture_hotkey(&self, cursor: Result<(i32, i32), String>) {
-        // Even denied requests invalidate previous in-flight captures.
-        let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
-        self.telemetry.selection_units.store(0, Ordering::Release);
-        self.telemetry.state.store(CaptureState::Queued as u8, Ordering::Release);
+        // Each new hotkey (even rejected) invalidates older requests.
+        let generation = self.telemetry.lock().unwrap().next_request();
         let source = match cursor {
             Ok(point) => SourceSnapshot::at_hotkey(point),
             Err(_) => Err(CaptureDenied::UnverifiableSource),
@@ -224,38 +213,35 @@ impl CaptureCoordinator {
         match source {
             Ok(source) => match self.sender.try_send(Request { generation, source }) {
                 Ok(()) => {},
-                Err(TrySendError::Full(_)) => self.set_if_current(generation, CaptureState::Busy),
-                Err(TrySendError::Disconnected(_)) => self.set_if_current(generation, CaptureState::ProviderFailure),
+                Err(TrySendError::Full(_)) => self.set_if_current(generation, CaptureDenied::Busy),
+                Err(TrySendError::Disconnected(_)) => self.set_if_current(generation, CaptureDenied::ProviderError),
             },
-            Err(err) => self.set_if_current(generation, state_for_error(err)),
+            Err(err) => self.set_if_current(generation, err),
         }
     }
 
-    fn set_if_current(&self, generation: u64, state: CaptureState) {
-        if is_current(&self.generation, generation) {
-            self.telemetry.state.store(state as u8, Ordering::Release);
-        }
+    fn set_if_current(&self, generation: u64, error: CaptureDenied) {
+        self.telemetry.lock().unwrap().complete(generation, Err(error));
     }
 
     pub fn status(&self) -> CaptureStatus {
+        let state = self.telemetry.lock().unwrap();
         CaptureStatus {
-            state: CaptureState::from_u8(self.telemetry.state.load(Ordering::Acquire)),
-            selection_units: self.telemetry.selection_units.load(Ordering::Acquire),
-            verified_count: self.telemetry.verified_count.load(Ordering::Relaxed),
-            generation: self.generation.load(Ordering::Acquire),
+            state: state.state,
+            selection_units: state.selection_units,
+            verified_count: state.verified_count,
+            generation: state.generation,
         }
     }
 
     pub fn invalidate(&self) {
-        self.generation.fetch_add(1, Ordering::AcqRel);
-        self.telemetry.selection_units.store(0, Ordering::Release);
-        self.telemetry.state.store(CaptureState::Idle as u8, Ordering::Release);
+        let mut state = self.telemetry.lock().unwrap();
+        state.generation = state.generation.wrapping_add(1);
+        state.selection_units = 0;
+        state.state = CaptureState::Idle;
     }
 }
 
-fn is_current(counter: &AtomicU64, generation: u64) -> bool {
-    counter.load(Ordering::Acquire) == generation
-}
 fn state_for_error(error: CaptureDenied) -> CaptureState {
     match error {
         CaptureDenied::SelectionUnavailable => CaptureState::Empty,
@@ -327,17 +313,26 @@ fn read_selection(automation: &IUIAutomation, source: &SourceSnapshot) -> Result
 mod tests {
     use super::*;
     #[test]
-    fn stale_generation_cannot_take_result_ownership() {
-        let generation = AtomicU64::new(1);
-        assert!(is_current(&generation, 1));
-        generation.store(2, Ordering::Release);
-        assert!(!is_current(&generation, 1));
-        assert!(is_current(&generation, 2));
+    fn stale_selection_cannot_override_latest_result() {
+        let mut telemetry = Telemetry::default();
+        let first = telemetry.next_request();
+        let second = telemetry.next_request();
+        telemetry.complete(first, Ok("old".into()));
+        assert_eq!(telemetry.state, CaptureState::Queued);
+        telemetry.complete(second, Ok("new".into()));
+        assert_eq!(telemetry.state, CaptureState::Verified);
+        assert_eq!(telemetry.selection_units, 3);
+        assert_eq!(telemetry.verified_count, 1);
     }
     #[test]
-    fn capture_state_is_closed_over_untrusted_codes() {
-        assert_eq!(CaptureState::from_u8(255), CaptureState::Idle);
+    fn denied_newer_request_cancels_prior_success() {
+        let mut telemetry = Telemetry::default();
+        let first = telemetry.next_request();
+        let second = telemetry.next_request();
+        telemetry.complete(second, Err(CaptureDenied::UnverifiableSource));
+        telemetry.complete(first, Ok("late".into()));
+        assert_eq!(telemetry.state, CaptureState::Denied);
+        assert_eq!(telemetry.verified_count, 0);
         assert_eq!(state_for_error(CaptureDenied::PasswordField), CaptureState::Denied);
-        assert_eq!(state_for_error(CaptureDenied::SelectionUnavailable), CaptureState::Empty);
     }
 }
