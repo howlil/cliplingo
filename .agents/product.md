@@ -127,3 +127,28 @@ Cloud accounts/sync, chat assistant, translation history and usage tracking by d
 ## 9. Product change policy
 
 A proposed feature must trace to the reading job and its observable proof. If it adds attention, idle work, privacy risk, or a new window without strengthening the job, defer it. Preserve `DESIGN.md` as the accepted visual baseline; update product behavior here before architecture.
+
+## M3 product acceptance — Manual region OCR
+
+When selected text/hover cannot access an image or canvas, the user can
+explicitly choose **Capture screen text** in the system tray. A temporary
+overlay lets the user drag a rectangular portion of the desktop; Escape or
+right-click cancels without translation. A successfully chosen region is
+read locally using an optional CPU OCR backend and passed to the same EN→ID
+translator and target-text-only popup. The popup anchors to the frozen
+drag-release cursor. No full-screen background scanning, clipboard
+interception, image history or network text upload is introduced.
+
+Additional acceptance traces:
+- Given OCR is unavailable, selecting OCR shows actionable status in Settings
+  and does not display a fake success popup.
+- Given no meaningful region/recognizable text, there is no result popup.
+- Given a huge rectangle, reject before allocating a screenshot; ROI is capped
+  at 12 megapixels.
+- Given selection cancellation, capture buffers and the overlay do not persist.
+- Given a failed OCR request and a subsequent valid hotkey, only the latest
+  generation can update the popup.
+- Given a protected/secure desktop, do not attempt to bypass capture restrictions.
+
+OCR accuracy on photographed text, multi-monitor DPI, accessibility of the
+manual selector and production pack installation remain **unverified**.

@@ -1,0 +1,37 @@
+name: M3 optional native Tesseract OCR build
+on:
+  pull_request:
+    paths:
+      - 'src/ocr.cpp'
+      - 'src/region_selector.*'
+      - 'src/region_geometry.h'
+      - 'CMakeLists.txt'
+      - '.github/workflows/ocr-native.yml'
+  workflow_dispatch:
+jobs:
+  ocr-native:
+    runs-on: windows-2022
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tesseract and Leptonica with vcpkg
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git clone --quiet --depth 1 https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP/vcpkg"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:RUNNER_TEMP/vcpkg/bootstrap-vcpkg.bat" -disableMetrics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:RUNNER_TEMP/vcpkg/vcpkg.exe" install tesseract:x64-windows --clean-after-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Compile and link actual OCR implementation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = "$env:RUNNER_TEMP/vcpkg/scripts/buildsystems/vcpkg.cmake"
+          cmake -S . -B build-ocr -A x64 "-DCMAKE_TOOLCHAIN_FILE=$toolchain" -DCLIPLINGO_HOST_SMOKE=ON -DCLIPLINGO_WITH_TESSERACT=ON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-ocr --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-ocr -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

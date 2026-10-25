@@ -8,7 +8,7 @@
 enum class CaptureScope : std::uint32_t {
   SelectionOnly = 0, Word = 1, Sentence = 2, Paragraph = 3
 };
-enum class Failure { None, NoSelection, Unsupported, TooLong, CaptureFailed, ModelMissing, ModelInvalid, TranslationFailed };
+enum class Failure { None, NoSelection, Unsupported, TooLong, CaptureFailed, ModelMissing, ModelInvalid, TranslationFailed, OcrUnavailable };
 struct CaptureResult {
   Failure failure{Failure::None};
   std::wstring text;
@@ -19,7 +19,10 @@ struct TranslationResult {
   std::wstring text;
   explicit operator bool() const { return failure == Failure::None && !text.empty(); }
 };
+enum class RequestKind : std::uint8_t { Text, ManualOcr };
 struct Request {
+  RequestKind kind{RequestKind::Text};
+  RECT region{}; // physical virtual-screen coordinates; manual OCR only
   std::uint64_t generation{0};
   HWND foreground{nullptr};
   POINT cursor{};  // physical virtual-screen pixels captured at hotkey time
@@ -41,6 +44,9 @@ struct ModelInstallResult {
 };
 bool verify_model_pack(const std::filesystem::path& folder);
 ModelInstallResult install_model_pack(const std::filesystem::path& source);
+bool ocr_available();
+CaptureResult capture_ocr_region(RECT selected);
+CaptureResult capture_ocr_isolated(RECT selected);
 CaptureResult capture_selected_text(HWND expected_foreground);
 CaptureResult capture_hover_text(HWND expected_foreground, POINT cursor, CaptureScope scope);
 CaptureResult capture_with_hover(HWND expected_foreground, POINT cursor, CaptureScope scope);
