@@ -1,0 +1,25 @@
+name: F0 Windows compile and unit checks
+on:
+  pull_request:
+  push:
+    branches: [master]
+concurrency:
+  group: f0-windows-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Rust format (first scaffold; report diff separately)
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all
+      - name: Windows compile and unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Check production Windows build code paths
+        run: cargo check --manifest-path src-tauri/Cargo.toml --release

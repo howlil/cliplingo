@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "settings",
+  "description": "Only the settings window can access base Tauri core capabilities. No capture or filesystem plugin is exposed.",
+  "windows": [
+    "settings"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}
