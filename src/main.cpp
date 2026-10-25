@@ -15,6 +15,8 @@
 #include <memory>
 #include <string>
 
+int run_benchmark_if_requested(); // headless diagnostics; no resident workers
+
 using Microsoft::WRL::ComPtr;
 namespace {
 constexpr UINT kTrayMessage = WM_APP + 1;
@@ -687,6 +689,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
   int child_exit = 1;
   if (maybe_run_capture_helper(child_exit)) return child_exit;
   if (const int diagnostic = native_model_probe(); diagnostic >= 0) return diagnostic;
+  if (const int performance = run_benchmark_if_requested(); performance >= 0) return performance;
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   if (FAILED(com)) return 1;
