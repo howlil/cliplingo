@@ -36,10 +36,12 @@ constexpr int kSurfaceCombo = 109;
 constexpr int kPreviewPopup = 110;
 constexpr int kHoverEnabled = 111;
 constexpr int kHoverScope = 112;
+constexpr int kClipboardEnabled = 113;
 constexpr int kTrayPause = 201;
 constexpr int kTraySettings = 202;
 constexpr int kTrayQuit = 203;
 constexpr int kTrayCapture = 204;
+constexpr int kTrayClipboard = 205;
 constexpr UINT kDismissTimer = 1;
 
 struct JobResult {
@@ -149,6 +151,8 @@ public:
       prefs_.hover_enabled = GetPrivateProfileIntW(L"capture", L"hover_enabled", 1, cfg.c_str()) != 0;
       prefs_.hover_scope = std::clamp(static_cast<int>(GetPrivateProfileIntW(
           L"capture", L"hover_scope", 0, cfg.c_str())), 0, 2);
+      prefs_.clipboard_enabled = GetPrivateProfileIntW(L"capture", L"clipboard_enabled",
+                                                     0, cfg.c_str()) == 1;
     }
     WNDCLASSEXW wc{sizeof(wc)};
     wc.hInstance = instance;
@@ -268,7 +272,8 @@ private:
           case kTraySettings: ShowSettings(); break;
           case kTrayPause: paused_ = !paused_; ++generation_; popup_.Hide(); RefreshSettings(); break;
           case kTrayQuit: PostQuitMessage(0); break;
-          case kTrayCapture: ShowSettings(1); break; // OCR is intentionally not implemented in M1
+          case kTrayCapture: ShowSettings(1); break; // OCR is independently pending in M3
+          case kTrayClipboard: BeginClipboardTranslation(); break;
         }
         return 0;
       }
@@ -291,7 +296,11 @@ private:
     HMENU menu = CreatePopupMenu();
     if (!menu) return;
     AppendMenuW(menu, MF_STRING, kTrayPause, paused_ ? L"Resume" : L"Pause");
-    AppendMenuW(menu, MF_STRING | MF_GRAYED, kTrayCapture, L"Capture screen text (later milestone)");
+    AppendMenuW(menu, MF_STRING | MF_GRAYED, kTrayCapture, L"Capture screen text (OCR in M3)");
+    AppendMenuW(menu, MF_STRING | ((paused_ || !prefs_.clipboard_enabled) ? MF_GRAYED : 0),
+                kTrayClipboard, prefs_.clipboard_enabled ?
+                L"Translate clipboard (explicit)" :
+                L"Translate clipboard (enable in Settings)");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kTraySettings, L"Settings...");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -302,6 +311,30 @@ private:
     PostMessageW(host_, WM_NULL, 0, 0);
     DestroyMenu(menu);
   }
+  void BeginClipboardTranslation() {
+    // The user must explicitly opt in AND select this tray action. Never send
+    // Ctrl+C, alter clipboard content or silently fallback to stale text.
+    if (paused_ || !prefs_.clipboard_enabled) return;
+    popup_.Hide();
+    KillTimer(host_, kDismissTimer);
+    Request request{};
+    request.kind = CaptureKind::ExplicitClipboard;
+    request.generation = ++generation_;
+    request.clipboard_sequence = GetClipboardSequenceNumber();
+    GetCursorPos(&request.cursor);
+    if (!request.clipboard_sequence) {
+      failure_ = Failure::ClipboardUnavailable;
+      RefreshSettings();
+      return;
+    }
+    {
+      std::lock_guard lock(jobs_mutex_);
+      pending_ = request;
+      worker_prefs_ = prefs_;
+    }
+    jobs_cv_.notify_one();
+  }
+
   void BeginTranslation() {
     if (paused_ || !shortcut_registered_) return;
     popup_.Hide();
@@ -340,7 +373,11 @@ private:
       result->cursor = current.cursor;
       const auto scope = !settings.hover_enabled ? CaptureScope::SelectionOnly :
           static_cast<CaptureScope>(settings.hover_scope + 1);
-      const auto captured = capture_isolated(current.foreground, current.cursor, scope);
+      const auto captured = current.kind == CaptureKind::ExplicitClipboard ?
+          (settings.clipboard_enabled ?
+              capture_clipboard_isolated(current.clipboard_sequence) :
+              CaptureResult{Failure::ClipboardUnavailable, {}}) :
+          capture_isolated(current.foreground, current.cursor, scope);
       result->failure = captured.failure;
       if (captured) {
         // A newer hotkey may have arrived while the bounded UIA helper ran.
@@ -376,6 +413,8 @@ private:
     WritePrivateProfileStringW(L"appearance", L"surface", std::to_wstring(prefs_.popup_style).c_str(), path.c_str());
     WritePrivateProfileStringW(L"capture", L"hover_enabled", prefs_.hover_enabled ? L"1" : L"0", path.c_str());
     WritePrivateProfileStringW(L"capture", L"hover_scope", std::to_wstring(prefs_.hover_scope).c_str(), path.c_str());
+    WritePrivateProfileStringW(L"capture", L"clipboard_enabled",
+                              prefs_.clipboard_enabled ? L"1" : L"0", path.c_str());
   }
 
   static LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -451,6 +490,20 @@ private:
       if (id == kHoverScope && HIWORD(wp) == CBN_SELCHANGE) {
         const int scope = static_cast<int>(SendMessageW(reinterpret_cast<HWND>(lp), CB_GETCURSEL, 0, 0));
         if (scope >= 0 && scope <= 2) { prefs_.hover_scope = scope; SaveSettings(); }
+        return 0;
+      }
+      if (id == kClipboardEnabled && HIWORD(wp) == BN_CLICKED) {
+        const bool enabled = SendMessageW(reinterpret_cast<HWND>(lp),
+                                          BM_GETCHECK, 0, 0) == BST_CHECKED;
+        prefs_.clipboard_enabled = enabled;
+        ++generation_; // invalidate in-flight display after privacy change
+        {
+          std::lock_guard lock(jobs_mutex_);
+          pending_.reset();
+        }
+        popup_.Hide();
+        SaveSettings();
+        DrawSettingsSection();
         return 0;
       }
       if (id == kPreviewPopup && HIWORD(wp) == BN_CLICKED) {
@@ -559,7 +612,15 @@ private:
           EnableWindow(combo, prefs_.hover_enabled);
         }
         Label(L"No background tracking. Hover is read only after Ctrl+Alt+T.", 251);
-        Label(L"Clipboard fallback and OCR are intentionally excluded from M2.", 304);
+        Label(L"Clipboard is never read automatically after selection failure.", 304);
+        {
+          const auto check = Control(L"BUTTON", L"Allow explicit clipboard translation from tray",
+              WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+              246, 356, 440, 30, kClipboardEnabled);
+          SendMessageW(check, BM_SETCHECK,
+                       prefs_.clipboard_enabled ? BST_CHECKED : BST_UNCHECKED, 0);
+        }
+        Label(L"Read-only; no Ctrl+C, no clipboard replacement or history.", 403);
         break;
       case 2:
         Label(L"Translation Popup", 32);
