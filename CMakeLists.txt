@@ -30,6 +30,7 @@ else()
 endif()
 add_executable(${CLIPLINGO_TARGET} WIN32
   src/main.cpp
+  src/model_benchmark.cpp
   src/capture.cpp
   src/hover.cpp
   src/capture_helper.cpp
@@ -41,7 +42,7 @@ target_include_directories(${CLIPLINGO_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DI
 target_compile_definitions(${CLIPLINGO_TARGET} PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(${CLIPLINGO_TARGET} PRIVATE /W4 /permissive- /EHsc /utf-8 /sdl)
 target_link_libraries(${CLIPLINGO_TARGET} PRIVATE
-  ole32 oleaut32 uiautomationcore user32 shell32 shlwapi comctl32 d2d1 dwrite dwmapi shcore bcrypt)
+  ole32 oleaut32 uiautomationcore user32 shell32 shlwapi comctl32 d2d1 dwrite dwmapi shcore bcrypt psapi)
 if(NOT CLIPLINGO_HOST_SMOKE)
   target_link_libraries(${CLIPLINGO_TARGET} PRIVATE CTranslate2::ctranslate2 sentencepiece::sentencepiece)
 endif()
@@ -59,4 +60,8 @@ if(CLIPLINGO_HOST_SMOKE)
   enable_testing()
   add_test(NAME model_pack_integrity COMMAND ClipLingoModelPackTest)
   add_test(NAME scope_text COMMAND ClipLingoScopeTextTest)
+  add_executable(ClipLingoBenchmarkStatsTest tests/benchmark_stats_test.cpp)
+  target_include_directories(ClipLingoBenchmarkStatsTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_compile_options(ClipLingoBenchmarkStatsTest PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+  add_test(NAME benchmark_stats COMMAND ClipLingoBenchmarkStatsTest)
 endif()
