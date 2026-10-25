@@ -78,7 +78,7 @@ Errors classified as silent (no selection), recoverable/actionable (model missin
 - OCR backend and packaging identity requirements.
 - Supported target apps, privileged/elevated app limitations, accessibility variants.
 - Numeric latency/RAM thresholds: define only after representative benchmarks; don't invent performance claims.
-- Full C++ migration cost if an existing Rust/Tauri implementation is later brought into this repo.
+- Rust-first native Windows implementation is the **accepted future engineering direction**, but current functionality is implemented in C++/CMake. Cross-language migration must preserve all listed acceptance behavior; native Windows and model integration remain verification gates. See [engineering contract](engineering-design.md) and [ADR-0001](decisions/0001-rust-first-native-windows.md).
 
 ## 6. Smallest coherent release scope
 
@@ -122,7 +122,7 @@ Cloud accounts/sync, chat assistant, translation history and usage tracking by d
 - Evaluate manually triggered OCR viability on supported Windows versions *before* promising a specific OCR implementation.
 - Validate one-word disambiguation using optional local context without changing displayed selection.
 - Validate text-only popup with screen readers and keyboard-only workflows; no extra visual controls added.
-- Compare native Win32 C++ and existing host approaches on actual Windows hardware before claiming measured superiority.
+- Compare the existing C++ Windows baseline with the Rust Windows implementation on representative hardware before claiming any performance, memory, crash-safety or packaging improvement.
 
 ## 9. Product change policy
 
