@@ -59,13 +59,18 @@ fn open_settings(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 fn dispatch_preview(app: tauri::AppHandle) {
+    // Snapshot cursor on the triggering thread, before scheduling the HWND draw.
+    let anchor = match native_popup::cursor_snapshot() {
+        Ok(point) => point,
+        Err(err) => { eprintln!("Unable to snapshot preview cursor: {err}"); return; }
+    };
     let handle = app.clone();
     // HWND and all native GDI resources must be used from the Tauri UI thread.
     if let Err(err) = app.run_on_main_thread(move || {
         let state = handle.state::<ShellState>();
         match state.popup.lock() {
             Ok(popup) => {
-                if let Err(err) = popup.show_preview() {
+                if let Err(err) = popup.show_preview_at(anchor) {
                     eprintln!("ClipLingo F0 native preview error: {err}");
                 } else {
                     state.preview_count.fetch_add(1, Ordering::Relaxed);
