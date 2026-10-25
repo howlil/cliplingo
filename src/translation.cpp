@@ -98,6 +98,7 @@ std::wstring failure_label(Failure failure) {
     case Failure::ModelMissing: return L"EN-ID model is not installed. Choose a converted model folder in Settings.";
     case Failure::ModelInvalid: return L"Model/tokenizer files are invalid";
     case Failure::TranslationFailed: return L"Offline translation failed";
+    case Failure::ExcludedSource: return L"Capture blocked: app excluded or process identity unavailable";
   }
   return L"Unknown failure";
 }
