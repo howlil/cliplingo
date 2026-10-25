@@ -309,6 +309,10 @@ private:
     AppendMenuW(menu, MF_STRING, kTrayPause, paused_ ? L"Resume" : L"Pause");
     AppendMenuW(menu, MF_STRING | (paused_ ? MF_GRAYED : 0), kTrayCapture,
                 L"Capture screen text (select area)...");
+    AppendMenuW(menu, MF_STRING | ((paused_ || !prefs_.clipboard_enabled) ? MF_GRAYED : 0),
+                kTrayClipboard, prefs_.clipboard_enabled ?
+                L"Translate clipboard (explicit)" :
+                L"Translate clipboard (enable in Settings)");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kTraySettings, L"Settings...");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
