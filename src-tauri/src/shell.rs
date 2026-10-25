@@ -129,7 +129,7 @@ pub fn run() {
                         if let Err(err) = popup.show_text_at(message.anchor, &message.target) {
                             eprintln!("Unable to show native target text: {err}");
                         }
-                    }
+                    };
                 });
             });
             let translator = Arc::new(TranslationEngine::start(on_translation).map_err(std::io::Error::other)?);
