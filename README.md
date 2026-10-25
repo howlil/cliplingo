@@ -51,7 +51,7 @@ Default `cargo run` remains a lightweight shell build **without CTranslate2**, a
 Developer machine (one-time model preparation only):
 
 ```powershell
-python -m pip install ctranslate2==4.8.3 "transformers>=4.49,<5" huggingface_hub sentencepiece torch
+python -m pip install ctranslate2==4.8.3 "transformers>=4.49,<5" "huggingface_hub>=0.30,<1" "hf_xet>=1,<2" sentencepiece torch
 python scripts/prepare-en-id-pack.py --output "$env:LOCALAPPDATA\ClipLingo\models\en-id"
 ```
 
@@ -60,7 +60,13 @@ The script converts the Apache-2.0 [Helsinki-NLP OPUS-MT EN→ID model](https://
 Build with real CPU backend:
 
 ```powershell
+$env:RUSTFLAGS = "-C target-feature=+crt-static"
 cargo run --manifest-path src-tauri/Cargo.toml --features offline-ct2
 ```
 
 Then select English text in a supported Windows editor and press `Ctrl+Alt+T`. The native popup is shown only if foreground policy, model validation, inference and latest-generation checks succeed. No text is sent online. The CPU model is lazy-loaded on first use, uses at most two engine threads per replica and is evicted after roughly 90 seconds idle. Note: model generation/performance on a real Windows desktop and screen-reader/long-text popup behavior still require acceptance testing; Windows Cargo checks cannot prove those behaviors.
+
+
+### Native F2 verification
+
+A [Windows CI run](https://github.com/howlil/cliplingo/actions/runs/40243341975) successfully built CTranslate2, converted a pinned OPUS-MT EN→ID model, linked the native executable, loaded the model, and produced a nonempty translated output from a fixed test sentence. [Default Rust tests](https://github.com/howlil/cliplingo/actions/runs/40243341796) also passed. `RUSTFLAGS=-C target-feature=+crt-static` is **required for the Windows native CT2/CXX build**, since upstream CTranslate2 uses the static MSVC C runtime. This is headless inference proof; desktop focus, UIA provider compatibility, model quality, latency/RAM and release packaging remain open acceptance gates. See [.agents/f2-acceptance.md](.agents/f2-acceptance.md).
