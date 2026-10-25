@@ -152,3 +152,87 @@ Additional acceptance traces:
 
 OCR accuracy on photographed text, multi-monitor DPI, accessibility of the
 manual selector and production pack installation remain **unverified**.
+
+## M4 — Privacy and excluded application behavior
+
+Purpose: users must be able to prevent ClipLingo from reading text in an
+explicitly excluded Windows application. The check happens **before**
+selection/hover capture, not after the translation result exists.
+
+**Behavior proof:** Settings → Privacy accepts one exact executable basename
+per line (e.g. `vault.exe`). The list is deduplicated and saved locally.
+On a user hotkey, ClipLingo resolves the foreground process identity once;
+a matching basename, the app's own HWND, an unknown process identity or an
+invalid/corrupted policy denies capture and produces no result popup. The
+diagnostic state is available in Settings. An unexcluded, resolvable process
+continues through the existing M1/M2 selection-first path without extra input
+polling, network traffic or raw-text logging. Changes invalidate pending
+requests so a stale result cannot appear after a privacy update.
+
+This list is **not a security sandbox**, and does not grant access to
+elevated/protected applications. Executable basename matching intentionally
+affects all installations with the same name; users cannot enter paths or
+wildcards. If the process cannot be identified, deny rather than guess.
+
+Acceptance: blocked app, case-insensitive match, corrupted saved list,
+unqueryable process, settings persistence, and repeated hotkeys must behave
+without reading restricted source text. Live-Windows acceptance is pending.
+
+## M5 — Explicit clipboard translation, opt-in
+
+The clipboard fallback is **explicit**, not a hidden `Ctrl+C` simulation.
+To protect clipboard ownership and avoid translating stale unrelated text,
+the feature is disabled by default in Settings → Text Capture. When enabled,
+the system tray offers **Translate clipboard (explicit)**. Choosing it
+captures only `CF_UNICODETEXT` currently on the clipboard and passes that
+text to the same local EN→ID engine and target-only popup, anchored to the
+trigger-time cursor. The selection/hover hotkey remains unchanged.
+
+Behavior proofs:
+- Off by default; ordinary selection/hover NEVER reads clipboard.
+- One explicit tray click generates at most one read (no monitoring/listener).
+- Clipboard memory is read-only; never cleared, overwritten or re-copied,
+  and no keystrokes or clipboard APIs that mutate content are invoked.
+- Clipboard busy, unsupported format, empty/whitespace, changed content
+  or text exceeding 8192 UTF-16 units cannot create a translation popup.
+- Turning the setting off invalidates all previous pending display results.
+- Selected text never gets silently replaced by unrelated old clipboard data.
+
+Clipboard content has **no reliable application-of-origin identity**.
+This explicit manual action is not equivalent to source selection and may
+contain sensitive data from any program. Privacy explanations must state
+this directly; when the separate M4 app-exclusion work is integrated, its
+policy must not be misrepresented as protecting arbitrary historical
+clipboard content. No clipboard history, network upload, logging or account
+is introduced.
+
+Live Win11 clipboard owner/delayed-rendering and UI validation remain pending.
+
+## M6 — Native performance proof (benchmark milestone)
+
+ClipLingo's low-latency/low-resource positioning needs repeatable evidence, not
+guessed thresholds. M6 adds a diagnostic command that runs the **same native
+CTranslate2 EN→ID inference code as the app** against public, fixed test inputs
+and saves only numerical timings and memory counters. No selected text,
+clipboard text, OCR images, or user file paths are included in output.
+
+Success proof: a Windows build accepting
+`--benchmark-model <validated-model-pack> <report.json> [iterations]`
+checks model loading and generates a versioned JSON report containing:
+cold translation time (includes model load), 3 warm workloads
+(word/sentence/paragraph) with p50/p95/p99, private bytes/working set,
+peak working set and process CPU time. Inputs are fixed literals; there is
+no telemetry, automatic network request or background service.
+
+Fail safely: missing/invalid model, invalid iteration count, missing OS
+counters, translation failure and report write errors return a nonzero exit
+code rather than generating fabricated numbers. Iterations are bounded
+(5–200 per workload). The command exits without starting the tray/UIA
+helper/popup and unloads the translation model.
+
+Caution: one-off model benchmark does **not** measure user-visible
+hotkey-to-result (UIA helper startup and popup rendering), energy, idle tray
+RAM, 8-hour soak, or model quality across natural reading tasks. Those remain
+separate native Windows acceptance gates. No fixed latency/RAM SLO is claimed
+without representative device and workload measurements.
+

@@ -15,6 +15,9 @@ std::wstring failure_label(Failure failure) {
     case Failure::ModelInvalid: return L"Model invalid";
     case Failure::TranslationFailed: return L"Translation failed";
     case Failure::OcrUnavailable: return L"OCR package unavailable";
+    case Failure::ExcludedSource: return L"Capture denied by privacy exclusion policy";
+    case Failure::ClipboardUnavailable: return L"Clipboard unavailable or busy";
+    case Failure::ClipboardChanged: return L"Clipboard changed before capture";
   }
   return L"Unknown";
 }

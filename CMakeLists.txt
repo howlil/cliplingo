@@ -32,6 +32,9 @@ endif()
 add_executable(${CLIPLINGO_TARGET} WIN32
   src/main.cpp
   src/capture.cpp
+  src/capture_policy.cpp
+  src/clipboard.cpp
+  src/model_benchmark.cpp
   src/hover.cpp
   src/capture_helper.cpp
   src/model_package.cpp
@@ -44,7 +47,7 @@ target_include_directories(${CLIPLINGO_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DI
 target_compile_definitions(${CLIPLINGO_TARGET} PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(${CLIPLINGO_TARGET} PRIVATE /W4 /permissive- /EHsc /utf-8 /sdl)
 target_link_libraries(${CLIPLINGO_TARGET} PRIVATE
-  ole32 oleaut32 uiautomationcore user32 shell32 shlwapi comctl32 d2d1 dwrite dwmapi shcore bcrypt gdi32)
+  ole32 oleaut32 uiautomationcore user32 shell32 shlwapi comctl32 d2d1 dwrite dwmapi shcore bcrypt gdi32 psapi)
 if(NOT CLIPLINGO_HOST_SMOKE)
   target_link_libraries(${CLIPLINGO_TARGET} PRIVATE CTranslate2::ctranslate2 sentencepiece::sentencepiece)
 endif()
@@ -74,4 +77,17 @@ if(CLIPLINGO_HOST_SMOKE)
   target_include_directories(ClipLingoRegionTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_compile_options(ClipLingoRegionTest PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
   add_test(NAME region_geometry COMMAND ClipLingoRegionTest)
+  add_executable(ClipLingoCapturePolicyTest tests/capture_policy_test.cpp)
+  target_include_directories(ClipLingoCapturePolicyTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_compile_definitions(ClipLingoCapturePolicyTest PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+  target_compile_options(ClipLingoCapturePolicyTest PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+  add_test(NAME capture_policy COMMAND ClipLingoCapturePolicyTest)
+  add_executable(ClipLingoClipboardTextTest tests/clipboard_text_test.cpp)
+  target_include_directories(ClipLingoClipboardTextTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_compile_options(ClipLingoClipboardTextTest PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+  add_test(NAME clipboard_text COMMAND ClipLingoClipboardTextTest)
+  add_executable(ClipLingoBenchmarkStatsTest tests/benchmark_stats_test.cpp)
+  target_include_directories(ClipLingoBenchmarkStatsTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_compile_options(ClipLingoBenchmarkStatsTest PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+  add_test(NAME benchmark_stats COMMAND ClipLingoBenchmarkStatsTest)
 endif()

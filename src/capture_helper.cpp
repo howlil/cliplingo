@@ -7,9 +7,10 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <exception>
 
 namespace {
-constexpr std::uint32_t kMagic = 0x434C5533; // CLU3, versioned UIA/OCR IPC
+constexpr std::uint32_t kMagic = 0x434C5536; // CLU6, UIA / OCR / explicit clipboard IPC
 constexpr DWORD kCaptureTimeoutMs = 1800;
 constexpr DWORD kOcrTimeoutMs = 8000;
 struct SharedCapture {
@@ -18,7 +19,8 @@ struct SharedCapture {
   std::uint32_t length;
   POINT cursor{};
   std::uint32_t scope{};
-  std::uint32_t method{}; // 0 UIA selection/hover, 1 manual region OCR
+  std::uint32_t method{}; // 0 UIA, 1 manual OCR, 2 explicit clipboard
+  DWORD clipboard_sequence{};
   RECT region{};
   wchar_t text[8193];
 };
@@ -49,8 +51,9 @@ struct ChildProcess {
 // This is intentionally per-request (bounded resource lifetime). Benchmark before
 // considering a persistent helper: never replace a safety property speculatively.
 CaptureResult capture_in_child(HWND expected_foreground, POINT cursor,
-                               CaptureScope scope, RECT region, bool is_ocr) {
-  if (!is_ocr && !expected_foreground) return {Failure::NoSelection, {}};
+                               CaptureScope scope, RECT region, std::uint32_t method,
+                               DWORD clipboard_sequence) {
+  if (method == 0 && !expected_foreground) return {Failure::NoSelection, {}};
   SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
   UniqueHandle mapping(CreateFileMappingW(INVALID_HANDLE_VALUE, &security, PAGE_READWRITE,
                                           0, sizeof(SharedCapture), nullptr));
@@ -60,8 +63,9 @@ CaptureResult capture_in_child(HWND expected_foreground, POINT cursor,
   *shared.ptr = SharedCapture{};
   shared.ptr->cursor = cursor;
   shared.ptr->scope = static_cast<std::uint32_t>(scope);
-  shared.ptr->method = is_ocr ? 1u : 0u;
+  shared.ptr->method = method;
   shared.ptr->region = region;
+  shared.ptr->clipboard_sequence = clipboard_sequence;
 
   wchar_t executable[MAX_PATH]{};
   const DWORD length = GetModuleFileNameW(nullptr, executable, MAX_PATH);
@@ -94,7 +98,7 @@ CaptureResult capture_in_child(HWND expected_foreground, POINT cursor,
       &startup.StartupInfo, &child.info))
     return {Failure::CaptureFailed, {}};
   const DWORD waited = WaitForSingleObject(child.info.hProcess,
-                                            is_ocr ? kOcrTimeoutMs : kCaptureTimeoutMs);
+                                            method == 1 ? kOcrTimeoutMs : kCaptureTimeoutMs);
   if (waited != WAIT_OBJECT_0) {
     TerminateProcess(child.info.hProcess, ERROR_TIMEOUT);
     // Native/driver calls can delay even a requested process termination.
@@ -105,7 +109,7 @@ CaptureResult capture_in_child(HWND expected_foreground, POINT cursor,
   DWORD exit_code = 0;
   if (!GetExitCodeProcess(child.info.hProcess, &exit_code) || exit_code != 0 ||
       shared.ptr->magic != kMagic || shared.ptr->length > 8192 ||
-      shared.ptr->failure > static_cast<std::uint32_t>(Failure::OcrUnavailable))
+      shared.ptr->failure > static_cast<std::uint32_t>(Failure::ClipboardChanged))
     return {Failure::CaptureFailed, {}};
   const auto code = static_cast<Failure>(shared.ptr->failure);
   if (code != Failure::None) return {code, {}};
@@ -114,10 +118,14 @@ CaptureResult capture_in_child(HWND expected_foreground, POINT cursor,
 }
 
 CaptureResult capture_isolated(HWND foreground, POINT cursor, CaptureScope scope) {
-  return capture_in_child(foreground, cursor, scope, RECT{}, false);
+  return capture_in_child(foreground, cursor, scope, RECT{}, 0, 0);
 }
 CaptureResult capture_ocr_isolated(RECT region) {
-  return capture_in_child(nullptr, POINT{}, CaptureScope::SelectionOnly, region, true);
+  return capture_in_child(nullptr, POINT{}, CaptureScope::SelectionOnly, region, 1, 0);
+}
+CaptureResult capture_clipboard_isolated(DWORD sequence) {
+  if (!sequence) return {Failure::ClipboardUnavailable, {}};
+  return capture_in_child(nullptr, POINT{}, CaptureScope::SelectionOnly, RECT{}, 2, sequence);
 }
 
 // The helper MUST NOT instantiate the app, model, tray or popup. Only one COM MTA
@@ -135,18 +143,23 @@ bool maybe_run_capture_helper(int& exit_code) {
     const auto shared_handle = _wcstoui64(argv[3], &map_end, 10);
     if (*target_end == 0 && *map_end == 0 && shared_handle != 0) {
       MappedCapture shared(reinterpret_cast<HANDLE>(static_cast<std::uintptr_t>(shared_handle)));
-      if (shared.ptr && shared.ptr->method <= 1 &&
+      if (shared.ptr && shared.ptr->method <= 2 &&
           shared.ptr->scope <= static_cast<std::uint32_t>(CaptureScope::Paragraph) &&
-          (shared.ptr->method == 1 || target != 0)) {
-        const HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+          (shared.ptr->method != 0 || target != 0)) {
+        const bool clipboard = shared.ptr->method == 2;
+        const HRESULT hr = clipboard ? S_OK : CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         if (SUCCEEDED(hr)) {
           CaptureResult result;
           try {
-            result = shared.ptr->method == 1 ?
-                capture_ocr_region(shared.ptr->region) :
-                capture_with_hover(reinterpret_cast<HWND>(static_cast<std::uintptr_t>(target)),
-                                   shared.ptr->cursor,
-                                   static_cast<CaptureScope>(shared.ptr->scope));
+            if (clipboard) {
+              result = capture_clipboard_text(shared.ptr->clipboard_sequence);
+            } else if (shared.ptr->method == 1) {
+              result = capture_ocr_region(shared.ptr->region);
+            } else {
+              result = capture_with_hover(
+                  reinterpret_cast<HWND>(static_cast<std::uintptr_t>(target)),
+                  shared.ptr->cursor, static_cast<CaptureScope>(shared.ptr->scope));
+            }
           } catch (const std::exception&) {
             result = {Failure::CaptureFailed, {}};
           }
@@ -156,7 +169,7 @@ bool maybe_run_capture_helper(int& exit_code) {
             std::copy(result.text.begin(), result.text.end(), shared.ptr->text);
           }
           shared.ptr->magic = kMagic; // written LAST; parent checks after process exit
-          CoUninitialize();
+          if (!clipboard) CoUninitialize();
           exit_code = 0;
         }
       }

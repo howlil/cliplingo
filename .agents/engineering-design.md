@@ -240,3 +240,91 @@ and tessdata_fast `eng.traineddata`; enabled MSVC build; real text OCR on
 Windows desktop; mixed-DPI capture accuracy; privacy/protected content;
 keyboard-only and screen reader UX; raw working set/latency measurement.
 This build-time choice is not evidence that the fully packaged app is ready.
+
+## M4 — Privacy capture-policy boundary
+
+`capture_policy.h` owns only a validated, bounded executable-name list.
+`capture_policy.cpp` owns Win32 process identity lookup via
+`GetWindowThreadProcessId` and `QueryFullProcessImageNameW` with
+`PROCESS_QUERY_LIMITED_INFORMATION`. The source window is checked at the
+shortcut/coordinator boundary and again immediately before the isolated
+UIA helper. The check never runs as a background poll, never enumerates all
+processes and never persists executable paths or captured text.
+
+The `Preferences` snapshot contains a single authoritative serialized
+policy (max 32 names / 4096 characters). Invalid policy or inaccessible
+foreground-process identity fails closed. Saving a new policy invalidates
+in-flight presentation generations and queued requests. Active native capture
+calls already in progress may continue until their bounded timeout; do not
+claim retroactive cancellation.
+
+The user-facing settings design remains a single Privacy section. No service
+registry, policy engine, generic capture-provider abstraction, Windows
+administrative privilege, clipboard injection, or global mouse hooks are added.
+
+Follow-up when integrating M3: ensure the separately developed OCR tray
+entrypoint respects the policy if it operates on content from the currently
+foreground application; never merge two independent routes that disagree about
+privacy checks.
+
+## M5 — Clipboard read boundary (opt-in)
+
+`clipboard.cpp` exclusively owns a single Win32 `CF_UNICODETEXT` read using
+RAII for `OpenClipboard/CloseClipboard` and `GlobalLock/GlobalUnlock`.
+It bounds clipboard allocation inspection, copies at most 8192 UTF-16 units,
+rejects missing NUL and overlong data, and never calls
+`EmptyClipboard`, `SetClipboardData` or keyboard synthesis.
+`clipboard_text.h` is a small pure parser tested under Release.
+
+A read is allowed only after explicit user opt-in plus the dedicated tray
+command. Coordinator captures `GetClipboardSequenceNumber` at trigger time
+so changed clipboard content is not mistakenly translated later.
+`capture_helper.cpp` reuses the existing **short-lived isolated capture
+subprocess** with versioned `CLU5` shared memory to guard against delayed
+clipboard rendering or native application hangs. There is no permanent
+clipboard listener or extra resident worker.
+
+The authoritative preference is `Preferences::clipboard_enabled` in
+`main.cpp`, persisted to the local INI file, disabled by default.
+Turning it off advances the request generation and discards pending work.
+The UI thread never blocks waiting for `OpenClipboard`.
+
+Open evidence: actual Windows clipboard owner contention and delayed
+render behavior, foreground state while tray menu is open, mixed-DPI cursor
+anchoring, and integration with M3 CLU3 / M4 app exclusions.
+**Clipboard provenance cannot be inferred from `GetClipboardOwner`** and
+must not be claimed; source-app exclusions cover live app capture but not
+historically copied clipboard content.
+
+## M6 — Performance baseline instrumentation
+
+M6 introduces a **headless on-demand diagnostic**, not resident telemetry.
+`model_benchmark.cpp` calls the existing `translate_en_id` and
+`unload_translation_model` on one thread, times operations with
+`std::chrono::steady_clock`, collects native process memory with
+`GetProcessMemoryInfo` and CPU user+kernel time with `GetProcessTimes`.
+`benchmark_stats.h` owns only deterministic nearest-rank percentile math.
+
+The command has bounded iterations and uses fixed EN→ID test literals, with
+an explicit JSON output path. Report schema 1 excludes selected/user text,
+model path, clipboard and system identity. An incomplete report is written
+to `.partial` first, then published via Windows file replacement. An
+exception at the CLI boundary maps to a nonzero error code; model lifetime
+is managed by RAII.
+
+`main.cpp` routes the CLI before creating HWND, tray, background workers,
+mutex or global shortcut; ordinary application behavior is unchanged.
+`psapi` is a Windows native link dependency, not another service.
+
+Metric meanings: cold time is the first translator request including
+verification/load; warm distributions are per fixed input class, process CPU
+is the sum across its native threads, and private bytes/working set are
+snapshots (not a validated peak private allocation graph). Windows peak
+working set is measured separately. Do not compare this headless process's
+memory to the resident tray/GUI process as if they were identical.
+
+Acceptance: Win32/MSVC build, always-active math tests even in Release,
+real model benchmark invocation, verifiable JSON schema and resource
+measurement reproducibility on actual Windows hardware. Product-wide TTTR,
+idle wakeups, battery and E2E UIA/OCR runtime remain unverified.
+
