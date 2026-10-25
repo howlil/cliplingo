@@ -1,6 +1,6 @@
-# ClipLingo — Native Windows Selection & Hover Translation
+# ClipLingo — Native Windows Offline Translation
 
-Milestones: M1 merged to master; M2 hover extension on `feat/m2-hover-text-capture` · C++20 · Win32 · DirectWrite/Direct2D · UI Automation · CTranslate2 · SentencePiece.
+Milestones: M1–M2 merged; M3–M6 integrated via consolidated PR. Native Windows C++20 · DirectWrite/Direct2D · UI Automation · CTranslate2 · SentencePiece.
 
 ## What M1 actually implements
 
@@ -13,7 +13,7 @@ Milestones: M1 merged to master; M2 hover extension on `feat/m2-hover-text-captu
 - EN→ID model is prepared by a separate developer-side conversion tool and imported into `%LOCALAPPDATA%\ClipLingo\models`. SHA-256 file manifest validates source and staged content. Versioned rename activates pack atomically. Model stays warm between uses and can be unloaded after about two minutes idle.
 - No browser processes, network on translation path, account, OCR or clipboard hook. M2 adds shortcut-only hover fallback.
 
-## M2 — Hover fallback (branch: feat/m2-hover-text-capture)
+## M2 — Hover fallback (merged)
 
 When Ctrl+Alt+T is pressed, ClipLingo still translates a valid selection **exactly**.
 If the UI Automation selection is confirmed empty and hover fallback is enabled,
@@ -75,6 +75,84 @@ screen-reader workflow, OCR accuracy, idle RAM and translation latency.
 The CI job `M3 optional native Tesseract OCR build` validates compilation
 and links of the real C++ OCR library but cannot verify those user interactions
 in a headless runner.
+
+## M4 — Privacy: exclude specific Windows applications
+
+In Settings → **Privacy**, enter executable filenames (one per line), such as
+`vault.exe` or `password manager.exe`. Click **Save exclusions**. The policy
+persists locally, accepts at most 32 distinct names, and does not allow full
+paths or wildcards. Matching is case-insensitive. ClipLingo checks the
+foreground application's executable identity **on the shortcut** and again
+immediately before UIA capture. Excluded/unknown sources return a status in
+Settings and **never show a translation popup**. No background process
+enumeration, clipboard inspection, history or network request is added.
+
+Invalid/truncated policy files **fail closed**, rather than silently erasing
+privacy protections. Changing exclusions invalidates pending result UI;
+an already started native UIA call cannot be retroactively canceled, but its
+result cannot appear after the settings change.
+
+This is a privacy preference against unintended app capture, not a security
+sandbox or guarantee against malicious processes in the same Windows session.
+M3 OCR is integrated. With excluded apps configured, arbitrary screen-region OCR is disabled to avoid violating the exclusion policy.
+same policy to OCR's invoking application as well.
+
+## M5 — Explicit clipboard translation (opt-in)
+
+This is an **intentional manual action**, not automatic clipboard capture and
+not a simulated Ctrl+C. Enable **Settings → Text Capture → Allow explicit
+clipboard translation from tray** (disabled by default), then choose
+**ClipLingo tray → Translate clipboard (explicit)**. Only the current
+`CF_UNICODETEXT` format is read, at most 8192 UTF-16 units, on a bounded
+one-shot helper process. ClipLingo does not change clipboard ownership or
+contents, create history, or poll the clipboard. A sequence-number check
+rejects clipboard content that changed after the tray action.
+
+When valid, the text uses the existing local EN→ID CTranslate2 path and the
+same text-only native popup anchored at the trigger-time mouse position.
+When the clipboard is busy, empty, over limit, unavailable or changed, no
+result popup is shown; the error status can be read in Settings.
+
+**Privacy limitation:** ClipLingo cannot establish which application created
+historical clipboard content. Only enable the feature if you accept that the
+explicit command may translate text copied from other apps, including text
+you did not intend to process. Clipboard source identity remains unknowable; live app exclusions do not cover previously copied clipboard text.
+
+Native CI exercises bounded Unicode parsing; an interactive Windows desktop
+is still needed to test clipboard owner contention and delayed rendering.
+
+## M6 — Native performance baseline (headless)
+
+Build the real C++ application with the same **CTranslate2 + SentencePiece**
+dependencies as the tray app; the inference stub used by Windows smoke CI is
+**not a valid performance target**. Prepare/verify the EN→ID pack as described
+below, then run the production executable on Windows:
+
+```powershell
+# Usage: ClipLingo.exe --benchmark-model <model-pack-dir> <output.json> [iterations]
+.\build-full\Release\ClipLingo.exe --benchmark-model "C:\models\en-id" "C:\temp\cliplingo-perf.json" 20
+# Exit code 0 means an atomic, schema-1 report was written.
+Get-Content "C:\temp\cliplingo-perf.json"
+```
+
+M6 is a **diagnostic**, not a new Settings panel, background profiler, or
+automatic telemetry system. It uses only fixed public English test phrases,
+not clipboard content, captured user text, app identities or model paths.
+Reports include first/cold translation (including model loading),
+warm p50/p95/p99 for fixed word/sentence/paragraph inputs, process CPU
+time, private bytes/working-set snapshots and peak working set.
+Iterations are limited to 5–200 **for each of three cohorts** (default 20).
+Invalid model, invalid iteration count or report write errors exit nonzero;
+there is no invented fallback metric or success popup.
+
+**Interpreting the data:** one headless execution measures inference and
+model loading, **not** end-to-end hotkey-to-result, real tray idle RAM, OCR
+accuracy, GUI DPI behaviour, battery impact or cold Windows boot. Compare
+the same model, OS build, CPU, power plan, thread count and background
+load before considering an architectural change. Keep raw per-run reports
+for repeated measurements; don't publish a single number as universal.
+The baseline itself is accepted only when a real model pack and Windows
+machine successfully complete this command.
 
 ## Prepare a trusted model pack (developer / release packager)
 
