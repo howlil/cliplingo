@@ -41,4 +41,4 @@ jobs:
       - name: Verify model load and native inference end to end
         shell: pwsh
         run: |
-          cargo run --manifest-path src-tauri/Cargo.toml --features offline-ct2 --bin offline_model_smoke
+          cargo run --manifest-path src-tauri/Cargo.toml --features offline-ct2 --bin offline_model_smoke -- --benchmark
