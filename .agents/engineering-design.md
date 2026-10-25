@@ -211,3 +211,35 @@ Links are reference material, not claims of completed platform compatibility tes
 | Windows minimum version | **Windows 11 x64 candidate** | app audience and compatibility tests |
 
 Record an ADR under `.agents/decisions/` only when a consequential alternative is actually chosen with evidence. Do not implement all candidates or pre-create folders/modules because they appear in this document.
+
+## M6 — Performance baseline instrumentation
+
+M6 introduces a **headless on-demand diagnostic**, not resident telemetry.
+`model_benchmark.cpp` calls the existing `translate_en_id` and
+`unload_translation_model` on one thread, times operations with
+`std::chrono::steady_clock`, collects native process memory with
+`GetProcessMemoryInfo` and CPU user+kernel time with `GetProcessTimes`.
+`benchmark_stats.h` owns only deterministic nearest-rank percentile math.
+
+The command has bounded iterations and uses fixed EN→ID test literals, with
+an explicit JSON output path. Report schema 1 excludes selected/user text,
+model path, clipboard and system identity. An incomplete report is written
+to `.partial` first, then published via Windows file replacement. An
+exception at the CLI boundary maps to a nonzero error code; model lifetime
+is managed by RAII.
+
+`main.cpp` routes the CLI before creating HWND, tray, background workers,
+mutex or global shortcut; ordinary application behavior is unchanged.
+`psapi` is a Windows native link dependency, not another service.
+
+Metric meanings: cold time is the first translator request including
+verification/load; warm distributions are per fixed input class, process CPU
+is the sum across its native threads, and private bytes/working set are
+snapshots (not a validated peak private allocation graph). Windows peak
+working set is measured separately. Do not compare this headless process's
+memory to the resident tray/GUI process as if they were identical.
+
+Acceptance: Win32/MSVC build, always-active math tests even in Release,
+real model benchmark invocation, verifiable JSON schema and resource
+measurement reproducibility on actual Windows hardware. Product-wide TTTR,
+idle wakeups, battery and E2E UIA/OCR runtime remain unverified.
