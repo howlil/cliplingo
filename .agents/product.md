@@ -127,3 +127,28 @@ Cloud accounts/sync, chat assistant, translation history and usage tracking by d
 ## 9. Product change policy
 
 A proposed feature must trace to the reading job and its observable proof. If it adds attention, idle work, privacy risk, or a new window without strengthening the job, defer it. Preserve `DESIGN.md` as the accepted visual baseline; update product behavior here before architecture.
+
+## M4 — Privacy and excluded application behavior
+
+Purpose: users must be able to prevent ClipLingo from reading text in an
+explicitly excluded Windows application. The check happens **before**
+selection/hover capture, not after the translation result exists.
+
+**Behavior proof:** Settings → Privacy accepts one exact executable basename
+per line (e.g. `vault.exe`). The list is deduplicated and saved locally.
+On a user hotkey, ClipLingo resolves the foreground process identity once;
+a matching basename, the app's own HWND, an unknown process identity or an
+invalid/corrupted policy denies capture and produces no result popup. The
+diagnostic state is available in Settings. An unexcluded, resolvable process
+continues through the existing M1/M2 selection-first path without extra input
+polling, network traffic or raw-text logging. Changes invalidate pending
+requests so a stale result cannot appear after a privacy update.
+
+This list is **not a security sandbox**, and does not grant access to
+elevated/protected applications. Executable basename matching intentionally
+affects all installations with the same name; users cannot enter paths or
+wildcards. If the process cannot be identified, deny rather than guess.
+
+Acceptance: blocked app, case-insensitive match, corrupted saved list,
+unqueryable process, settings persistence, and repeated hotkeys must behave
+without reading restricted source text. Live-Windows acceptance is pending.
