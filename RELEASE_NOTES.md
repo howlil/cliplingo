@@ -1,4 +1,4 @@
-# ClipLingo v0.1.0 Beta 1
+# ClipLingo __VERSION__
 
 **Windows 11 x64 · Portable early-access pre-release · Offline EN → ID**
 
@@ -13,7 +13,7 @@ This preview packages a native Windows system-tray translation utility. It is **
 - Offline CTranslate2 + SentencePiece EN–ID model inference, model integrity verification/import, single-instance tray host and native performance diagnostic.
 
 ## Installation
-1. Download **ClipLingo-v0.1.0-beta.1-win-x64.zip** and **ClipLingo-v0.1.0-beta.1-en-id-model.zip**.
+1. Download **ClipLingo-__VERSION__-win-x64.zip** and **ClipLingo-__VERSION__-en-id-model.zip**.
 2. Extract the Windows ZIP to a normal folder you own. **Keep ClipLingo.exe and its DLLs together**, including the `tessdata` directory. No installer or auto-update is supplied in this version.
 3. Run `ClipLingo.exe`. In tray → **Settings → Language Models → Install verified model pack**, select the extracted **en-id** folder from the model ZIP.
 4. Select English text in a supported application and press **Ctrl + Alt + T**. For images, use tray → **Capture screen text** and drag a rectangle.
