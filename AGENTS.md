@@ -14,7 +14,7 @@ User's explicit request and safety constraints
 
 Read only the docs relevant to the actual change. The Rust-first target in `engineering-design.md` and its ADR are **not a verified Rust implementation**; open backend/ABI decisions and unmeasured performance claims stay open until tested. Avoid duplicated rules or shadow copies of these contracts.
 
-**Baseline:** ClipLingo is a low-resource, low-latency, offline Windows translation utility. Tray as shell, Settings as separate window, auto-fit target-text-only popup anchored above cursor. **No controls or source text inside translation popup.** **Target architecture: Rust-first native Windows** ([ADR-0001](.agents/decisions/0001-rust-first-native-windows.md)). **Current implementation: C++/CMake on `master`** until separately verified migration gates pass. Do not claim that Rust code ships, that C++ has been retired, or that the release/OS matrix, worker topology or native OCR ABI has been validated.
+**Baseline:** ClipLingo is a low-resource, low-latency, offline Windows translation utility. Tray as shell, Settings as separate window, auto-fit target-text-only popup anchored above cursor. **No controls or source text inside translation popup.** **Target architecture: Rust-first native Windows** ([ADR-0001](.agents/decisions/0001-rust-first-native-windows.md)). **Current repository: documentation-only clean slate with no runnable application or CI**. Archived C++ source, build and tests are recoverable from `archive/pre-rust-clean-slate-20261026`. Do not claim any Rust binary exists, that tests passed, or that release/OS support and native OCR ABI are verified.
 
 ## 1. Default router: `$agentflow`
 
@@ -84,7 +84,7 @@ Understand the request and affected contract
 - UI thread owns HWND and popup lifecycle. UIA calls run on correctly initialized COM MTA workers or bounded helper processes. Late generations never present stale output; a timeout does not cancel an arbitrary hung COM call.
 - Validate model packs, OCR regions and capture/clipboard data; deny excluded or unknown live app sources; avoid captured-text logs, automatic clipboard access, default history and privilege bypass.
 - For new Rust code use `cargo fmt`, `cargo clippy`, unit/integration tests and appropriate platform checks. Run actual Windows native/UIA tests and analyze any unsafe/FFI boundary; do not substitute lints for sanitizer/handle-soak or fresh-VM packaging proof.
-- For existing C++ paths **until retirement**, preserve RAII, checked HRESULTs, exception/ABI barriers and active CMake/MSVC tests. Do not remove a release pipeline merely because the target architecture changed.
+- C++ sources, CMake/MSVC tests and release workflow are **archived, not active** after the user's explicit clean-slate request. Consult the archive for previous behavior and recovery; do not claim its CI still runs on the default branch.
 - Low idle use and hotkey-to-result latency **require measured evidence**. Prefer event-driven behavior and on-demand OCR; compare measured cold/warm latency, RAM, native resource ownership and fault containment before changing process/model topology.
 
 ## 4. Module boundary direction (conceptual only)
@@ -124,4 +124,4 @@ Run the smallest fast tests repeatedly. For an affected native boundary, an inte
 
 ## 7. Completion report
 
-For implementation work, report: behavior delivered, affected owners/boundaries, files changed, checks **actually executed**, failure paths checked, remaining unverified Windows acceptance, and any ADR/contract updates. For the Rust migration, distinguish the *target* from the still-shipping C++ system until cutover evidence is complete. Be factual and concise.
+For implementation work, report: behavior delivered, affected owners/boundaries, files changed, checks **actually executed**, failure paths checked, remaining unverified Windows acceptance, and any ADR/contract updates. For the Rust implementation, distinguish the documented *target* from any genuinely built executable and from archived C++ reference code. Be factual and concise.
