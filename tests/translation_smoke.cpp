@@ -14,6 +14,7 @@ std::wstring failure_label(Failure failure) {
     case Failure::ModelMissing: return L"Inference stub only";
     case Failure::ModelInvalid: return L"Model invalid";
     case Failure::TranslationFailed: return L"Translation failed";
+    case Failure::ExcludedSource: return L"Capture denied by privacy policy";
   }
   return L"Unknown";
 }
