@@ -23,11 +23,13 @@ on:
   schedule:
     - cron: '17 2 * * *'
 
-# Never cancel a healthy packaging run when a subsequent commit lands.
-# Only one master release resolves the next tag at a time.
+# One release attempt per ref. A newer master push supersedes older
+# packaging: stale commits cannot be published (freshness guard), so they
+# must not block a verified release on the latest master indefinitely.
+# Manual dispatch remains protected from automatic cancellation.
 concurrency:
   group: cliplingo-versioned-release-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 permissions:
   contents: read
