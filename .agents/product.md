@@ -89,7 +89,7 @@ Errors classified as silent (no selection), recoverable/actionable (model missin
 - Explicit selection capture; request ordering, empty-selection silent stop.
 - Text-only auto-fit popup above trigger-time cursor; sensible dismiss; mixed-DPI readiness.
 - Windows desktop UI consistent with `DESIGN.md` (Tauri WebView2 Settings, popup backend after native acceptance); no mandatory model download for merely opening Settings.
-- Basic privacy settings and excluded-app handling.
+- Basic privacy settings and excluded-app handling. The existing Language Models/Privacy sections will also host the Offline/Online/Smart route, provider selection and consent; there is no new top-level Settings section.
 
 ### After M1 — additional compatibility where research justifies it
 
@@ -149,7 +149,7 @@ right-click cancels without translation. A successfully chosen region is
 read locally using an optional CPU OCR backend and passed to the same EN→ID
 translator and target-text-only popup. The popup anchors to the frozen
 drag-release cursor. No full-screen background scanning, clipboard
-interception, image history or network text upload is introduced.
+interception, or image history is introduced. OCR pixels remain local; recognized text follows the separately consented offline/online translation mode rather than an implicit upload.
 
 Additional acceptance traces:
 - Given OCR is unavailable, selecting OCR shows actionable status in Settings
@@ -215,8 +215,7 @@ This explicit manual action is not equivalent to source selection and may
 contain sensitive data from any program. Privacy explanations must state
 this directly; when the separate M4 app-exclusion work is integrated, its
 policy must not be misrepresented as protecting arbitrary historical
-clipboard content. No clipboard history, network upload, logging or account
-is introduced.
+clipboard content. No clipboard history, automatic network upload, raw-text logging or account is introduced. If the user selects a consented Online-only translation mode, explicit clipboard text may be sent to that provider only after warning that its app of origin cannot be verified.
 
 Live Win11 clipboard owner/delayed-rendering and UI validation remain pending.
 
