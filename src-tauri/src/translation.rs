@@ -1,12 +1,13 @@
 //! One bounded translation worker; model is never constructed on the hotkey or
 //! Tauri event loop. Only verified translated *target* text reaches PopupOwner.
 use crate::model_pack::{default_pack_dir, ModelError};
+use crate::latest_slot::{LatestSlot, Next};
 #[cfg(feature = "offline-ct2")]
 use crate::model_pack::verify_pack;
 #[cfg(feature = "offline-ct2")]
 use ct2rs::Tokenizer as _;
 use std::{
-    sync::{Arc, Mutex, mpsc::{self, SyncSender, TrySendError}},
+    sync::{Arc, Mutex},
     thread,
     time::Duration,
 };
@@ -132,14 +133,15 @@ fn classify_pack(error: ModelError) -> TranslationState {
 }
 
 pub struct TranslationEngine {
-    sender: SyncSender<TranslationRequest>,
+    pending: Arc<LatestSlot<TranslationRequest>>,
     telemetry: Arc<Mutex<Telemetry>>,
 }
 impl TranslationEngine {
     pub fn start(on_result: Arc<dyn Fn(TranslationResult) + Send + Sync>) -> Result<Self, String> {
         #[cfg(not(feature = "offline-ct2"))]
         let _ = &on_result;
-        let (sender, receiver) = mpsc::sync_channel::<TranslationRequest>(1);
+        let pending = Arc::new(LatestSlot::<TranslationRequest>::new());
+        let worker_pending = pending.clone();
         let telemetry = Arc::new(Mutex::new(Telemetry::default()));
         let state = telemetry.clone();
         thread::Builder::new().name("cliplingo-local-model".into()).spawn(move || {
@@ -148,11 +150,10 @@ impl TranslationEngine {
             #[cfg(feature="offline-ct2")]
             let mut last_used = Instant::now();
             loop {
-                let next = receiver.recv_timeout(Duration::from_secs(10));
-                let request = match next {
-                    Ok(value) => value,
-                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                let request = match worker_pending.take_timeout(Duration::from_secs(10)) {
+                    Next::Item(value) => value,
+                    Next::Closed => break,
+                    Next::Timeout => {
                         #[cfg(feature="offline-ct2")]
                         if loaded.is_some() && last_used.elapsed() >= MODEL_IDLE_EVICTION {
                             loaded = None;
@@ -207,14 +208,14 @@ impl TranslationEngine {
                 }
             }
         }).map_err(|e| format!("Could not start local model worker: {e}"))?;
-        Ok(Self { sender, telemetry })
+        Ok(Self { pending, telemetry })
     }
     pub fn submit(&self, request: TranslationRequest) {
-        // Caller must enforce newest-generation presentation after result.
-        match self.sender.try_send(request) {
-            Ok(()) => self.telemetry.lock().unwrap().state = TranslationState::Translating,
-            Err(TrySendError::Full(_)) => self.telemetry.lock().unwrap().state = TranslationState::QueueFull,
-            Err(TrySendError::Disconnected(_)) => self.telemetry.lock().unwrap().state = TranslationState::Failed,
+        // Always replace older pending text; never reject newest hotkey simply
+        // because obsolete work occupies the single pending slot.
+        match self.pending.publish(request) {
+            Ok(_) => self.telemetry.lock().unwrap().state = TranslationState::Translating,
+            Err(_) => self.telemetry.lock().unwrap().state = TranslationState::Failed,
         }
     }
     pub fn status(&self) -> TranslationStatus {
@@ -223,6 +224,12 @@ impl TranslationEngine {
     }
     pub fn pack_dir(&self) -> Result<String, ModelError> {
         default_pack_dir().map(|p| p.display().to_string())
+    }
+}
+
+impl Drop for TranslationEngine {
+    fn drop(&mut self) {
+        self.pending.close();
     }
 }
 
