@@ -297,3 +297,11 @@ Do not activate online merely because the user is connected to the internet. Onl
 - **Verified:** Windows CT2 + Rust/CXX MSVC build with static CRT, pinned OPUS-MT pack conversion/checksums, and real headless EN→ID inference. **Not proven:** actual desktop UIA-to-popup translation, translation quality/reference parity, p50/p95 latency/RAM, browser attribution, screen reader/paragraph overflow and mixed-DPI native UI acceptance.
 
 Reference: [F2 acceptance](f2-acceptance.md), [CTranslate2 quickstart](https://opennmt.net/CTranslate2/quickstart.html), [ct2rs 0.10.2](https://docs.rs/crate/ct2rs/0.10.2), [Helsinki OPUS-MT EN→ID](https://huggingface.co/Helsinki-NLP/opus-mt-en-id).
+
+
+## 12. F2.5 scheduling and measurement proof
+
+- `latest_slot.rs` replaces mpsc FIFO/try_send rejection in the translator with one bounded pending request; during active inference obsolete pending source text is replaced and dropped. The running inference remains non-preemptible and latest generation still owns the popup.
+- `capture.rs::finish_and_forward` holds the capture generation owner while forwarding the verified String to the translation worker. This prevents an older UIA callback from overtaking a newer hotkey and removes a duplicate source String copy.
+- `offline_model_smoke --benchmark`: one cold load plus twelve sequential warm model inferences on fixed public inputs. These numbers exclude UIA capture, foreground checks, DWM display and all live Windows application paths.
+- `scripts/measure-f25.ps1` records only Windows process-tree private/working memory by named workload phase. Full native GUI focus/latency/DPI acceptance remains required; see [F2.5 acceptance](f25-acceptance.md).
