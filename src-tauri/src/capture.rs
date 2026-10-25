@@ -248,6 +248,15 @@ impl CaptureCoordinator {
         }
     }
 
+    pub fn with_current<F: FnOnce()>(&self, generation: u64, present: F) {
+        // Hold generation owner until native presentation has completed.
+        // Otherwise a hotkey could invalidate after a check but before ShowWindow.
+        let guard = self.telemetry.lock().unwrap();
+        if guard.generation == generation {
+            present();
+        }
+    }
+
     pub fn is_current(&self, generation: u64) -> bool {
         self.telemetry.lock().unwrap().generation == generation
     }
