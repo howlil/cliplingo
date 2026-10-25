@@ -35,6 +35,27 @@ Run hover tests using the existing smoke build and `ctest`; a **real Windows
 desktop** compatibility matrix remains mandatory before release, especially
 for browser/PDF providers whose UIA text patterns are incomplete.
 
+## M4 — Privacy: exclude specific Windows applications
+
+In Settings → **Privacy**, enter executable filenames (one per line), such as
+`vault.exe` or `password manager.exe`. Click **Save exclusions**. The policy
+persists locally, accepts at most 32 distinct names, and does not allow full
+paths or wildcards. Matching is case-insensitive. ClipLingo checks the
+foreground application's executable identity **on the shortcut** and again
+immediately before UIA capture. Excluded/unknown sources return a status in
+Settings and **never show a translation popup**. No background process
+enumeration, clipboard inspection, history or network request is added.
+
+Invalid/truncated policy files **fail closed**, rather than silently erasing
+privacy protections. Changing exclusions invalidates pending result UI;
+an already started native UIA call cannot be retroactively canceled, but its
+result cannot appear after the settings change.
+
+This is a privacy preference against unintended app capture, not a security
+sandbox or guarantee against malicious processes in the same Windows session.
+M3 OCR remains separately unmerged in PR #3; when integrating, apply the
+same policy to OCR's invoking application as well.
+
 ## Prepare a trusted model pack (developer / release packager)
 
 Conversion requires Python >=3.11, `ctranslate2`, `sentencepiece`, `huggingface_hub`, `transformers<5`, and PyTorch on a **builder machine**, never on the resident Windows app. Choose and pin an immutable commit from [Helsinki-NLP/opus-mt-en-id](https://huggingface.co/Helsinki-NLP/opus-mt-en-id/tree/main). Then:
@@ -101,6 +122,8 @@ Windows CI runs geometry test, model-package integrity regression test, and an M
 | --- | --- |
 | `src/main.cpp` | event loop, tray, settings projection, serialized requests, lifecycle |
 | `src/capture.cpp` | UI Automation selection and input validation |
+| `src/capture_policy.h` | bounded, validated exclusion-list semantics |
+| `src/capture_policy.cpp` | one-shot Win32 foreground process identity check |
 | `src/hover.cpp` | on-demand UIA hover hit-testing and Word/Sentence/Paragraph acquisition |
 | `src/scope_text.h` | pure bounds validation and sentence segmentation |
 | `src/capture_helper.cpp` | bounded helper process, IPC memory mapping, timeout and crash containment |
