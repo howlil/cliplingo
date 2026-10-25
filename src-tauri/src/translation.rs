@@ -3,6 +3,8 @@
 use crate::model_pack::{default_pack_dir, ModelError};
 #[cfg(feature = "offline-ct2")]
 use crate::model_pack::verify_pack;
+#[cfg(feature = "offline-ct2")]
+use ct2rs::Tokenizer as _;
 use std::{
     sync::{Arc, Mutex, mpsc::{self, SyncSender, TrySendError}},
     thread,
@@ -14,6 +16,9 @@ use std::{path::Path, time::Instant};
 
 #[cfg(feature = "offline-ct2")]
 const MODEL_IDLE_EVICTION: Duration = Duration::from_secs(90);
+// Marian model advertises 512 positions; reserve headroom for special tokens.
+#[cfg(feature = "offline-ct2")]
+const MAX_SOURCE_TOKENS: usize = 480;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TranslationState {
@@ -26,6 +31,7 @@ pub enum TranslationState {
     Failed,
     BackendUnavailable,
     QueueFull,
+    InputTooLong,
 }
 impl TranslationState {
     pub fn label(self) -> &'static str {
@@ -39,6 +45,7 @@ impl TranslationState {
             Self::Failed => "translation_failed",
             Self::BackendUnavailable => "backend_not_compiled",
             Self::QueueFull => "translation_busy",
+            Self::InputTooLong => "input_too_long",
         }
     }
 }
@@ -72,6 +79,7 @@ pub struct TranslationResult {
 #[cfg(feature = "offline-ct2")]
 struct Loaded {
     translator: ct2rs::Translator<ct2rs::tokenizers::sentencepiece::Tokenizer>,
+    source_tokenizer: ct2rs::tokenizers::sentencepiece::Tokenizer,
 }
 #[cfg(feature = "offline-ct2")]
 impl Loaded {
@@ -85,15 +93,27 @@ impl Loaded {
         let tokenizer = ct2rs::tokenizers::sentencepiece::Tokenizer::from_file(
             model_dir.join("source.spm"), model_dir.join("target.spm")
         ).map_err(|_| TranslationState::InvalidModel)?;
+        let source_tokenizer = ct2rs::tokenizers::sentencepiece::Tokenizer::from_file(
+            model_dir.join("source.spm"), model_dir.join("target.spm")
+        ).map_err(|_| TranslationState::InvalidModel)?;
         let translator = ct2rs::Translator::with_tokenizer(model_dir, tokenizer, &config)
             .map_err(|_| TranslationState::InvalidModel)?;
-        Ok(Self { translator })
+        Ok(Self { translator, source_tokenizer })
     }
     fn translate(&self, text: &str) -> Result<String, TranslationState> {
+        // CTranslate2 can truncate max_input_length silently. Reject oversized
+        // tokenized inputs instead; short UTF-8 strings cannot exceed this budget.
+        if text.len() > 128 {
+            let source_tokens = self.source_tokenizer.encode(text)
+                .map_err(|_| TranslationState::Failed)?;
+            if source_tokens.len() > MAX_SOURCE_TOKENS {
+                return Err(TranslationState::InputTooLong);
+            }
+        }
         let options = ct2rs::TranslationOptions::<String, String> {
             beam_size: 2,
-            max_input_length: 1024,
-            max_decoding_length: 256,
+            max_input_length: 0, // disable silent input truncation
+            max_decoding_length: 512,
             ..Default::default()
         };
         let results = self.translator.translate_batch(&[text], &options, None)
