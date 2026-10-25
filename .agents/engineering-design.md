@@ -103,7 +103,7 @@ State owner / invariants:
 - UI: exactly six sections from `DESIGN.md` (General, Text Capture, Translation Popup, Appearance, Language Models, Privacy); keyboard/focus/high-contrast/text scaling.
 - Commands are deliberately narrow: `get_settings`, `update_settings(validated_patch)`, `get_model_status`, `install_model(user_intent)`, `get_app_status`, `check_update(user_intent)`. Never expose `read_screen(x,y)`, arbitrary `exec`, filesystem paths, or `translate_selected_text` to a compromised renderer without actual authorization policy.
 - Tauri command arguments are untrusted regardless of TypeScript typing. Backend validates constraints and source window label/role. Apply per-window v2 capabilities and deliberate command manifest restrictions; an empty/unspecified capabilities list is **not proof that all app commands are inaccessible**. Keep CSP restrictive, no CDN/remote JS injection.
-- Do not emit source text or captured OCR pixels in global Tauri events. Result WebView gets only translated target text. Document privacy boundaries for devtools/logging and crash reports.
+- Do not emit source text or captured OCR pixels in global Tauri events. The Rust-owned native result popup receives only translated target text; Settings frontend receives statuses/settings, not captured content. Document privacy boundaries for devtools/logging and crash reports.
 - Settings persisted with versioned schema and atomic replacement; corrupted config produces safe fallback plus recoverable indication; no silently destructive migrations.
 
 ## 5. Binding, deployment and performance constraints
@@ -113,11 +113,11 @@ State owner / invariants:
 | Tauri/WebView2 | Runtime present on Windows 11; Tauri installer can bootstrap WebView2, even if the app itself performs offline inference | Test clean Windows VM with/without runtime, online installer and chosen offline install scenario; no claim fully offline installer by default |
 | Tray resident | Hidden WebViews may have measurable idle memory/CPU, and Tauri worker processes may persist | Measure Settings closed, model cold, model warm, popup hidden/visible; do not claim "zero cost" |
 | UIA/COM | Microsoft recommends separate **non-window-owning MTA** thread for desktop-wide UI Automation | Keep UIA away from Tauri main/event loop and JS; test deadlocks, stalls, COM lifetime and privileges |
-| Tauri popup | Window visibility/coordinates differ between physical pixels and logical DIPs; `alwaysOnTop` does not prove no activation | Native focus/window-style/DPI/negative-coordinate proof required **before final popup choice** |
+| Native popup | Raw HWND, DirectWrite and Tauri host must share one UI-thread/window-lifetime contract; mixed DPI and nonactivation are not automatic | Verify focus, accessible text, intrinsic sizing and negative-screen coordinates on real Windows; compare WebView popup only as a performance experiment |
 | Rust native model | CTranslate2 and SentencePiece are C++ dependencies; no guaranteed compatible first-party stable Rust ABI | Prototype C ABI wrapper or isolated helper; document allocators, panics, exceptions, DLLs, CPU instruction sets, license and pack format |
 | OCR | Microsoft's `Windows.Media.Ocr` desktop package-identity restriction | Avoid assuming NSIS portable exe can invoke it; investigate unpackaged-compatible local OCR backend and MSIX as separate option |
 | User safety | Protected/elevated/UAC/secure desktop may block capture legitimately | No forced elevation, driver, hook/injection or bypass; actionable status only |
-| Offline vs update | Translation must work without network after installation; updater/model installation naturally requires permitted network | Separate network controls from translation path; deny raw text telemetry |
+| Offline/online vs update | Offline-only must work without network after installing a model; online-only requires explicit provider upload permission; updater/model download are separately authorized | Isolate Rust HTTPS online adapter from local translator and updater; no silent fallback or raw-text telemetry |
 | Release | Tauri updater validates signature (cannot disable), latest JSON requires correct URL/signature/target; old repo had GitHub release 403 | Use constrained `contents:write` release job + confirmed token permissions, signed Windows NSIS asset, JSON metadata and fresh-VM upgrade/rollback proof |
 | Performance | No numeric latency, RAM, package size or battery SLO has been measured in Rust/Tauri | Define p50/p95/p99 hotkey-to-visible-result for cold/warm, separate model warm/cold, idle private bytes and WebView2 child processes before budgets |
 | Update mechanism | Installer/update artifact names differ from portable ZIP and require signing/private key protection | Pick only one initial installer channel, keep signing key in protected CI secret; never include key in source |
@@ -166,14 +166,14 @@ For E2E flakiness, use deterministic local fixtures and observable readiness rat
 | Phase | Scope | Acceptance and go/no-go |
 | --- | --- | --- |
 | R0 — research/contract | Tauri v2 hybrid decision, explicit constraints, ADR, proof plan | Docs consistent; no pretend runnable app |
-| R1 — shell + UI proof | Initialize Tauri v2 Cargo + React/TS; tray/single-instance/hotkey/settings; prototype reusable Tauri popup | Real Windows tray/hotkey, close-to-tray, no focus steal and measurable idle/WebView cost; if popup fails, choose native HWND for result |
+| R1 — shell + native UI proof | Initialize Tauri v2 Cargo + lazy React/TS Settings, tray/single-instance/hotkey, **reusable native Rust Win32 tooltip** | Real Windows tray/hotkey, close-to-tray, no focus steal, mixed-DPI, accessible text and measured process-tree idle RAM; compare a WebView popup only to falsify the native-first choice |
 | R2 — selection + policy | Rust coordinator + UIA MTA worker, selection only, excluded-app policy | Latest-wins, exact selection, no-selection silent, foreground focus and provider timeouts |
 | R3 — EN→ID offline engine | Proven local model/tokenizer + management and typed errors | Offline valid fixture, cold/warm evidence, crash/failure behavior, model integrity and licensing |
-| R4 — result/presentation | Final chosen popup backend + settings preview/parity | Correct translation only; intrinsic sizing, mixed DPI, screen reader, no activation |
+| R4 — result/presentation | Native popup final acceptance + Settings preview/parity; optional Online-only via official provider after consent | Correct translation only; intrinsic sizing, mixed DPI, screen reader, no activation; privacy/network failure cases |
 | R5 — explicit enhancements | Geometry-checked hover, opt-in clipboard, manual OCR | Only explicit capture modes, no periodic capture, protected content respected; correct OCR backend for installer |
 | R6 — distribution | Windows NSIS, versioning, signed updater, GitHub Release, installed E2E | Verified download/install/update/rollback on clean Windows, runtime dependencies, signed metadata/asset availability |
 
-**Critical path:** R0 → R1 **popup + idle feasibility gate** → R2 → R3 → R4 → R6. R5 additions do not block the minimal selection-only first release unless product scope changes. Do not add model/update backend before the shell+popup viability is shown.
+**Critical path:** R0 → R1 **native popup + idle feasibility** → R2 → R3 offline → R4 → R6. The optional online provider may be implemented after offline proof without delaying the core offline release. R5 additions do not block selection-only release unless product scope changes. Do not add model/update backend before shell+popup viability is shown.
 
 ## 8. Sources and decision validity (consulted 2026-10-26)
 
