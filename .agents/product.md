@@ -127,3 +127,33 @@ Cloud accounts/sync, chat assistant, translation history and usage tracking by d
 ## 9. Product change policy
 
 A proposed feature must trace to the reading job and its observable proof. If it adds attention, idle work, privacy risk, or a new window without strengthening the job, defer it. Preserve `DESIGN.md` as the accepted visual baseline; update product behavior here before architecture.
+
+## M5 — Explicit clipboard translation, opt-in
+
+The clipboard fallback is **explicit**, not a hidden `Ctrl+C` simulation.
+To protect clipboard ownership and avoid translating stale unrelated text,
+the feature is disabled by default in Settings → Text Capture. When enabled,
+the system tray offers **Translate clipboard (explicit)**. Choosing it
+captures only `CF_UNICODETEXT` currently on the clipboard and passes that
+text to the same local EN→ID engine and target-only popup, anchored to the
+trigger-time cursor. The selection/hover hotkey remains unchanged.
+
+Behavior proofs:
+- Off by default; ordinary selection/hover NEVER reads clipboard.
+- One explicit tray click generates at most one read (no monitoring/listener).
+- Clipboard memory is read-only; never cleared, overwritten or re-copied,
+  and no keystrokes or clipboard APIs that mutate content are invoked.
+- Clipboard busy, unsupported format, empty/whitespace, changed content
+  or text exceeding 8192 UTF-16 units cannot create a translation popup.
+- Turning the setting off invalidates all previous pending display results.
+- Selected text never gets silently replaced by unrelated old clipboard data.
+
+Clipboard content has **no reliable application-of-origin identity**.
+This explicit manual action is not equivalent to source selection and may
+contain sensitive data from any program. Privacy explanations must state
+this directly; when the separate M4 app-exclusion work is integrated, its
+policy must not be misrepresented as protecting arbitrary historical
+clipboard content. No clipboard history, network upload, logging or account
+is introduced.
+
+Live Win11 clipboard owner/delayed-rendering and UI validation remain pending.
