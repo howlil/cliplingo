@@ -20,9 +20,9 @@ use windows_sys::Win32::{
         HiDpi::GetDpiForWindow,
         WindowsAndMessaging::{
             CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, GetForegroundWindow,
-            RegisterClassW, SetWindowPos, WNDCLASSW,
-            HWND_TOPMOST, MA_NOACTIVATE, SWP_NOACTIVATE, SWP_SHOWWINDOW,
-            WM_MOUSEACTIVATE, WM_PAINT, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+            KillTimer, RegisterClassW, SetTimer, SetWindowPos, ShowWindow, WNDCLASSW,
+            HWND_TOPMOST, MA_NOACTIVATE, SW_HIDE, SWP_NOACTIVATE, SWP_SHOWWINDOW,
+            WM_MOUSEACTIVATE, WM_PAINT, WM_TIMER, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
             WS_POPUP,
         },
     },
@@ -176,6 +176,11 @@ impl NativePopup {
                 return Err("SetWindowPos failed".into());
             }
             InvalidateRect(hwnd, std::ptr::null(), 1);
+            KillTimer(hwnd, 1);
+            if SetTimer(hwnd, 1, 2_500, None) == 0 {
+                ShowWindow(hwnd, SW_HIDE);
+                return Err("Unable to arm automatic preview dismissal".into());
+            }
             // WS_EX_NOACTIVATE and SWP_NOACTIVATE are necessary but not
             // sufficient proof: a real Windows foreground/focus test is gated.
             let _ = GetForegroundWindow();
@@ -185,7 +190,7 @@ impl NativePopup {
 
     pub fn destroy(&self) {
         if let Ok(hwnd) = self.hwnd() {
-            unsafe { DestroyWindow(hwnd); }
+            unsafe { KillTimer(hwnd, 1); DestroyWindow(hwnd); }
         }
     }
 }
@@ -193,6 +198,11 @@ impl NativePopup {
 unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     match msg {
         WM_MOUSEACTIVATE => MA_NOACTIVATE as LRESULT,
+        WM_TIMER if w == 1 => {
+            KillTimer(hwnd, 1);
+            ShowWindow(hwnd, SW_HIDE);
+            0
+        },
         WM_PAINT => {
             // SAFETY: dispatched by Windows on the owning window thread.
             let mut paint = PAINTSTRUCT::default();
