@@ -1,13 +1,13 @@
 # ClipLingo — Engineering Contract
 
-Status: **Rust-first migration target accepted; migration NOT implemented** (2026-10-26).
-Current production-oriented code on `master` is C++/CMake. This document describes **the target architecture**, not the language/runtime currently shipping. The existing C++ implementation remains the behavior and regression baseline until Rust passes equivalent Windows verification.
+Status: **Rust-first clean-slate architecture accepted; application NOT implemented** (2026-10-26).
+This repository is intentionally being reset to documentation only: `.agents/`, `AGENTS.md` and `DESIGN.md`. The previous C++/CMake application is preserved on branch `archive/pre-rust-clean-slate-20261026` (commit `24b8e3c30f390e6d571e2b15d1e1a56ba4781846`) for reference and recovery. **No current application build, installed executable, CI or release pipeline remains on the clean-slate default branch.** This document specifies the Rust-first architecture to implement next; historical C++ behavior is a reference, not a shipping guarantee.
 
 Sources of authority: `.agents/product.md` (observable behavior), `DESIGN.md` (approved UI), `AGENTS.md` (agent workflow), and [ADR-0001](decisions/0001-rust-first-native-windows.md) (consequential language decision). Do not add a competing `.agents/engineering.md`: this existing file is the repository's single engineering contract.
 
-## 1. Current system and migration boundary
+## 1. Archived implementation and new system boundary
 
-Current repository evidence (2026-10-26):
+Archived C++ repository evidence (before clean-slate reset, 2026-10-26):
 - `src/main.cpp`: Win32 host/tray/settings, hotkey handling, request coordination and lifecycle.
 - `src/capture.cpp`, `src/hover.cpp`, `src/capture_helper.cpp`: UI Automation and bounded helper capture; `src/capture_policy.cpp`: excluded-app policy.
 - `src/clipboard.cpp`: explicit opt-in clipboard reading; `src/ocr.cpp` and `src/region_selector.cpp`: on-demand region OCR.
@@ -16,11 +16,11 @@ Current repository evidence (2026-10-26):
 - `src/model_benchmark.cpp`: opt-in headless native performance diagnostic.
 - `CMakeLists.txt`, `tests/*.cpp`, `.github/workflows/*.yml`: active C++ build/test/distribution mechanisms.
 
-These are observations about **existing code paths**, not claims that all requirements are proven on real Windows or that releases currently work. The existing benchmark is not a validated end-to-end latency SLO. In particular, GitHub release authorization must be verified separately.
+These are observations of **archived code paths only**, not active source files, verified functionality, or Windows acceptance. The archived benchmark is not a validated end-to-end latency SLO. When a future Rust release pipeline is created, publication permissions and actual assets must be verified separately.
 
 Target: migrate **new application-owned native Windows host, coordinator, capture policy, settings, popup and other application logic to Rust**. Preserve Win32/COM/DirectWrite where they meet behavior; do not introduce Tauri/WebView2 or a local HTTP service by default. A narrowly scoped native C/C++ inference/OCR dependency may remain behind FFI when required by CTranslate2, SentencePiece, Tesseract or packaging realities. Calling this "Rust-first" must not be misrepresented as "zero unsafe code" or "100% Rust".
 
-The migration changes implementation ownership, not the user-facing product. No new runtime, binary, or release is approved solely because this document changed.
+The clean-slate reset removes implementation files and release infrastructure by explicit user request; it does not change the user-facing target product. No Rust runtime, binary, or release exists until implemented and verified.
 
 ## 2. System graph — responsibilities and state owners
 
@@ -83,20 +83,20 @@ Capture text, clipboard, images, model manifests, files and tokens are untrusted
 3. **Accessibility:** text-only visual popup still exposes readable accessible text; DPI, high contrast, text scaling, mixed monitors, Unicode/BiDi, keyboard-only settings and no-focus-steal require native acceptance.
 4. **Privacy/security:** deny excluded/unknown live sources; no default capture history, analytics, background OCR, clipboard rewriting, or cloud text upload; validate packages and restrict DLL load paths when native dependencies are shipped.
 5. **Reliability:** responsive tray/settings during provider/inference failure; bounded concurrent work, typed errors, deterministic shutdown, fault isolation where needed.
-6. **Distribution:** existing CMake/MSVC Windows build, models, executable packaging and release workflow remain authoritative until a separately proven Rust replacement is ready. CI green is not proof that a GitHub Release was actually published.
+6. **Distribution:** the archived CMake/MSVC build and model packaging are recovery references, **not an active build or release path**. Re-establish Cargo-based Windows verification, model packaging and publication only after implementation is ready. CI green alone does not prove that a GitHub Release was published.
 
 ## 6. Rust migration execution gates
 
 | Gate | Change | Acceptance before proceeding |
 | --- | --- | --- |
-| M0 — contract | Rust target documented; ADR; repository rules aligned | Docs cross-reference correctly; current C++ reality and pending verification are explicit; **no app behavior changes** |
+| M0 — reset | Rust target and ADR; archive prior C++ commit; remove tracked code/build/CI files | Only `.agents/`, `AGENTS.md` and `DESIGN.md` remain; archived original commit and absence of a runnable build are explicit |
 | M1 — host | Build a small Rust Windows tray/hotkey/settings shell | Real Windows launch, hotkey conflict, tray restart, pause/quit and resource teardown; no UI regression |
 | M2 — capture & coordination | Migrate latest-generation coordinator, selection/hover, excluded-app policy and explicit clipboard | Deterministic race tests plus live UIA COM/apartment/permission/hang/timeout evidence |
 | M3 — local inference & OCR | Integrate existing model packs through tested Rust-native or FFI boundary; port explicit region OCR | EN→ID offline parity, tokenizer integrity, invalid model/ROI tests, privacy, crashes/hangs and native DLL packaging |
 | M4 — popup | Native text window, geometry, accessible representation, settings parity | Real Windows word/sentence/paragraph intrinsic fit; mixed-DPI edges; screen reader; no activation |
-| M5 — release cutover | Replace build/test/packaging workflow only after Rust acceptance; retire C++ paths | Repeatable Windows CI, full installed-package smoke on clean VM, actual GitHub Release asset verified and rollback route |
+| M5 — new release pipeline | Establish Cargo-based build/test/packaging workflow and signed distribution as appropriate | Repeatable Windows CI, installed-package smoke on clean VM, actual GitHub Release asset verified and rollback route |
 
-These migration M-numbers are **migration gates**, not the existing product M1–M6 feature history. Preserve the prior C++ build and the last known releasable artifact until all required parity checks pass. Do not merge a release-cutover or delete `src/`, CMake or model tooling during M0. No performance improvement is claimed without side-by-side measurements.
+These migration M-numbers are **implementation gates**, not the historical product M1–M6 feature names. The archived original C++ tree remains recoverable via its branch and commit but is no longer present on the default branch. Recreate only the Rust modules and tooling that satisfy the product contract. No performance improvement is claimed without side-by-side measurements against the archive.
 
 ## 7. Consequential decisions and open questions
 
@@ -106,6 +106,6 @@ These migration M-numbers are **migration gates**, not the existing product M1�
 
 ## 8. Verification boundary
 
-At M0 review the docs, existing code inventory and GitHub diff. No app compilation or native test is possible from doc changes alone. For later migration gates use Rust format/lint/unit checks **and** real-Windows integration/soak tests; mock Win32/UIA is not a substitute for genuine COM/apartment, HWND, focus and DPI tests.
+At M0 verify exact remaining tracked files, archive reference, root documentation links and clean Git diff. **No application build or release is possible on the clean-slate branch.** For later gates use Rust format/lint/unit checks **and** real-Windows integration/soak tests; mock Win32/UIA is not a substitute for genuine COM/apartment, HWND, focus and DPI tests.
 
 The recorded C++ implementation details remain recoverable in Git history; this file deliberately stops treating those implementation-specific techniques as instructions for *new* Rust code.
