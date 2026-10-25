@@ -11,7 +11,7 @@ use windows_sys::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
     Graphics::Gdi::{
         BeginPaint, CreateFontW, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint, FillRect,
-        GetDC, GetMonitorInfoW, MonitorFromPoint, ReleaseDC, SelectObject, SetBkMode,
+        GetDC, GetMonitorInfoW, InvalidateRect, MonitorFromPoint, ReleaseDC, SelectObject, SetBkMode,
         SetTextColor, MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT,
         DT_CALCRECT, DT_LEFT, DT_NOPREFIX, DT_WORDBREAK, TRANSPARENT,
     },
@@ -20,8 +20,8 @@ use windows_sys::Win32::{
         HiDpi::GetDpiForWindow,
         WindowsAndMessaging::{
             CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, GetForegroundWindow,
-            InvalidateRect, RegisterClassW, SetWindowPos, ShowWindow, WNDCLASSW,
-            HWND_TOPMOST, MA_NOACTIVATE, SW_HIDE, SWP_NOACTIVATE, SWP_SHOWWINDOW,
+            RegisterClassW, SetWindowPos, WNDCLASSW,
+            HWND_TOPMOST, MA_NOACTIVATE, SWP_NOACTIVATE, SWP_SHOWWINDOW,
             WM_MOUSEACTIVATE, WM_PAINT, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
             WS_POPUP,
         },
@@ -200,7 +200,7 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM
                 let family = utf16("Segoe UI");
                 let font = CreateFontW(-px(15, dpi), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 0, 0, family.as_ptr());
                 let old = if !font.is_null() { SelectObject(hdc, font) } else { std::ptr::null_mut() };
-                SetBkMode(hdc, TRANSPARENT);
+                SetBkMode(hdc, TRANSPARENT as i32);
                 SetTextColor(hdc, 0x0030_241D);
                 let pad = px(PADDING_DIP, dpi);
                 bounds.left += pad;
