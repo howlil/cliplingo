@@ -8,13 +8,13 @@ This is the **repository-wide instruction and skill router** for every AI coding
 User's explicit request and safety constraints
   ├── DESIGN.md                       → approved visual/design tokens and UI composition
   ├── .agents/product.md              → job, observable behavior, scope, acceptance proof
-  ├── .agents/engineering-design.md   → Rust-first migration target, boundaries, state owners & guarantees
+  ├── .agents/engineering-design.md   → Tauri v2 + Rust native Windows contract, owners & evidence gates
   └── AGENTS.md                       → engineering workflow / AI skill routing / code quality
 ```
 
-Read only the docs relevant to the actual change. The Rust-first target in `engineering-design.md` and its ADR are **not a verified Rust implementation**; open backend/ABI decisions and unmeasured performance claims stay open until tested. Avoid duplicated rules or shadow copies of these contracts.
+Read only the docs relevant to the actual change. The Tauri v2 + Rust/Win32 hybrid target in `engineering-design.md` and ADR-0002 are **not a verified implementation**; open backend/ABI decisions and unmeasured performance claims stay open until tested. Avoid duplicated rules or shadow copies of these contracts.
 
-**Baseline:** ClipLingo is a low-resource, low-latency, offline Windows translation utility. Tray as shell, Settings as separate window, auto-fit target-text-only popup anchored above cursor. **No controls or source text inside translation popup.** **Target architecture: Rust-first native Windows** ([ADR-0001](.agents/decisions/0001-rust-first-native-windows.md)). **Current repository: documentation-only clean slate with no runnable application or CI**. Archived C++ source, build and tests are recoverable from `archive/pre-rust-clean-slate-20261026`. Do not claim any Rust binary exists, that tests passed, or that release/OS support and native OCR ABI are verified.
+**Baseline:** ClipLingo is a low-resource, low-latency, offline Windows translation utility. Tray as shell, Settings as separate window, auto-fit target-text-only popup anchored above cursor. **No controls or source text inside translation popup.** **Target architecture: Tauri v2 + Rust-owned Windows capture/inference/coordinator** ([ADR-0002](.agents/decisions/0002-tauri-rust-windows-hybrid.md); historical [ADR-0001](.agents/decisions/0001-rust-first-native-windows.md)). Settings uses WebView2; the result popup backend is gated by real Windows focus, DPI and resource tests. **Current repository: documentation-only clean slate with no runnable application or CI**. Archived C++ source, build and tests are recoverable from `archive/pre-rust-clean-slate-20261026`. Do not claim any Rust binary exists, that tests passed, or that release/OS support and native OCR ABI are verified.
 
 ## 1. Default router: `$agentflow`
 
@@ -76,13 +76,14 @@ Understand the request and affected contract
 
 **Rule of admission:** every new class, interface, process, thread, dependency or abstraction must answer: *what current state invariant, lifecycle boundary, external contract or testability risk justifies it?* If none, keep the code direct and local.
 
-### Rust-first native Windows safety defaults (target implementation)
+### Tauri + Rust native Windows safety defaults (target implementation)
 
 - Prefer Rust ownership/borrowing and explicit native-resource guards for HWND, HANDLE, COM, DirectWrite and buffers. Every `unsafe` block/function must identify its platform invariant; do not scatter raw pointers through coordinator/domain logic.
 - Expected absence (`NoSelection`) and recoverable failures use explicit Rust results/errors; never invent translation success or panic for routine missing selection.
 - Rust panics and C++ exceptions must not cross Win32/COM/C callbacks or an FFI ABI. Define ownership, allocator, lifetime, UTF conversion, HRESULT/error mapping and thread affinity at foreign boundaries; Rust does **not** automatically make FFI safe.
 - UI thread owns HWND and popup lifecycle. UIA calls run on correctly initialized COM MTA workers or bounded helper processes. Late generations never present stale output; a timeout does not cancel an arbitrary hung COM call.
 - Validate model packs, OCR regions and capture/clipboard data; deny excluded or unknown live app sources; avoid captured-text logs, automatic clipboard access, default history and privilege bypass.
+- Keep captured source text and OCR pixels in Rust backend only. Settings must never receive them through frontend events or logs. Apply Tauri v2 per-window capabilities, restrictive CSP, and explicit Rust command input/authorization checks; permissions do not sandbox Rust.
 - For new Rust code use `cargo fmt`, `cargo clippy`, unit/integration tests and appropriate platform checks. Run actual Windows native/UIA tests and analyze any unsafe/FFI boundary; do not substitute lints for sanitizer/handle-soak or fresh-VM packaging proof.
 - C++ sources, CMake/MSVC tests and release workflow are **archived, not active** after the user's explicit clean-slate request. Consult the archive for previous behavior and recovery; do not claim its CI still runs on the default branch.
 - Low idle use and hotkey-to-result latency **require measured evidence**. Prefer event-driven behavior and on-demand OCR; compare measured cold/warm latency, RAM, native resource ownership and fault containment before changing process/model topology.
@@ -90,12 +91,13 @@ Understand the request and affected contract
 ## 4. Module boundary direction (conceptual only)
 
 ```text
-WindowsHost (Rust-owned Win32 tray/hotkey, lifecycle)
-      → RequestCoordinator (request generation & cursor snapshot)
-          → Capture (UIA / optional OCR)
-          → Translation (offline model lifecycle; native CTranslate2 FFI only if needed)
-      → Popup (text layout/measurement, HWND only)
-      → Settings (authoritative local preferences)
+TauriHost (Rust: tray, hotkey, lifecycle, single instance)
+      → RequestCoordinator (generation & frozen cursor/foreground snapshot)
+          → NativeCapture (Windows UIA MTA, optional explicit OCR/clipboard)
+          → Translator (offline model lifecycle; compatible native FFI only if proven)
+      → PopupOwner (Tauri WebviewWindow prototype; native HWND fallback)
+      → SettingsStore (authoritative Rust preferences)
+          → SettingsUI (Tauri WebView2 React/TS; validated IPC projection)
 ```
 
 This is **not a prescribed directory tree** and does not require an interface for each arrow. Prefer a direct function call when two responsibilities share a legitimate owner and no independently meaningful boundary exists. New modules must preserve one-way ownership; don't let UI rendering call capture/inference APIs directly.
@@ -104,12 +106,12 @@ This is **not a prescribed directory tree** and does not require an interface fo
 
 | Change | Minimum faithful proof |
 | --- | --- |
-| Visual text/popup change | Real Windows native rendering, intrinsic size, DPI/edges, focus and accessibility |
+| Visual text/popup change | Real Windows Tauri/Win32 popup, intrinsic size, mixed-DPI edges, no-focus-steal and accessibility |
 | Selection/hover capture | Valid/empty/denied cases on real target apps; MTA/timeout handling |
 | Coordinator/concurrency | Rapid hotkey/reordering/stale response tests |
 | Model/worker | Offline fixture, invalid/missing model, load/unload and error lifecycle |
 | Native resources | Leak/handle soak, sanitizer/static findings, shutdown/restart |
-| Installer/security boundary | Fresh OS VM, DLL load path, signature/update and permission constraints |
+| Installer/security boundary | Fresh Windows VM, WebView2 runtime, DLL paths, Tauri IPC permissions, signed updater and actual release assets |
 
 Run the smallest fast tests repeatedly. For an affected native boundary, an integration test on Windows is necessary; mocks cannot prove HWND focus or actual UIA provider semantics. For docs-only changes, check links, paths, contradictions and complete contracts; do not pretend an application binary exists.
 
@@ -117,7 +119,7 @@ Run the smallest fast tests repeatedly. For an affected native boundary, an inte
 
 - If changing **how it looks or behaves on screen**, update `DESIGN.md` after explicit UI decision and product behavior when relevant.
 - If changing **what outcome the user receives**, update `.agents/product.md`.
-- If changing **ownership, concurrency, runtime topology, resource lifecycle, error policy or package constraints**, update `.agents/engineering-design.md`.
+- If changing **ownership, concurrency, runtime topology, Tauri IPC/capabilities, popup rendering choice, resource lifecycle, error policy or package constraints**, update `.agents/engineering-design.md`.
 - Create concise ADRs only for consequential **accepted** choices, under `.agents/decisions/`; do not use them for naming, cosmetic refactors or undecided experiments.
 - Root `AGENTS.md` is the AI workflow router, **not** a second architecture document or a copy of the saved `RTK.md`.
 - Keep experimental assumptions explicitly labeled; preserve approved baseline across implementation iterations.
