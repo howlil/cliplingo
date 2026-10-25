@@ -6,6 +6,11 @@ on:
       - 'CMakeLists.txt'
       - 'src/translation.cpp'
   workflow_dispatch:
+
+concurrency:
+  group: cliplingo-native-link-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   real-windows-link:
     runs-on: windows-2022

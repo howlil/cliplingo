@@ -8,6 +8,11 @@ on:
       - 'CMakeLists.txt'
       - '.github/workflows/ocr-native.yml'
   workflow_dispatch:
+
+concurrency:
+  group: cliplingo-native-ocr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   ocr-native:
     runs-on: windows-2022

@@ -7,19 +7,27 @@ on:
       - 'tools/next_release_version.py'
       - 'tests/test_next_release_version.py'
       - 'RELEASE_NOTES.md'
+  # Publish only on product/runtime changes, not all master commits.
   push:
     branches: [master]
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'tools/build_en_id_pack.py'
+      - 'tools/verify_en_id_pack.py'
+      - 'tools/package_release.ps1'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
-  # Safety net for commits merged by integrations whose GitHub push events
-  # may not start a workflow. No new release is built for an already tagged SHA.
+  # Daily fallback for integrations that do not dispatch push workflows.
+  # A scheduled check skips non-product changes since the last release.
   schedule:
-    - cron: '17 * * * *'
+    - cron: '17 2 * * *'
 
 # Never cancel a healthy packaging run when a subsequent commit lands.
 # Only one master release resolves the next tag at a time.
 concurrency:
   group: cliplingo-versioned-release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -62,6 +70,23 @@ jobs:
               fi
             fi
           fi
+          # Scheduled checks must not turn documentation-only updates into
+          # expensive version bumps. Push path filters handle normal events.
+          if [[ "${{ github.event_name }}" == "schedule" && "$SHOULD_RELEASE" == true ]]; then
+            LATEST_NUMBER="${VERSION##*.}"
+            if (( LATEST_NUMBER > 1 )); then
+              LATEST_TAG="v0.1.0-beta.$((LATEST_NUMBER - 1))"
+              if git rev-parse --verify --quiet "refs/tags/$LATEST_TAG^{commit}" >/dev/null; then
+                if git diff --quiet "$LATEST_TAG" "$GITHUB_SHA" -- \
+                  src CMakeLists.txt \
+                  tools/build_en_id_pack.py tools/verify_en_id_pack.py \
+                  tools/package_release.ps1 .github/workflows/release.yml; then
+                  SHOULD_RELEASE=false
+                  echo "No release-relevant changes since $LATEST_TAG"
+                fi
+              fi
+            fi
+          fi
           echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
           echo "Release candidate: $VERSION, build: $SHOULD_RELEASE"
 
@@ -69,7 +94,7 @@ jobs:
     name: Convert & validate frozen EN-ID model
     runs-on: ubuntu-24.04
     needs: version
-    if: needs.version.outputs.should_release == 'true'
+    if: github.event_name != 'pull_request' && needs.version.outputs.should_release == 'true'
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -115,7 +140,7 @@ jobs:
     name: Build distributable OCR-enabled ClipLingo & native acceptance
     runs-on: windows-2022
     needs: [version, offline-model]
-    if: needs.version.outputs.should_release == 'true'
+    if: github.event_name != 'pull_request' && needs.version.outputs.should_release == 'true'
     env:
       VERSION: ${{ needs.version.outputs.version }}
     timeout-minutes: 120
@@ -198,7 +223,7 @@ jobs:
 
   publish:
     name: Publish verified GitHub prerelease
-    if: github.event_name != 'pull_request' && needs.version.outputs.should_release == 'true'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master' && needs.version.outputs.should_release == 'true'
     needs: [version, offline-model, portable-windows]
     runs-on: ubuntu-24.04
     permissions:

@@ -1,8 +1,24 @@
 name: M1 Windows host smoke
 on:
-  push:
-    branches: [master, 'feat/**']
+  # One validation for each PR commit; do not also run on its feature-branch push.
   pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/geometry.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/geometry.yml'
+
+concurrency:
+  group: cliplingo-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   geometry:
     runs-on: windows-2022
