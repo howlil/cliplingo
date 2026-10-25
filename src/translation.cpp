@@ -99,6 +99,9 @@ std::wstring failure_label(Failure failure) {
     case Failure::ModelInvalid: return L"Model/tokenizer files are invalid";
     case Failure::TranslationFailed: return L"Offline translation failed";
     case Failure::OcrUnavailable: return L"Optional local OCR not installed or English traineddata missing";
+    case Failure::ExcludedSource: return L"Capture denied by privacy exclusion policy";
+    case Failure::ClipboardUnavailable: return L"Clipboard unavailable or busy";
+    case Failure::ClipboardChanged: return L"Clipboard changed before capture";
   }
   return L"Unknown failure";
 }
