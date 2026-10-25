@@ -1,111 +1,193 @@
-# ClipLingo — Engineering Contract
+# ClipLingo — Tauri v2 + Rust + Native Windows Engineering Contract
 
-Status: **Rust-first clean-slate architecture accepted; application NOT implemented** (2026-10-26).
-This repository is intentionally being reset to documentation only: `.agents/`, `AGENTS.md` and `DESIGN.md`. The previous C++/CMake application is preserved on branch `archive/pre-rust-clean-slate-20261026` (commit `24b8e3c30f390e6d571e2b15d1e1a56ba4781846`) for reference and recovery. **No current application build, installed executable, CI or release pipeline remains on the clean-slate default branch.** This document specifies the Rust-first architecture to implement next; historical C++ behavior is a reference, not a shipping guarantee.
+Status: **research-based target architecture, NOT implemented or benchmarked** (2026-10-26).
+Decision: [ADR-0002 — Tauri v2 shell, Rust-owned native behavior](decisions/0002-tauri-rust-windows-hybrid.md) supersedes the "avoid Tauri by default" portion of [ADR-0001](decisions/0001-rust-first-native-windows.md). Rust-first and the original product acceptance remain. No new executable, Cargo project, WebView UI, model package or CI currently exists on \`master\`.
+Source of truth: [Product contract](product.md), root [DESIGN.md](../DESIGN.md), root [AGENTS.md](../AGENTS.md). The archived C++ project is preserved at branch \`archive/pre-rust-clean-slate-20261026\`, commit \`24b8e3c30f390e6d571e2b15d1e1a56ba4781846\`. It is a historical reference, not a current runtime.
 
-Sources of authority: `.agents/product.md` (observable behavior), `DESIGN.md` (approved UI), `AGENTS.md` (agent workflow), and [ADR-0001](decisions/0001-rust-first-native-windows.md) (consequential language decision). Do not add a competing `.agents/engineering.md`: this existing file is the repository's single engineering contract.
+## 1. Job and constraints (before technology)
 
-## 1. Archived implementation and new system boundary
+A user reading English text in a Windows browser/PDF/editor selects a span or invokes a configured hover target, presses \`Ctrl+Alt+T\`, receives **only its Indonesian translation** in a compact text-only popup above the **frozen hotkey-time cursor**, and keeps focus in the source application. The utility lives in the tray and works fully offline **after the local model is installed**. Manual region OCR and opt-in clipboard are separate explicit capture paths, never continuous polling. Settings is an accessible six-section window. Language model/update downloads, when deliberately initiated, are allowed online; **captured text must never go to an external translation service**.
 
-Archived C++ repository evidence (before clean-slate reset, 2026-10-26):
-- `src/main.cpp`: Win32 host/tray/settings, hotkey handling, request coordination and lifecycle.
-- `src/capture.cpp`, `src/hover.cpp`, `src/capture_helper.cpp`: UI Automation and bounded helper capture; `src/capture_policy.cpp`: excluded-app policy.
-- `src/clipboard.cpp`: explicit opt-in clipboard reading; `src/ocr.cpp` and `src/region_selector.cpp`: on-demand region OCR.
-- `src/translation.cpp` and `src/model_package.cpp`: local CTranslate2/SentencePiece inference and model management.
-- `src/popup.cpp` and geometry headers: native popup, sizing, position and accessible output.
-- `src/model_benchmark.cpp`: opt-in headless native performance diagnostic.
-- `CMakeLists.txt`, `tests/*.cpp`, `.github/workflows/*.yml`: active C++ build/test/distribution mechanisms.
+Non-negotiable behavior is owned by \`product.md\` and \`DESIGN.md\`, **not** by a preference for Tauri, WebView, React or Rust. Product still requires word/sentence/paragraph scope, no fake result for failed/no capture, latest-request-wins, excluded app policy, mixed-DPI work-area placement, no focus theft and accessibility.
 
-These are observations of **archived code paths only**, not active source files, verified functionality, or Windows acceptance. The archived benchmark is not a validated end-to-end latency SLO. When a future Rust release pipeline is created, publication permissions and actual assets must be verified separately.
+Architecture drivers: reduce application-owned native complexity with Rust, enable polished Settings and straightforward installer/updater via Tauri v2, while retaining low idle usage, low hotkey-to-result latency and OS capture/inference reliability. Tauri does **not** provide UI Automation, desktop OCR or an offline translation engine merely by being adopted. WebView2 costs process/memory; there is **no measured evidence yet** that this hybrid is faster, smaller or more reliable than archived Win32 C++.
 
-Target: migrate **new application-owned native Windows host, coordinator, capture policy, settings, popup and other application logic to Rust**. Preserve Win32/COM/DirectWrite where they meet behavior; do not introduce Tauri/WebView2 or a local HTTP service by default. A narrowly scoped native C/C++ inference/OCR dependency may remain behind FFI when required by CTranslate2, SentencePiece, Tesseract or packaging realities. Calling this "Rust-first" must not be misrepresented as "zero unsafe code" or "100% Rust".
+## 2. Stack selection and decisions
 
-The clean-slate reset removes implementation files and release infrastructure by explicit user request; it does not change the user-facing target product. No Rust runtime, binary, or release exists until implemented and verified.
-
-## 2. System graph — responsibilities and state owners
-
-```text
-Windows message loop / tray / global hotkey (Rust WindowsHost)
-  ├── SettingsStore: authoritative local versioned preferences
-  ├── RequestCoordinator: generation, trigger-time foreground/cursor/DPI snapshot
-  │    ├── Capture: selection first, geometry-checked hover, opt-in clipboard,
-  │    │            user-initiated region OCR; excluded-source policy before capture
-  │    │            UIA worker/helper isolation where provider hangs demand it
-  │    └── TranslationEngine: model/tokenizer integrity, offline EN→ID inference
-  │                         (Rust orchestration; isolated native FFI if needed)
-  └── PopupController: single UI-thread-owned nonactivating native text HWND,
-                       intrinsic measurement, mixed-DPI placement, accessibility
-```
-
-Arrows express responsibility, not a mandatory crate/class/thread per box. Prefer one process and one Rust application crate initially; use a real helper process only where current timeout/crash isolation requirements justify it. **Do not assume Rust threads can interrupt a blocking COM call.** Do not create a permanent OCR or updater service. An existing helper protocol must be deliberately migrated or replaced rather than accidentally dropped.
-
-| Mutable state | Authoritative owner | Invariant |
+| Concern | Target | Status, qualification |
 | --- | --- | --- |
-| Active translation request and generation | RequestCoordinator | Only newest valid generation may present a result |
-| Trigger anchor and foreground identity | Immutable request snapshot from coordinator | Cursor is not resampled after inference |
-| Window and visible text | PopupController on UI thread | Native HWND is not mutated from worker threads and cannot steal source focus |
-| Capture allow/deny decision | Capture policy using SettingsStore snapshot | Excluded, unknown or protected sources are never implicitly permitted |
-| Preferences and exclusions | SettingsStore | Single serialized versioned source of truth; privacy changes invalidate pending results |
-| Model installation and activated version | ModelManager/TranslationEngine with one agreed lifecycle owner | Corrupt/partial packs are never reported ready or used for fake success |
-| COM and native handle lifetime | Owning Windows adapter/worker | No use past shutdown, no leaking foreign handles/COM references |
+| Desktop shell, tray, lifecycle | Tauri **v2**, Rust process; Tauri tray/menu and single-instance plugin | Selected; use no persistent main/dashboard window |
+| Settings and preview | React + TypeScript + Vite, hosted by **WebView2 on Windows** | Selected rendering candidate for the six approved settings sections; Settings window created hidden/on demand |
+| Result popup | One reusable **frameless Tauri WebviewWindow** (HTML/CSS text only), with Windows native HWND adjustments if necessary | **Conditional prototype**, NOT approved as proven non-activating. If it fails focus/performance/accessibility proof, use a small Rust-owned Win32/DirectWrite result HWND instead; keep WebView2 for Settings only |
+| Global shortcut | \`tauri-plugin-global-shortcut\` registered by Rust owner | Selected capability; registration collision/unregister must be observed |
+| System text selection/hover | Windows UI Automation COM through Rust \`windows\` bindings, dedicated MTA worker/helper | Required native boundary; alternate wrapper crates need validation |
+| User-drawn OCR region | Rust-managed bounded native screen capture + local OCR | Optional later slice; **Windows.Media.Ocr requires desktop package identity** per Microsoft docs, so **do not assume it works with default NSIS/unpackaged installer**. Prototype compatible Tesseract/alternative with licensing/dependency review; MSIX is a separate deployment decision |
+| EN→ID inference | Rust model orchestration, local compatible model/tokenizer | Engine unresolved; short-list a *narrow, audited* CTranslate2/SentencePiece C ABI wrapper/sidecar and a proven Rust-consumable runtime only after accuracy, ABI, RAM, Windows packaging proof. Do not promise Rust-native inference/ONNX compatibility without demonstrating model parity |
+| Local preferences | One versioned Rust SettingsStore, atomic write to user config directory; view is read-only projection | Selected ownership; plugin-store can be evaluated but must not create a second authoritative store |
+| Distribution | Tauri Windows **NSIS** installer first candidate; verified WebView2 runtime provision | Candidate; only one user-facing installer format initially; MSI/MSIX not assumed |
+| Updates | \`tauri-plugin-updater\`, **signed artifacts**, controlled GitHub Release or signed metadata endpoint | Later release feature; independent from offline inference; version, signature, install mode and recovery checks required |
+| Security | Tauri v2 per-window capabilities, narrow Rust commands, CSP, no remote scripts | Mandatory; Tauri permissions do NOT sandbox Rust itself |
 
-No duplicate "current request", "model ready", or mutable preferences in UI/controller/worker. A copied snapshot is read-only.
+Do not introduce a remote HTTP backend, WebSocket daemon, telemetry SDK, plugin ecosystem, Redux/global JS state copy of domain truth, separate crate per concept or service locator. A helper **process** is admitted only when it solves a demonstrated UIA hang or native inference crash/ABI isolation failure; Tauri sidecars need separately versioned packaging and threat boundaries.
 
-## 3. Boundary contracts
+## 3. Responsibility and ownership graph
 
-- `CaptureRequest`: `generation + trigger + foreground + physical cursor + scope + privacy snapshot` -> `TextWithProvenance` or typed `NoSelection | Unsupported | Denied | Timeout | InvalidInput | Failed`. Manual region OCR carries bounded ROI; explicit clipboard carries trigger-time sequence number.
-- `TranslationRequest`: `generation + validated captured UTF text + activated model` -> nonempty translated target text or typed `ModelMissing | ModelInvalid | Timeout | Failed`. Inference must be offline after model installation.
-- `PopupRequest`: `generation + nonempty target text + frozen cursor/monitor snapshot + display preferences` -> show/reuse measured popup or no display. Always recheck latest generation before showing.
-- `SettingsChange`: validated, persisted preference update -> coherent snapshot and invalidation of affected pending requests.
-- Native boundary: Win32/COM return values and HRESULT map to Rust error outcomes; Windows adapters own raw pointers/handles, thread/apartment affinity, UTF-8/UTF-16 conversion and teardown. `unsafe` code must be locally encapsulated and its safety invariants documented.
-- FFI boundary (if needed): define ABI-compatible ownership, allocator/free side, panic/exception barriers, thread-affinity, lengths, model lifetime and error mapping. Neither Rust panic nor C++ exception may unwind across the ABI. Crash containment cannot be promised by an in-process FFI wrapper.
+\`\`\`text
+User's other Windows app (browser / PDF / editor)
+    | Ctrl+Alt+T / explicit OCR or clipboard tray command
+    v
+Tauri Rust Shell [one process, event loop, tray, global shortcut, lifecycle]
+    |
+    +--> RequestCoordinator [ONLY owner: generation, pause, trigger snapshot,
+    |                        bounded in-flight work, cancellation/presentation gate]
+    |        |
+    |        +--> Policy + CaptureService [Rust: allow/deny before read]
+    |        |         -> UIA dedicated MTA worker [Win32/COM, foreign provider]
+    |        |         -> optional opt-in clipboard read
+    |        |         -> optional region selector -> screen capture -> local OCR
+    |        |
+    |        +--> ModelManager [model manifest/version/integrity/local availability]
+    |        |         -> Translator [one local EN→ID engine+tokenizer/session]
+    |        |
+    |        +--> PopupOwner [single authoritative shown/hidden text, frozen anchor]
+    |                   -> A: reusable Tauri WebviewWindow (conditional)
+    |                   -> B: Rust Win32/DirectWrite HWND if A fails acceptance
+    |
+    +--> SettingsStore [ONLY owner: validated, versioned preferences/exclusions]
+    |        ^                  |
+    |        | Rust commands    v
+    |        +-- Settings WebviewWindow [React/TS projection + input; no direct capture]
+    |
+    +--> Updater/Installer integration [opt-in/version check; not translation hot path]
+\`\`\`
 
-Capture text, clipboard, images, model manifests, files and tokens are untrusted inputs; validate sizes and structure. Never log or retain raw captured content by default. Do not bypass protected/elevated content restrictions.
+**WebView frontend is presentation and user input only.** Rust owns capture policy, model access, snapshot, concurrency and OS operations. No capture text goes through the Settings frontend. The result view receives only target translation, generation and *validated presentation metadata*. To avoid native UI failure from JS-event races, Rust must perform authoritative latest-generation checks immediately before showing the popup, regardless of renderer.
 
-## 4. Critical runtime flows
+State owner / invariants:
 
-**Normal translation:** `WM_HOTKEY` -> snapshot cursor/foreground/monitor and increment generation -> reject excluded/unknown source -> capture selection (or configured hover) on bounded COM MTA worker/helper -> no popup for absent/invalid text -> offline inference -> reject stale or failed results -> measure actual target text and wrap to maximum DIPs -> place above frozen cursor, flip/clamp to monitor work area -> present without activating source window.
-
-**Competing hotkeys:** request B advancing the generation invalidates A. A may finish its native call but may never display a result after B. A timeout is *not* evidence that the underlying COM call stopped; a stuck provider must not block the tray/message pump.
-
-**Explicit clipboard:** only user-initiated tray action when enabled; read `CF_UNICODETEXT` without modification; fail for unavailable, overlong or changed sequence. Clipboard text has no reliable source-app provenance and is not covered by foreground excluded-app policy.
-
-**Manual OCR:** only the user-drawn bounded region, no background capture; cancel/empty/oversized/denied -> no popup; release images promptly. OCR implementation and model dependencies remain subject to real Windows/package validation.
-
-**Model failure/upgrade:** absent/corrupt/incompatible/incomplete assets never produce translation success. Activate only verified model; failure leaves a recoverable Settings state. The model pack and file format must remain compatible with installed user data unless a tested migration exists.
-
-**Shutdown/session changes:** invalidate pending work; stop accepting triggers, hide popup, release HWND on owning thread, stop/join bounded workers and dispose COM/native resources on the correct apartments. Sleep, lock, Explorer restart and disconnected monitors must not resurrect a stale popup.
-
-## 5. Guarantees and constraints
-
-1. **Behavior:** preserve all tests and acceptance traces in `.agents/product.md` and appearance in `DESIGN.md`; especially selection exactness, latest-request-wins, no fake success and target-text-only popup.
-2. **Resource/latency:** low idle footprint and low hotkey-to-visible-result time are objectives **without invented numeric budgets**. Measure cold and warm full-path latency, private bytes, working set, CPU, handles, threads and wakeups on representative Windows machines.
-3. **Accessibility:** text-only visual popup still exposes readable accessible text; DPI, high contrast, text scaling, mixed monitors, Unicode/BiDi, keyboard-only settings and no-focus-steal require native acceptance.
-4. **Privacy/security:** deny excluded/unknown live sources; no default capture history, analytics, background OCR, clipboard rewriting, or cloud text upload; validate packages and restrict DLL load paths when native dependencies are shipped.
-5. **Reliability:** responsive tray/settings during provider/inference failure; bounded concurrent work, typed errors, deterministic shutdown, fault isolation where needed.
-6. **Distribution:** the archived CMake/MSVC build and model packaging are recovery references, **not an active build or release path**. Re-establish Cargo-based Windows verification, model packaging and publication only after implementation is ready. CI green alone does not prove that a GitHub Release was published.
-
-## 6. Rust migration execution gates
-
-| Gate | Change | Acceptance before proceeding |
+| Mutable state | Sole owner | Must remain true |
 | --- | --- | --- |
-| M0 — reset | Rust target and ADR; archive prior C++ commit; remove tracked code/build/CI files | Only `.agents/`, `AGENTS.md` and `DESIGN.md` remain; archived original commit and absence of a runnable build are explicit |
-| M1 — host | Build a small Rust Windows tray/hotkey/settings shell | Real Windows launch, hotkey conflict, tray restart, pause/quit and resource teardown; no UI regression |
-| M2 — capture & coordination | Migrate latest-generation coordinator, selection/hover, excluded-app policy and explicit clipboard | Deterministic race tests plus live UIA COM/apartment/permission/hang/timeout evidence |
-| M3 — local inference & OCR | Integrate existing model packs through tested Rust-native or FFI boundary; port explicit region OCR | EN→ID offline parity, tokenizer integrity, invalid model/ROI tests, privacy, crashes/hangs and native DLL packaging |
-| M4 — popup | Native text window, geometry, accessible representation, settings parity | Real Windows word/sentence/paragraph intrinsic fit; mixed-DPI edges; screen reader; no activation |
-| M5 — new release pipeline | Establish Cargo-based build/test/packaging workflow and signed distribution as appropriate | Repeatable Windows CI, installed-package smoke on clean VM, actual GitHub Release asset verified and rollback route |
+| Active generation, request queue, paused state | RequestCoordinator | Newer valid requests win; no stale display even if worker finishes |
+| Cursor, foreground HWND, monitor and DPI at trigger | Immutable coordinator snapshot | No resampling cursor on completion; no wrong-monitor anchor |
+| Excluded apps, capture toggles and settings | SettingsStore + validated policy projection | Fail closed for unqueryable live app identity; settings changes invalidate pending work |
+| Model activated version & readiness | ModelManager | Verified immutable active model, never partial/corrupt files |
+| Translation model/session memory | Translator worker | One bounded session owner; shutdown/upgrade cannot race with inference |
+| Popup visibility/text/geometry | PopupOwner | No focus theft, taskbar entry or obsolete generation; only translated text |
+| Native COM/HWND/FFI handles | Native adapter/owning worker | Correct thread/apartment lifetime and teardown |
+| App/update install version | Bundle/updater | Signed manifest and installed version consistent, no downgrade by accident |
 
-These migration M-numbers are **implementation gates**, not the historical product M1–M6 feature names. The archived original C++ tree remains recoverable via its branch and commit but is no longer present on the default branch. Recreate only the Rust modules and tooling that satisfy the product contract. No performance improvement is claimed without side-by-side measurements against the archive.
+## 4. End-to-end (E2E) runtime contracts
 
-## 7. Consequential decisions and open questions
+### 4.1 Selection → offline translation → popup (critical vertical slice)
 
-**Accepted:** [ADR-0001 — Rust-first native Windows migration](decisions/0001-rust-first-native-windows.md). This is a user-directed maintainability/safety/engineering decision, not a demonstrated performance win.
+1. **Launch:** Tauri boots into tray; register \`Ctrl+Alt+T\` (or report shortcut conflict), single-instance protection; Settings is available independent of model readiness. Background startup does not eagerly render two hidden WebViews or repeatedly poll input.
+2. **Trigger:** Rust shortcut handler captures foreground HWND/process identity, cursor in **physical virtual-screen pixels**, monitor and DPI once; increments monotonic generation. Reject if paused, source is own app, excluded/unresolvable, or secure desktop/permission rules deny.
+3. **Capture:** dispatch only to a dedicated initialized COM MTA worker; call UI Automation for actual selected ranges first. A missing selection is \`NoSelection\`; do not silently read clipboard or synthesize Ctrl+C. Hover fallback is separately configured and must validate text geometry, not simply choose nearest UIA word.
+4. **Bound:** validate nonempty text/UTF, max units, scope provenance; snapshot request and current preferences; avoid sending raw source to any JS view or disk.
+5. **Translate:** ModelManager verifies installed pack and tokenizer compatibility, then translator performs offline EN→ID inference on bounded worker(s). Return typed \`ModelMissing | ModelInvalid | Unsupported | Timeout | Failed\` rather than fake translated output.
+6. **Present:** reject if generation stale, locked, settings/policy changed or result empty. Measure final output with actual font/DPI, intrinsic width → cap at max 420 DIP → wrap → cap height at max 300 DIP, position above frozen cursor with default 12 DIP gap, flip below/clamp into monitor work area (including negative coordinates), show **without activating** the original app.
+7. **Dismiss:** explicit policy and escape/action; on new hotkey hide/replace old popup per coordinator; no translation history by default.
 
-**Open until implementation evidence:** exact Windows Rust bindings and native UI wrapper; Rust-to-CTranslate2/SentencePiece ABI packaging, optional Tesseract/OCR boundary, helper IPC protocol/versioning, Windows minimum version, model residency policy, installer/update topology and signed dependency availability. Avoid premature crate frameworks, interface hierarchies, thread pools, services, package/runtime promises, or a claim of zero `unsafe`.
+**Popup implementation risk:** \`alwaysOnTop\`, \`decorations:false\`, \`transparent\`, \`skipTaskbar\`, \`visible:false\` are available Tauri window knobs, but **none alone proves \`WS_EX_NOACTIVATE\`/focus or correct accessibility** on Windows. Prototype Windows HWND semantics using \`SWP_NOACTIVATE\`/Win32 APIs if supported by Tauri's raw window handle; verify against Edge, Chrome, Notepad and PDF with input focus and keyboard selection. Avoid window-per-hotkey creation; precreate only if justified by measured latency versus resident memory. A native HWND fallback must not duplicate settings or capture logic.
 
-## 8. Verification boundary
+### 4.2 Failure, concurrency and recovery
 
-At M0 verify exact remaining tracked files, archive reference, root documentation links and clean Git diff. **No application build or release is possible on the clean-slate branch.** For later gates use Rust format/lint/unit checks **and** real-Windows integration/soak tests; mock Win32/UIA is not a substitute for genuine COM/apartment, HWND, focus and DPI tests.
+- Two hotkeys A then B: B becomes generation N+1; if A completes last, A is dropped at **Rust-owned presentation boundary**, not just hidden by JS. No unbounded new OS thread per trigger; bounded queue/backpressure, deterministic latest-wins.
+- UIA provider hung: caller timeout cancels *interest* in the answer, **not necessarily the underlying COM call**. If provider hangs make process-unresponsive or exhaust capacity, escalate capture to a separately supervised helper process with timeouts and restart; never claim \`tokio::timeout\` can terminate COM.
+- Missing/corrupt model: Settings displays an actionable install/repair state, result popup stays hidden. Installation stages files in temp area, verifies SHA-256 + tokenizer/model manifest/license, then atomically activates. Interrupted downloads never replace a working model.
+- Region OCR: explicit tray action → dedicated selector overlay → freeze ROI and release cursor anchor → bound pixels and permissions → capture in memory → local OCR → same translation/presentation pipeline. Escape/right-click cancels; protected/secure content is denied. Never continuous OCR or persistent screenshots.
+- Clipboard: separate user-initiated tray action only after opt-in, \`CF_UNICODETEXT\` read-only, sequence validation, bounded length, no source-app provenance claims. Ordinary hotkey must not access clipboard.
+- Shutdown/restart: invalidate generations, unregister shortcut, hide/destroy popup on proper thread, close WebViews, stop native workers/helper, release COM/FFI resources. Restore tray after Explorer taskbar restart; session lock invalidates pending presentation. Closing Settings hides/destroys *Settings*, not the tray app; Quit is explicit.
 
-The recorded C++ implementation details remain recoverable in Git history; this file deliberately stops treating those implementation-specific techniques as instructions for *new* Rust code.
+### 4.3 Settings and frontend IPC
+
+- UI: exactly six sections from \`DESIGN.md\` (General, Text Capture, Translation Popup, Appearance, Language Models, Privacy); keyboard/focus/high-contrast/text scaling.
+- Commands are deliberately narrow: \`get_settings\`, \`update_settings(validated_patch)\`, \`get_model_status\`, \`install_model(user_intent)\`, \`get_app_status\`, \`check_update(user_intent)\`. Never expose \`read_screen(x,y)\`, arbitrary \`exec\`, filesystem paths, or \`translate_selected_text\` to a compromised renderer without actual authorization policy.
+- Tauri command arguments are untrusted regardless of TypeScript typing. Backend validates constraints and source window label/role. Apply per-window v2 capabilities and deliberate command manifest restrictions; an empty/unspecified capabilities list is **not proof that all app commands are inaccessible**. Keep CSP restrictive, no CDN/remote JS injection.
+- Do not emit source text or captured OCR pixels in global Tauri events. Result WebView gets only translated target text. Document privacy boundaries for devtools/logging and crash reports.
+- Settings persisted with versioned schema and atomic replacement; corrupted config produces safe fallback plus recoverable indication; no silently destructive migrations.
+
+## 5. Binding, deployment and performance constraints
+
+| Boundary | Constraint / evidence needed | Implementation consequence |
+| --- | --- | --- |
+| Tauri/WebView2 | Runtime present on Windows 11; Tauri installer can bootstrap WebView2, even if the app itself performs offline inference | Test clean Windows VM with/without runtime, online installer and chosen offline install scenario; no claim fully offline installer by default |
+| Tray resident | Hidden WebViews may have measurable idle memory/CPU, and Tauri worker processes may persist | Measure Settings closed, model cold, model warm, popup hidden/visible; do not claim "zero cost" |
+| UIA/COM | Microsoft recommends separate **non-window-owning MTA** thread for desktop-wide UI Automation | Keep UIA away from Tauri main/event loop and JS; test deadlocks, stalls, COM lifetime and privileges |
+| Tauri popup | Window visibility/coordinates differ between physical pixels and logical DIPs; \`alwaysOnTop\` does not prove no activation | Native focus/window-style/DPI/negative-coordinate proof required **before final popup choice** |
+| Rust native model | CTranslate2 and SentencePiece are C++ dependencies; no guaranteed compatible first-party stable Rust ABI | Prototype C ABI wrapper or isolated helper; document allocators, panics, exceptions, DLLs, CPU instruction sets, license and pack format |
+| OCR | Microsoft's \`Windows.Media.Ocr\` desktop package-identity restriction | Avoid assuming NSIS portable exe can invoke it; investigate unpackaged-compatible local OCR backend and MSIX as separate option |
+| User safety | Protected/elevated/UAC/secure desktop may block capture legitimately | No forced elevation, driver, hook/injection or bypass; actionable status only |
+| Offline vs update | Translation must work without network after installation; updater/model installation naturally requires permitted network | Separate network controls from translation path; deny raw text telemetry |
+| Release | Tauri updater validates signature (cannot disable), latest JSON requires correct URL/signature/target; old repo had GitHub release 403 | Use constrained \`contents:write\` release job + confirmed token permissions, signed Windows NSIS asset, JSON metadata and fresh-VM upgrade/rollback proof |
+| Performance | No numeric latency, RAM, package size or battery SLO has been measured in Rust/Tauri | Define p50/p95/p99 hotkey-to-visible-result for cold/warm, separate model warm/cold, idle private bytes and WebView2 child processes before budgets |
+| Update mechanism | Installer/update artifact names differ from portable ZIP and require signing/private key protection | Pick only one initial installer channel, keep signing key in protected CI secret; never include key in source |
+
+**Security threat surfaces:** untrusted selection/clipboard/OCR input; COM foreign provider; model archives/DLL loading; updater metadata; WebView XSS/IPC privilege boundary; unsafe Win32 handles. Validate and bound every crossing; keep telemetry off and avoid storing raw text or screenshot. Distinguish Tauri IPC restrictions from Rust command implementation authorization.
+
+## 6. Verification strategy: smallest faithful proofs
+
+**Pure tests (Rust unit / property):**
+- latest-generation arbitration under A/B reorder; pause/privacy updates invalidate results
+- word/sentence/paragraph segmentation and selected-text exactness
+- exclusion policy fail-closed on unknown process, normalization and invalid config
+- UTF conversion/length, ROI pixel bounds, monitor geometry clamping and negative coordinates
+- model pack manifest/hash/version atomic staging/recovery; no false success
+
+**Windows native integration (real Windows, not mocks):**
+- MTA init, selection/hit-test across Chrome/Edge, Notepad, PDF reader; denied/protected window
+- concurrent hotkeys with injected stall; source focus preserved, no bogus popup, deterministic shutdown
+- popup Win32 \`GetForegroundWindow\` before/after, keyboard focus, top/bottom/sides, 100/125/150/200% mixed-DPI, screen reader and text overflow
+- foreground excludes and clipboard origin caveat; region OCR cancellation/permissions
+- native tokenizer/model on supported CPU, DLL load on clean VM, process/handle leak soak
+
+**WebView/Settings E2E:** use \`@wdio/tauri-service\` / WebdriverIO for six-section navigation, persistence, model status, update UI, keyboard/high contrast and IPC guards. WDIO DOM checks **cannot prove** native no-focus-steal, real UIA capture, system tray restoration, install/update or COM hang containment. Pair these with targeted Windows-native host assertions and real app journey.
+
+**Critical all-the-way user journey on an interactive Windows desktop:**
+\`\`\`text
+Install app (clean VM)
+ -> launch tray with Settings closed
+ -> install/validate EN-ID model
+ -> open Chrome/PDF/Notepad fixture
+ -> select a known English sentence
+ -> trigger Ctrl+Alt+T
+ -> observe no focus change, no source text in popup
+ -> verify offline Indonesian output + cursor-position geometry
+ -> repeat on second monitor/scale
+ -> disable network and repeat
+ -> simulate fast A/B requests, model corruption, blocked UIA
+ -> quit/restart/reopen settings; verify preferences
+ -> install signed newer version and verify actual new version/assets
+\`\`\`
+
+For E2E flakiness, use deterministic local fixtures and observable readiness rather than sleeps. Keep sensitive captured content out of screenshots/artifacts/logs. Do not promote browser-mock tests to real-native acceptance.
+
+## 7. Incremental decision/proof gates (not existing historical product milestones)
+
+| Phase | Scope | Acceptance and go/no-go |
+| --- | --- | --- |
+| R0 — research/contract | Tauri v2 hybrid decision, explicit constraints, ADR, proof plan | Docs consistent; no pretend runnable app |
+| R1 — shell + UI proof | Initialize Tauri v2 Cargo + React/TS; tray/single-instance/hotkey/settings; prototype reusable Tauri popup | Real Windows tray/hotkey, close-to-tray, no focus steal and measurable idle/WebView cost; if popup fails, choose native HWND for result |
+| R2 — selection + policy | Rust coordinator + UIA MTA worker, selection only, excluded-app policy | Latest-wins, exact selection, no-selection silent, foreground focus and provider timeouts |
+| R3 — EN→ID offline engine | Proven local model/tokenizer + management and typed errors | Offline valid fixture, cold/warm evidence, crash/failure behavior, model integrity and licensing |
+| R4 — result/presentation | Final chosen popup backend + settings preview/parity | Correct translation only; intrinsic sizing, mixed DPI, screen reader, no activation |
+| R5 — explicit enhancements | Geometry-checked hover, opt-in clipboard, manual OCR | Only explicit capture modes, no periodic capture, protected content respected; correct OCR backend for installer |
+| R6 — distribution | Windows NSIS, versioning, signed updater, GitHub Release, installed E2E | Verified download/install/update/rollback on clean Windows, runtime dependencies, signed metadata/asset availability |
+
+**Critical path:** R0 → R1 **popup + idle feasibility gate** → R2 → R3 → R4 → R6. R5 additions do not block the minimal selection-only first release unless product scope changes. Do not add model/update backend before the shell+popup viability is shown.
+
+## 8. Sources and decision validity (consulted 2026-10-26)
+
+- Tauri v2 capabilities and command restrictions: https://v2.tauri.app/security/capabilities/
+- Tauri IPC/commands (Rust ↔ WebView): https://v2.tauri.app/develop/calling-rust/
+- Tauri config/window options: https://v2.tauri.app/reference/config/
+- Tauri shortcut plugin: https://v2.tauri.app/plugin/global-shortcut/
+- Tauri Windows installer & WebView2 options: https://v2.tauri.app/distribute/windows-installer/
+- Tauri updater signing, artifacts & JSON: https://v2.tauri.app/plugin/updater/
+- Tauri WebdriverIO testing: https://v2.tauri.app/develop/tests/webdriver/
+- Microsoft UIA threading (MTA): https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-threading
+- Microsoft UIA overview: https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-uiautomationoverview
+- Microsoft Windows.Media.Ocr namespace/package identity: https://learn.microsoft.com/en-us/uwp/api/windows.media.ocr
+- Microsoft screen capture security/picker: https://learn.microsoft.com/en-us/windows/apps/develop/media-authoring-processing/screen-capture
+
+Treat these as **documentation evidence**, not evidence the design compiles or performs. Before coding, pin and verify the exact Tauri/Windows/Rust plugin versions, Windows support matrix, native dependency licenses and model files. Do not copy these research assumptions into runtime claims.
