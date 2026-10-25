@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <exception>
 
 namespace {
 constexpr std::uint32_t kMagic = 0x434C5535; // CLU5, versioned UIA/clipboard IPC
