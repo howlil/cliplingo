@@ -31,6 +31,7 @@ endif()
 add_executable(${CLIPLINGO_TARGET} WIN32
   src/main.cpp
   src/capture.cpp
+  src/capture_policy.cpp
   src/hover.cpp
   src/capture_helper.cpp
   src/model_package.cpp
@@ -59,4 +60,8 @@ if(CLIPLINGO_HOST_SMOKE)
   enable_testing()
   add_test(NAME model_pack_integrity COMMAND ClipLingoModelPackTest)
   add_test(NAME scope_text COMMAND ClipLingoScopeTextTest)
+  add_executable(ClipLingoCapturePolicyTest tests/capture_policy_test.cpp)
+  target_include_directories(ClipLingoCapturePolicyTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_compile_options(ClipLingoCapturePolicyTest PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+  add_test(NAME capture_policy COMMAND ClipLingoCapturePolicyTest)
 endif()
