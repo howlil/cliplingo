@@ -1,0 +1,178 @@
+name: Release portable Windows beta
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'tools/package_release.ps1'
+      - 'RELEASE_NOTES.md'
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-model:
+    name: Convert & validate frozen EN-ID model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned conversion and CPU inference dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu 'torch==2.6.0'
+          python -m pip install 'ctranslate2==4.8.3' 'sentencepiece==0.2.1' 'transformers==4.57.3' 'huggingface_hub>=0.25,<1' 'safetensors>=0.4'
+      - name: Build model pack at immutable OPUS EN-ID revision
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-model"
+          python tools/build_en_id_pack.py "$RUNNER_TEMP/release-model/en-id" --revision 052fd659487dd0d1a655969050e97950f83dc903
+          python tools/verify_en_id_pack.py "$RUNNER_TEMP/release-model/en-id"
+      - name: Create standalone offline model ZIP
+        shell: bash
+        env:
+          VERSION: v0.1.0-beta.1
+        run: |
+          python - <<'PY'
+          import os, zipfile
+          from pathlib import Path
+          base=Path(os.environ['RUNNER_TEMP'])/'release-model'
+          zipname=base/f"ClipLingo-{os.environ['VERSION']}-en-id-model.zip"
+          with zipfile.ZipFile(zipname, 'w', zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as z:
+              for p in sorted((base/'en-id').iterdir()):
+                  if p.is_file():
+                      z.write(p, 'en-id/'+p.name)
+              z.writestr('README-MODEL.txt', 'Helsinki-NLP/opus-mt-en-id; immutable revision 052fd659487dd0d1a655969050e97950f83dc903; license Apache-2.0; origin https://huggingface.co/Helsinki-NLP/opus-mt-en-id. Extract and install ONLY the en-id folder in ClipLingo Settings.\n')
+          assert zipname.stat().st_size > 1000000
+          print(zipname)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cliplingo-offline-model-beta1
+          path: ${{ runner.temp }}/release-model/ClipLingo-v0.1.0-beta.1-en-id-model.zip
+          if-no-files-found: error
+          retention-days: 3
+
+  portable-windows:
+    name: Build distributable OCR-enabled ClipLingo & native acceptance
+    runs-on: windows-2022
+    needs: offline-model
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cliplingo-offline-model-beta1
+          path: ${{ runner.temp }}/model-artifact
+      - name: Extract exact model pack for native acceptance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Expand-Archive -Path "$env:RUNNER_TEMP/model-artifact/ClipLingo-v0.1.0-beta.1-en-id-model.zip" -DestinationPath "$env:RUNNER_TEMP/model-check"
+          if (!(Test-Path "$env:RUNNER_TEMP/model-check/en-id/cliplingo-model.sha256")) { throw 'Model manifest missing' }
+      - name: Clone pinned CTranslate2 & SentencePiece, and Windows OCR dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git clone --quiet --depth 1 --recurse-submodules --shallow-submodules --branch v4.8.3 https://github.com/OpenNMT/CTranslate2.git "$env:RUNNER_TEMP/ctranslate2"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git clone --quiet --depth 1 --recurse-submodules --shallow-submodules --branch v0.2.1 https://github.com/google/sentencepiece.git "$env:RUNNER_TEMP/sentencepiece"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git clone --quiet --depth 1 https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP/vcpkg"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:RUNNER_TEMP/vcpkg/bootstrap-vcpkg.bat" -disableMetrics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:RUNNER_TEMP/vcpkg/vcpkg.exe" install tesseract:x64-windows --clean-after-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Compile pinned SentencePiece and CTranslate2 CPU runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake -S "$env:RUNNER_TEMP/sentencepiece" -B "$env:RUNNER_TEMP/sp-build" -A x64 -DCMAKE_INSTALL_PREFIX="$env:RUNNER_TEMP/deps" -DSPM_BUILD_TEST=OFF -DSPM_ENABLE_SHARED=ON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build "$env:RUNNER_TEMP/sp-build" --config Release --parallel 2 --target INSTALL
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake -S "$env:RUNNER_TEMP/ctranslate2" -B "$env:RUNNER_TEMP/ct2-build" -A x64 -DCMAKE_INSTALL_PREFIX="$env:RUNNER_TEMP/deps" -DBUILD_SHARED_LIBS=ON -DWITH_MKL=OFF -DWITH_DNNL=OFF -DWITH_OPENBLAS=OFF -DWITH_CUDA=OFF -DWITH_RUY=ON -DOPENMP_RUNTIME=NONE -DBUILD_TESTS=OFF -DBUILD_CLI=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build "$env:RUNNER_TEMP/ct2-build" --config Release --parallel 2 --target INSTALL
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build REAL ClipLingo.exe with Tesseract OCR enabled (not smoke stub)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = "$env:RUNNER_TEMP/vcpkg/scripts/buildsystems/vcpkg.cmake"
+          cmake -S . -B build-release -A x64 "-DCMAKE_PREFIX_PATH=$env:RUNNER_TEMP/deps" "-DCMAKE_TOOLCHAIN_FILE=$toolchain" -DCLIPLINGO_WITH_TESSERACT=ON -DCLIPLINGO_HOST_SMOKE=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-release --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Test-Path 'build-release/Release/ClipLingo.exe')) { throw 'Executable missing' }
+      - name: Assemble standalone app and all native dependency DLLs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./tools/package_release.ps1 -Executable 'build-release/Release/ClipLingo.exe' -NativePrefix "$env:RUNNER_TEMP/deps" -VcpkgPrefix "$env:RUNNER_TEMP/vcpkg/installed/x64-windows" -OutputFolder "$env:RUNNER_TEMP/release-output" -Version 'v0.1.0-beta.1'
+          if (!$?) { throw 'Packaging failed' }
+      - name: Verify actual EXTRACTED release app with real model
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $extract = Join-Path $env:RUNNER_TEMP 'release-extracted'
+          Expand-Archive -Path "$env:RUNNER_TEMP/release-output/ClipLingo-v0.1.0-beta.1-win-x64.zip" -DestinationPath $extract
+          $exe = Join-Path $extract 'ClipLingo.exe'
+          $model = Join-Path $env:RUNNER_TEMP 'model-check/en-id'
+          if (!(Test-Path "$extract/tessdata/eng.traineddata")) { throw 'OCR data missing from archive' }
+          $p = Start-Process -FilePath $exe -ArgumentList ('--verify-model "' + $model + '"') -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Real C++ model translation failed in portable package: $($p.ExitCode)" }
+          $report = Join-Path $env:RUNNER_TEMP 'native-perf-smoke.json'
+          $p = Start-Process -FilePath $exe -ArgumentList ('--benchmark-model "' + $model + '" "' + $report + '" 5') -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Real native benchmark failed' }
+          $perf = Get-Content $report -Raw | ConvertFrom-Json
+          if ($perf.schema -ne 1 -or $perf.cohorts.sentence.p95_ms -le 0) { throw 'Invalid benchmark report' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cliplingo-windows-beta1
+          path: ${{ runner.temp }}/release-output/ClipLingo-v0.1.0-beta.1-win-x64.zip
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Publish verified GitHub prerelease
+    if: github.event_name != 'pull_request'
+    needs: [offline-model, portable-windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cliplingo-offline-model-beta1
+          path: release-assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: cliplingo-windows-beta1
+          path: release-assets
+      - name: Create SHA-256 checksum manifest
+        working-directory: release-assets
+        run: sha256sum *.zip > SHA256SUMS.txt
+      - name: Create v0.1.0-beta.1 prerelease exactly once
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: v0.1.0-beta.1
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to replace its assets"
+            exit 1
+          fi
+          gh release create "$TAG" release-assets/*.zip release-assets/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" \
+            --title "ClipLingo v0.1.0 Beta 1" \
+            --notes-file RELEASE_NOTES.md \
+            --prerelease --latest=false
+          gh release view "$TAG" --json url,isPrerelease,assets --jq '{url,isPrerelease,assets: [.assets[].name]}'
