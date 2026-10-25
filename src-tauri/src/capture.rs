@@ -195,23 +195,10 @@ impl CaptureCoordinator {
             while let Ok(request) = receiver.recv() {
                 if status.lock().unwrap().generation != request.generation { continue; }
                 let result = read_selection(&automation, &request.source);
-                // Serialized status owner: a late result cannot win between
-                // a generation check and the final status write.
-                let allowed = status.lock().unwrap().generation == request.generation;
-                if allowed {
-                    match result {
-                        Ok(text) => {
-                            status.lock().unwrap().complete(request.generation, Ok(text.clone()));
-                            on_selection(TranslationRequest {
-                                generation: request.generation,
-                                anchor: request.source.cursor,
-                                source_hwnd: request.source.hwnd,
-                                text,
-                            });
-                        }
-                        Err(err) => status.lock().unwrap().complete(request.generation, Err(err)),
-                    }
-                }
+                // Hold the same generation owner through the handoff into
+                // the translator: a new hotkey cannot be overtaken by an
+                // older result after its generation was invalidated.
+                finish_and_forward(&status, request, result, on_selection.as_ref());
             }
         }).map_err(|e| format!("Could not start UIA thread: {e}"))?;
         Ok(Self { sender, telemetry })
@@ -266,6 +253,34 @@ impl CaptureCoordinator {
         state.generation = state.generation.wrapping_add(1);
         state.selection_units = 0;
         state.state = CaptureState::Idle;
+    }
+}
+
+fn finish_and_forward(
+    status: &Mutex<Telemetry>,
+    request: Request,
+    result: Result<String, CaptureDenied>,
+    on_selection: &dyn Fn(TranslationRequest),
+) {
+    let mut state = status.lock().unwrap();
+    if state.generation != request.generation {
+        return;
+    }
+    match result {
+        Ok(text) => {
+            // Do not clone or persist source text. The sensitive String moves
+            // exactly once to the local translation worker.
+            state.selection_units = text.encode_utf16().count();
+            state.verified_count += 1;
+            state.state = CaptureState::Verified;
+            on_selection(TranslationRequest {
+                generation: request.generation,
+                anchor: request.source.cursor,
+                source_hwnd: request.source.hwnd,
+                text,
+            });
+        }
+        Err(error) => state.complete(request.generation, Err(error)),
     }
 }
 
@@ -346,6 +361,34 @@ fn read_selection(automation: &IUIAutomation, source: &SourceSnapshot) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stale_uia_result_cannot_submit_to_translator() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let status = Mutex::new(Telemetry::default());
+        let first = status.lock().unwrap().next_request();
+        let second = status.lock().unwrap().next_request();
+        let forwarded = AtomicUsize::new(0);
+        let source = SourceSnapshot {
+            hwnd: 12,
+            pid: 345,
+            process_name: "notepad.exe".into(),
+            cursor: (10, 20),
+        };
+        let emit = |req: TranslationRequest| {
+            assert_eq!(req.generation, second);
+            assert_eq!(req.text, "current");
+            forwarded.fetch_add(1, Ordering::Relaxed);
+        };
+        finish_and_forward(&status, Request {generation:first, source:source.clone()},
+            Ok("stale".into()), &emit);
+        finish_and_forward(&status, Request {generation:second, source},
+            Ok("current".into()), &emit);
+        assert_eq!(forwarded.load(Ordering::Relaxed), 1);
+        let state = status.lock().unwrap();
+        assert_eq!(state.verified_count, 1);
+        assert_eq!(state.selection_units, 7);
+    }
+
     #[test]
     fn stale_selection_cannot_override_latest_result() {
         let mut telemetry = Telemetry::default();
