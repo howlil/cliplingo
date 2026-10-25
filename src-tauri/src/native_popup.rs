@@ -167,7 +167,7 @@ impl NativePopup {
             // Size short target text intrinsically; wrap only above width cap.
             let mut measured = DrawTextW(hdc, label.as_ptr(), (label.len() - 1) as i32, &mut rect,
                 DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX | DT_LEFT);
-            if rect.right - rect.left > max_w - pad * 2 {
+            if target.contains('\n') || target.contains('\r') || rect.right - rect.left > max_w - pad * 2 {
                 rect = RECT { left: 0, top: 0, right: max_w - pad * 2, bottom: 0 };
                 measured = DrawTextW(hdc, label.as_ptr(), (label.len() - 1) as i32, &mut rect,
                     DT_WORDBREAK | DT_CALCRECT | DT_NOPREFIX | DT_LEFT);
@@ -192,7 +192,11 @@ impl NativePopup {
             }
             InvalidateRect(hwnd, std::ptr::null(), 1);
             KillTimer(hwnd, 1);
-            if SetTimer(hwnd, 1, 2_500, None) == 0 {
+            // Preview is brief; actual target text scales readability time with length.
+            let dismissal_ms = if target == PREVIEW { 2_500 } else {
+                4_500 + (target.chars().count() as u32).saturating_mul(40).min(8_000)
+            };
+            if SetTimer(hwnd, 1, dismissal_ms, None) == 0 {
                 ShowWindow(hwnd, SW_HIDE);
                 return Err("Unable to arm automatic preview dismissal".into());
             }
