@@ -61,6 +61,16 @@ pub(crate) fn layout_position(anchor: (i32, i32), work: (i32, i32, i32, i32), wh
     (x, y)
 }
 
+pub fn cursor_snapshot() -> Result<(i32, i32), String> {
+    let mut point = POINT::default();
+    let success = unsafe { GetCursorPos(&mut point) };
+    if success == 0 {
+        Err("GetCursorPos failed".to_owned())
+    } else {
+        Ok((point.x, point.y))
+    }
+}
+
 pub fn last_paint_us() -> Option<u64> {
     match LAST_PAINT_US.load(Ordering::Relaxed) {
         0 => None,
@@ -118,15 +128,12 @@ impl NativePopup {
 
     /// Preview is ONLY callable from explicit tray/debug proof route, never
     /// the production Ctrl+Alt+T translation shortcut before capture exists.
-    pub fn show_preview(&self) -> Result<(), String> {
+    pub fn show_preview_at(&self, anchor: (i32, i32)) -> Result<(), String> {
         let hwnd = self.hwnd()?;
         unsafe {
             // SAFETY: HWND created on this UI thread and GDI handles are
             // selected/restored on the same thread before deletion.
-            let mut cursor = POINT::default();
-            if GetCursorPos(&mut cursor) == 0 {
-                return Err("GetCursorPos failed".into());
-            }
+            let cursor = POINT { x: anchor.0, y: anchor.1 };
             let monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
             let mut monitor_info = MONITORINFO {
                 cbSize: std::mem::size_of::<MONITORINFO>() as u32,
