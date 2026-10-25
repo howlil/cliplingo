@@ -272,6 +272,13 @@ fn state_for_error(error: CaptureDenied) -> CaptureState {
     }
 }
 
+pub fn is_foreground_hwnd(window: isize) -> bool {
+    unsafe {
+        let current = GetForegroundWindow();
+        !current.is_null() && current as isize == window
+    }
+}
+
 fn source_still_foreground(source: &SourceSnapshot) -> bool {
     unsafe {
         let hwnd = GetForegroundWindow();
