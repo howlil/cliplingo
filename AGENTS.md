@@ -14,7 +14,7 @@ User's explicit request and safety constraints
 
 Read only the docs relevant to the actual change. The Tauri v2 + Rust/Win32 hybrid target in `engineering-design.md` and ADR-0002 are **not a verified implementation**; open backend/ABI decisions and unmeasured performance claims stay open until tested. Avoid duplicated rules or shadow copies of these contracts.
 
-**Baseline:** ClipLingo is a low-resource, low-latency, offline Windows translation utility. Tray as shell, Settings as separate window, auto-fit target-text-only popup anchored above cursor. **No controls or source text inside translation popup.** **Target architecture: Tauri v2 + Rust-owned Windows capture/inference/coordinator** ([ADR-0002](.agents/decisions/0002-tauri-rust-windows-hybrid.md); historical [ADR-0001](.agents/decisions/0001-rust-first-native-windows.md)). Settings uses WebView2; the result popup backend is gated by real Windows focus, DPI and resource tests. **Current repository: documentation-only clean slate with no runnable application or CI**. Archived C++ source, build and tests are recoverable from `archive/pre-rust-clean-slate-20261026`. Do not claim any Rust binary exists, that tests passed, or that release/OS support and native OCR ABI are verified.
+**Baseline:** ClipLingo is a low-resource, low-latency, offline Windows translation utility. Tray as shell, Settings as separate window, auto-fit target-text-only popup anchored above cursor. **No controls or source text inside translation popup.** **Target architecture: Tauri v2 + Rust-owned Windows capture/coordinator + native Win32/DirectWrite result popup** ([ADR-0003](.agents/decisions/0003-latency-first-dual-mode-translation.md) refines [ADR-0002](.agents/decisions/0002-tauri-rust-windows-hybrid.md)). Settings uses WebView2 on demand; translation is offline by default with an optional explicitly consented online provider. **Current repository: documentation-only clean slate with no runnable application or CI**. Archived C++ source, build and tests are recoverable from `archive/pre-rust-clean-slate-20261026`. Do not claim any Rust binary exists, that tests passed, or that release/OS support and native OCR ABI are verified.
 
 ## 1. Default router: `$agentflow`
 
@@ -83,10 +83,10 @@ Understand the request and affected contract
 - Rust panics and C++ exceptions must not cross Win32/COM/C callbacks or an FFI ABI. Define ownership, allocator, lifetime, UTF conversion, HRESULT/error mapping and thread affinity at foreign boundaries; Rust does **not** automatically make FFI safe.
 - UI thread owns HWND and popup lifecycle. UIA calls run on correctly initialized COM MTA workers or bounded helper processes. Late generations never present stale output; a timeout does not cancel an arbitrary hung COM call.
 - Validate model packs, OCR regions and capture/clipboard data; deny excluded or unknown live app sources; avoid captured-text logs, automatic clipboard access, default history and privilege bypass.
-- Keep captured source text and OCR pixels in Rust backend only. Settings must never receive them through frontend events or logs. Apply Tauri v2 per-window capabilities, restrictive CSP, and explicit Rust command input/authorization checks; permissions do not sandbox Rust.
+- Keep captured source text and OCR pixels in Rust backend only. Settings must never receive them through frontend events or logs. Online transmission is allowed ONLY in explicit per-provider user-consented mode; never silently fall back to cloud, including on model corruption or missing model. Apply Tauri v2 per-window capabilities, restrictive CSP, and explicit Rust command input/authorization checks; permissions do not sandbox Rust.
 - For new Rust code use `cargo fmt`, `cargo clippy`, unit/integration tests and appropriate platform checks. Run actual Windows native/UIA tests and analyze any unsafe/FFI boundary; do not substitute lints for sanitizer/handle-soak or fresh-VM packaging proof.
 - C++ sources, CMake/MSVC tests and release workflow are **archived, not active** after the user's explicit clean-slate request. Consult the archive for previous behavior and recovery; do not claim its CI still runs on the default branch.
-- Low idle use and hotkey-to-result latency **require measured evidence**. Prefer event-driven behavior and on-demand OCR; compare measured cold/warm latency, RAM, native resource ownership and fault containment before changing process/model topology.
+- Low idle use and hotkey-to-result latency **require measured evidence**. Prefer event-driven behavior, on-demand OCR, bounded RAM-only translation cache, lazy Settings WebView2 and on-demand/offline model load. Include WebView2 children in process-tree memory measurements; compare cold/warm latency, native resource ownership and fault containment.
 
 ## 4. Module boundary direction (conceptual only)
 
@@ -94,8 +94,8 @@ Understand the request and affected contract
 TauriHost (Rust: tray, hotkey, lifecycle, single instance)
       → RequestCoordinator (generation & frozen cursor/foreground snapshot)
           → NativeCapture (Windows UIA MTA, optional explicit OCR/clipboard)
-          → Translator (offline model lifecycle; compatible native FFI only if proven)
-      → PopupOwner (Tauri WebviewWindow prototype; native HWND fallback)
+          → TranslationRouter (offline model lifecycle OR consented official HTTPS provider; cache)
+      → PopupOwner (Rust Win32/DirectWrite HWND default; WebView prototype comparison only)
       → SettingsStore (authoritative Rust preferences)
           → SettingsUI (Tauri WebView2 React/TS; validated IPC projection)
 ```
@@ -109,7 +109,7 @@ This is **not a prescribed directory tree** and does not require an interface fo
 | Visual text/popup change | Real Windows Tauri/Win32 popup, intrinsic size, mixed-DPI edges, no-focus-steal and accessibility |
 | Selection/hover capture | Valid/empty/denied cases on real target apps; MTA/timeout handling |
 | Coordinator/concurrency | Rapid hotkey/reordering/stale response tests |
-| Model/worker | Offline fixture, invalid/missing model, load/unload and error lifecycle |
+| Model/worker | Offline fixture/network-off, quality + tokenizer parity, invalid model, load/unload, online consent/auth/429/timeout, cache isolation |
 | Native resources | Leak/handle soak, sanitizer/static findings, shutdown/restart |
 | Installer/security boundary | Fresh Windows VM, WebView2 runtime, DLL paths, Tauri IPC permissions, signed updater and actual release assets |
 
