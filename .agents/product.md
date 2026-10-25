@@ -127,3 +127,31 @@ Cloud accounts/sync, chat assistant, translation history and usage tracking by d
 ## 9. Product change policy
 
 A proposed feature must trace to the reading job and its observable proof. If it adds attention, idle work, privacy risk, or a new window without strengthening the job, defer it. Preserve `DESIGN.md` as the accepted visual baseline; update product behavior here before architecture.
+
+## M6 — Native performance proof (benchmark milestone)
+
+ClipLingo's low-latency/low-resource positioning needs repeatable evidence, not
+guessed thresholds. M6 adds a diagnostic command that runs the **same native
+CTranslate2 EN→ID inference code as the app** against public, fixed test inputs
+and saves only numerical timings and memory counters. No selected text,
+clipboard text, OCR images, or user file paths are included in output.
+
+Success proof: a Windows build accepting
+`--benchmark-model <validated-model-pack> <report.json> [iterations]`
+checks model loading and generates a versioned JSON report containing:
+cold translation time (includes model load), 3 warm workloads
+(word/sentence/paragraph) with p50/p95/p99, private bytes/working set,
+peak working set and process CPU time. Inputs are fixed literals; there is
+no telemetry, automatic network request or background service.
+
+Fail safely: missing/invalid model, invalid iteration count, missing OS
+counters, translation failure and report write errors return a nonzero exit
+code rather than generating fabricated numbers. Iterations are bounded
+(5–200 per workload). The command exits without starting the tray/UIA
+helper/popup and unloads the translation model.
+
+Caution: one-off model benchmark does **not** measure user-visible
+hotkey-to-result (UIA helper startup and popup rendering), energy, idle tray
+RAM, 8-hour soak, or model quality across natural reading tasks. Those remain
+separate native Windows acceptance gates. No fixed latency/RAM SLO is claimed
+without representative device and workload measurements.
