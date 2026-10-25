@@ -121,15 +121,16 @@ pub fn run() {
                     let state = current_ui.state::<ShellState>();
                     // Authoritative latest generation AND foreground provenance
                     // are required again immediately before native presentation.
-                    if !state.capture.is_current(message.generation) ||
-                       !crate::capture::is_foreground_hwnd(message.source_hwnd) {
+                    if !crate::capture::is_foreground_hwnd(message.source_hwnd) {
                         return;
                     }
-                    if let Ok(popup) = state.popup.lock() {
-                        if let Err(err) = popup.show_text_at(message.anchor, &message.target) {
-                            eprintln!("Unable to show native target text: {err}");
+                    state.capture.with_current(message.generation, || {
+                        if let Ok(popup) = state.popup.lock() {
+                            if let Err(err) = popup.show_text_at(message.anchor, &message.target) {
+                                eprintln!("Unable to show native target text: {err}");
+                            }
                         }
-                    };
+                    });
                 });
             });
             let translator = Arc::new(TranslationEngine::start(on_translation).map_err(std::io::Error::other)?);
