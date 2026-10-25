@@ -2,6 +2,8 @@
 
 mod capture;
 mod capture_policy;
+mod model_pack;
+mod translation;
 mod native_popup;
 mod shell;
 
