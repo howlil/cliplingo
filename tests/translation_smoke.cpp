@@ -14,6 +14,8 @@ std::wstring failure_label(Failure failure) {
     case Failure::ModelMissing: return L"Inference stub only";
     case Failure::ModelInvalid: return L"Model invalid";
     case Failure::TranslationFailed: return L"Translation failed";
+    case Failure::ClipboardUnavailable: return L"Clipboard busy/unavailable";
+    case Failure::ClipboardChanged: return L"Clipboard changed before capture";
   }
   return L"Unknown";
 }
