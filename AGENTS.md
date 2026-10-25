@@ -8,13 +8,13 @@ This is the **repository-wide instruction and skill router** for every AI coding
 User's explicit request and safety constraints
   ├── DESIGN.md                       → approved visual/design tokens and UI composition
   ├── .agents/product.md              → job, observable behavior, scope, acceptance proof
-  ├── .agents/engineering-design.md   → boundaries, state owners, native C++ research & guarantees
+  ├── .agents/engineering-design.md   → Rust-first migration target, boundaries, state owners & guarantees
   └── AGENTS.md                       → engineering workflow / AI skill routing / code quality
 ```
 
-Read only the docs relevant to the actual change. The `engineering-design.md` proposal is **not a verified implementation**; open ADRs and unmeasured performance claims must remain open until tested. Avoid duplicated rules or shadow copies of these contracts.
+Read only the docs relevant to the actual change. The Rust-first target in `engineering-design.md` and its ADR are **not a verified Rust implementation**; open backend/ABI decisions and unmeasured performance claims stay open until tested. Avoid duplicated rules or shadow copies of these contracts.
 
-**Baseline:** ClipLingo is a low-resource, low-latency, offline Windows translation utility. Tray as shell, Settings as separate window, auto-fit target-text-only popup anchored above cursor. **No controls or source text inside translation popup.** Prefer full-native C++20/23 / Win32 as a candidate implementation consistent with engineering research; do not misrepresent language, release OS matrix, worker topology or OCR backend as finalized without proof.
+**Baseline:** ClipLingo is a low-resource, low-latency, offline Windows translation utility. Tray as shell, Settings as separate window, auto-fit target-text-only popup anchored above cursor. **No controls or source text inside translation popup.** **Target architecture: Rust-first native Windows** ([ADR-0001](.agents/decisions/0001-rust-first-native-windows.md)). **Current repository: documentation-only clean slate with no runnable application or CI**. Archived C++ source, build and tests are recoverable from `archive/pre-rust-clean-slate-20261026`. Do not claim any Rust binary exists, that tests passed, or that release/OS support and native OCR ABI are verified.
 
 ## 1. Default router: `$agentflow`
 
@@ -76,24 +76,24 @@ Understand the request and affected contract
 
 **Rule of admission:** every new class, interface, process, thread, dependency or abstraction must answer: *what current state invariant, lifecycle boundary, external contract or testability risk justifies it?* If none, keep the code direct and local.
 
-### Native C++ safety defaults
+### Rust-first native Windows safety defaults (target implementation)
 
-- RAII for HWND/HANDLE/COM/DWrite buffers and all native resources; explicit ownership, smart pointers and checked HRESULT/Win32 error.
-- Expected absence (`NoSelection`) is a return/result, not an exception. Typed errors for recoverable problems; never return false translation success.
-- No C++ exception escapes Win32/COM/C callbacks/ABI; don't attempt to catch and continue after arbitrary memory corruption.
-- UI thread owns window lifecycles; UIA operations run in properly initialized MTA worker(s); stale generations never update UI.
-- Validate model files and OCR/capture input; avoid captured-text logging, default history or privileged bypass.
-- Build with relevant MSVC diagnostics/static analysis, ASan in verification builds, and tests for failure paths; harden signed release binaries separately.
-- Low idle resource use **requires measured evidence**; event-driven background behavior and deferred OCR are defaults.
-- Compare measured cold/warm hotkey-to-result, RAM and crash isolation before locking optional processes and model residency.
+- Prefer Rust ownership/borrowing and explicit native-resource guards for HWND, HANDLE, COM, DirectWrite and buffers. Every `unsafe` block/function must identify its platform invariant; do not scatter raw pointers through coordinator/domain logic.
+- Expected absence (`NoSelection`) and recoverable failures use explicit Rust results/errors; never invent translation success or panic for routine missing selection.
+- Rust panics and C++ exceptions must not cross Win32/COM/C callbacks or an FFI ABI. Define ownership, allocator, lifetime, UTF conversion, HRESULT/error mapping and thread affinity at foreign boundaries; Rust does **not** automatically make FFI safe.
+- UI thread owns HWND and popup lifecycle. UIA calls run on correctly initialized COM MTA workers or bounded helper processes. Late generations never present stale output; a timeout does not cancel an arbitrary hung COM call.
+- Validate model packs, OCR regions and capture/clipboard data; deny excluded or unknown live app sources; avoid captured-text logs, automatic clipboard access, default history and privilege bypass.
+- For new Rust code use `cargo fmt`, `cargo clippy`, unit/integration tests and appropriate platform checks. Run actual Windows native/UIA tests and analyze any unsafe/FFI boundary; do not substitute lints for sanitizer/handle-soak or fresh-VM packaging proof.
+- C++ sources, CMake/MSVC tests and release workflow are **archived, not active** after the user's explicit clean-slate request. Consult the archive for previous behavior and recovery; do not claim its CI still runs on the default branch.
+- Low idle use and hotkey-to-result latency **require measured evidence**. Prefer event-driven behavior and on-demand OCR; compare measured cold/warm latency, RAM, native resource ownership and fault containment before changing process/model topology.
 
 ## 4. Module boundary direction (conceptual only)
 
 ```text
-NativeHost (Win32 tray/hotkey, lifecycle)
+WindowsHost (Rust-owned Win32 tray/hotkey, lifecycle)
       → RequestCoordinator (request generation & cursor snapshot)
           → Capture (UIA / optional OCR)
-          → Translation (CTranslate2, model state)
+          → Translation (offline model lifecycle; native CTranslate2 FFI only if needed)
       → Popup (text layout/measurement, HWND only)
       → Settings (authoritative local preferences)
 ```
@@ -124,4 +124,4 @@ Run the smallest fast tests repeatedly. For an affected native boundary, an inte
 
 ## 7. Completion report
 
-For implementation work, report: behavior delivered, affected owners/boundaries, files changed, checks **actually executed**, failure paths checked, remaining unverified Windows acceptance, and any ADR/contract updates. Be factual and concise.
+For implementation work, report: behavior delivered, affected owners/boundaries, files changed, checks **actually executed**, failure paths checked, remaining unverified Windows acceptance, and any ADR/contract updates. For the Rust implementation, distinguish the documented *target* from any genuinely built executable and from archived C++ reference code. Be factual and concise.
