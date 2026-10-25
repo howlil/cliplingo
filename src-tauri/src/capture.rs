@@ -31,6 +31,7 @@ use windows_sys::Win32::{
     },
 };
 use crate::capture_policy::{authorize_process, validate_selection, CaptureDenied, MAX_SELECTION_UNITS};
+use crate::translation::TranslationRequest;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -169,7 +170,7 @@ pub struct CaptureCoordinator {
     telemetry: Arc<Mutex<Telemetry>>,
 }
 impl CaptureCoordinator {
-    pub fn start() -> Result<Self, String> {
+    pub fn start(on_selection: Arc<dyn Fn(TranslationRequest) + Send + Sync>) -> Result<Self, String> {
         let (sender, receiver) = mpsc::sync_channel::<Request>(1);
         let telemetry = Arc::new(Mutex::new(Telemetry::default()));
         let status = telemetry.clone();
@@ -196,7 +197,21 @@ impl CaptureCoordinator {
                 let result = read_selection(&automation, &request.source);
                 // Serialized status owner: a late result cannot win between
                 // a generation check and the final status write.
-                status.lock().unwrap().complete(request.generation, result);
+                let allowed = status.lock().unwrap().generation == request.generation;
+                if allowed {
+                    match result {
+                        Ok(text) => {
+                            status.lock().unwrap().complete(request.generation, Ok(text.clone()));
+                            on_selection(TranslationRequest {
+                                generation: request.generation,
+                                anchor: request.source.cursor,
+                                source_hwnd: request.source.hwnd,
+                                text,
+                            });
+                        }
+                        Err(err) => status.lock().unwrap().complete(request.generation, Err(err)),
+                    }
+                }
             }
         }).map_err(|e| format!("Could not start UIA thread: {e}"))?;
         Ok(Self { sender, telemetry })
@@ -231,6 +246,10 @@ impl CaptureCoordinator {
             verified_count: state.verified_count,
             generation: state.generation,
         }
+    }
+
+    pub fn is_current(&self, generation: u64) -> bool {
+        self.telemetry.lock().unwrap().generation == generation
     }
 
     pub fn invalidate(&self) {
