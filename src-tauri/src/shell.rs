@@ -72,7 +72,7 @@ fn dispatch_preview(app: tauri::AppHandle) {
                 }
             }
             Err(_) => eprintln!("ClipLingo F0 native popup lock poisoned"),
-        }
+        };
     }) {
         eprintln!("Unable to dispatch native preview: {err}");
     }
