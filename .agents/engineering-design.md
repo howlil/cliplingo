@@ -211,3 +211,29 @@ Links are reference material, not claims of completed platform compatibility tes
 | Windows minimum version | **Windows 11 x64 candidate** | app audience and compatibility tests |
 
 Record an ADR under `.agents/decisions/` only when a consequential alternative is actually chosen with evidence. Do not implement all candidates or pre-create folders/modules because they appear in this document.
+
+## M4 — Privacy capture-policy boundary
+
+`capture_policy.h` owns only a validated, bounded executable-name list.
+`capture_policy.cpp` owns Win32 process identity lookup via
+`GetWindowThreadProcessId` and `QueryFullProcessImageNameW` with
+`PROCESS_QUERY_LIMITED_INFORMATION`. The source window is checked at the
+shortcut/coordinator boundary and again immediately before the isolated
+UIA helper. The check never runs as a background poll, never enumerates all
+processes and never persists executable paths or captured text.
+
+The `Preferences` snapshot contains a single authoritative serialized
+policy (max 32 names / 4096 characters). Invalid policy or inaccessible
+foreground-process identity fails closed. Saving a new policy invalidates
+in-flight presentation generations and queued requests. Active native capture
+calls already in progress may continue until their bounded timeout; do not
+claim retroactive cancellation.
+
+The user-facing settings design remains a single Privacy section. No service
+registry, policy engine, generic capture-provider abstraction, Windows
+administrative privilege, clipboard injection, or global mouse hooks are added.
+
+Follow-up when integrating M3: ensure the separately developed OCR tray
+entrypoint respects the policy if it operates on content from the currently
+foreground application; never merge two independent routes that disagree about
+privacy checks.
