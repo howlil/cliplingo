@@ -3,12 +3,13 @@
 #include <cstdint>
 #include <string>
 #include <filesystem>
+#include <string_view>
 
 // Selection always takes priority; these modes are only fallback policy.
 enum class CaptureScope : std::uint32_t {
   SelectionOnly = 0, Word = 1, Sentence = 2, Paragraph = 3
 };
-enum class Failure { None, NoSelection, Unsupported, TooLong, CaptureFailed, ModelMissing, ModelInvalid, TranslationFailed };
+enum class Failure { None, NoSelection, Unsupported, TooLong, CaptureFailed, ModelMissing, ModelInvalid, TranslationFailed, ExcludedSource };
 struct CaptureResult {
   Failure failure{Failure::None};
   std::wstring text;
@@ -32,6 +33,7 @@ struct Preferences {
   int hover_scope{0};        // 0 word, 1 sentence, 2 paragraph
   int popup_style{0}; // 0 solid, 1 tinted (glass deferred)
   std::filesystem::path model_path;
+  std::wstring excluded_app_names; // normalized ; separated basenames, max 32
 };
 
 struct ModelInstallResult {
@@ -40,6 +42,7 @@ struct ModelInstallResult {
   std::wstring message;
 };
 bool verify_model_pack(const std::filesystem::path& folder);
+bool capture_source_allowed(HWND foreground, std::wstring_view policy);
 ModelInstallResult install_model_pack(const std::filesystem::path& source);
 CaptureResult capture_selected_text(HWND expected_foreground);
 CaptureResult capture_hover_text(HWND expected_foreground, POINT cursor, CaptureScope scope);
