@@ -10,6 +10,10 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+  # Safety net for commits merged by integrations whose GitHub push events
+  # may not start a workflow. No new release is built for an already tagged SHA.
+  schedule:
+    - cron: '17 * * * *'
 
 # Never cancel a healthy packaging run when a subsequent commit lands.
 # Only one master release resolves the next tag at a time.
@@ -26,6 +30,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.next.outputs.version }}
+      should_release: ${{ steps.next.outputs.should_release }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,12 +46,30 @@ jobs:
           VERSION="$(git tag --list 'v0.1.0-beta.*' | python tools/next_release_version.py)"
           [[ "$VERSION" =~ ^v0\.1\.0-beta\.[1-9][0-9]*$ ]]
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Release candidate: $VERSION"
+          # No new release when the newest beta tag already represents this
+          # exact master commit. PRs always build for acceptance only.
+          SHOULD_RELEASE=true
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            LATEST_NUMBER="${VERSION##*.}"
+            if (( LATEST_NUMBER > 1 )); then
+              LATEST_TAG="v0.1.0-beta.$((LATEST_NUMBER - 1))"
+              if git rev-parse --verify --quiet "refs/tags/$LATEST_TAG^{commit}" >/dev/null; then
+                LATEST_SHA="$(git rev-parse "refs/tags/$LATEST_TAG^{commit}")"
+                if [[ "$LATEST_SHA" == "$GITHUB_SHA" ]]; then
+                  SHOULD_RELEASE=false
+                  echo "Current master already released as $LATEST_TAG"
+                fi
+              fi
+            fi
+          fi
+          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "Release candidate: $VERSION, build: $SHOULD_RELEASE"
 
   offline-model:
     name: Convert & validate frozen EN-ID model
     runs-on: ubuntu-24.04
     needs: version
+    if: needs.version.outputs.should_release == 'true'
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -92,6 +115,7 @@ jobs:
     name: Build distributable OCR-enabled ClipLingo & native acceptance
     runs-on: windows-2022
     needs: [version, offline-model]
+    if: needs.version.outputs.should_release == 'true'
     env:
       VERSION: ${{ needs.version.outputs.version }}
     timeout-minutes: 120
@@ -174,7 +198,7 @@ jobs:
 
   publish:
     name: Publish verified GitHub prerelease
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && needs.version.outputs.should_release == 'true'
     needs: [version, offline-model, portable-windows]
     runs-on: ubuntu-24.04
     permissions:
