@@ -14,6 +14,9 @@ jobs:
   cpu-native:
     runs-on: windows-latest
     timeout-minutes: 55
+    env:
+      # ct2rs CMake forces /MT; the Rust CXX bridge must use /MT too.
+      RUSTFLAGS: "-C target-feature=+crt-static"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
