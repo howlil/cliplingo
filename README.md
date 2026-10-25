@@ -70,3 +70,10 @@ Then select English text in a supported Windows editor and press `Ctrl+Alt+T`. T
 ### Native F2 verification
 
 A [Windows CI run](https://github.com/howlil/cliplingo/actions/runs/40243341975) successfully built CTranslate2, converted a pinned OPUS-MT EN→ID model, linked the native executable, loaded the model, and produced a nonempty translated output from a fixed test sentence. [Default Rust tests](https://github.com/howlil/cliplingo/actions/runs/40243341796) also passed. `RUSTFLAGS=-C target-feature=+crt-static` is **required for the Windows native CT2/CXX build**, since upstream CTranslate2 uses the static MSVC C runtime. This is headless inference proof; desktop focus, UIA provider compatibility, model quality, latency/RAM and release packaging remain open acceptance gates. See [.agents/f2-acceptance.md](.agents/f2-acceptance.md).
+
+
+## F2.5: bounded latest-request scheduler and measurement
+
+When many shortcuts arrive while a model inference is running, only the **newest pending** selection is retained; obsolete pending sensitive text is dropped. The already-running native inference is not forcibly interrupted. Source generation and original foreground-window checks remain required before native presentation.
+
+The native Windows model workflow runs one **cold** load/inference and twelve **warm** public English fixtures to report p50/p95/max **inference-only** timing. The result is not hotkey-to-popup latency or an application SLO. On a real Windows session, collect separate process-tree private/working memory samples with `scripts/measure-f25.ps1` and follow [.agents/f25-acceptance.md](.agents/f25-acceptance.md) for Notepad/Chrome/PDF focus/DPI testing. Interactive desktop acceptance has **not** passed merely because GitHub CI is green.
