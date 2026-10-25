@@ -11,7 +11,6 @@ use std::{
     thread,
 };
 use windows::{
-    core::Interface,
     Win32::{
         System::Com::{
             CoCreateInstance, CoInitializeEx, CoUninitialize,
@@ -277,7 +276,7 @@ fn read_selection(automation: &IUIAutomation, source: &SourceSnapshot) -> Result
     // a native child HWND proven to belong to our original foreground HWND.
     let element_hwnd = unsafe { element.CurrentNativeWindowHandle() }
         .map_err(|_| CaptureDenied::UnverifiableSource)?;
-    let same_root = if element_hwnd.is_null() {
+    let same_root = if element_hwnd.0.is_null() {
         false
     } else {
         let root = unsafe { GetAncestor(element_hwnd.0 as HWND, GA_ROOT) };
