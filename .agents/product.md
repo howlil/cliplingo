@@ -78,7 +78,7 @@ Errors classified as silent (no selection), recoverable/actionable (model missin
 - OCR backend and packaging identity requirements.
 - Supported target apps, privileged/elevated app limitations, accessibility variants.
 - Numeric latency/RAM thresholds: define only after representative benchmarks; don't invent performance claims.
-- Rust-first native Windows implementation is the **accepted future engineering direction**, but current functionality is implemented in C++/CMake. Cross-language migration must preserve all listed acceptance behavior; native Windows and model integration remain verification gates. See [engineering contract](engineering-design.md) and [ADR-0001](decisions/0001-rust-first-native-windows.md).
+- Rust-first native Windows implementation is the **accepted future engineering direction**, and the tracked codebase is intentionally cleared to documentation only. Historical C++/CMake functionality is archived on `archive/pre-rust-clean-slate-20261026`; no current executable is supplied by this branch. A new Rust implementation must meet all listed acceptance behavior; native Windows and model integration remain verification gates. See [engineering contract](engineering-design.md) and [ADR-0001](decisions/0001-rust-first-native-windows.md).
 
 ## 6. Smallest coherent release scope
 
@@ -122,7 +122,7 @@ Cloud accounts/sync, chat assistant, translation history and usage tracking by d
 - Evaluate manually triggered OCR viability on supported Windows versions *before* promising a specific OCR implementation.
 - Validate one-word disambiguation using optional local context without changing displayed selection.
 - Validate text-only popup with screen readers and keyboard-only workflows; no extra visual controls added.
-- Compare the existing C++ Windows baseline with the Rust Windows implementation on representative hardware before claiming any performance, memory, crash-safety or packaging improvement.
+- Compare the archived C++ Windows baseline with the future Rust Windows implementation on representative hardware before claiming any performance, memory, crash-safety or packaging improvement.
 
 ## 9. Product change policy
 
