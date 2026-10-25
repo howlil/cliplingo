@@ -4,19 +4,49 @@ on:
     paths:
       - '.github/workflows/release.yml'
       - 'tools/package_release.ps1'
+      - 'tools/next_release_version.py'
+      - 'tests/test_next_release_version.py'
       - 'RELEASE_NOTES.md'
   push:
     branches: [master]
-    paths:
-      - '.github/workflows/release.yml'
-      - 'tools/package_release.ps1'
   workflow_dispatch:
+
+# Never cancel a healthy packaging run when a subsequent commit lands.
+# Only one master release resolves the next tag at a time.
+concurrency:
+  group: cliplingo-versioned-release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
+
 jobs:
+  version:
+    name: Resolve next immutable beta version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Test version calculation and edge cases
+        run: python -m unittest discover -s tests -p 'test_next_release_version.py' -v
+      - name: Determine next version from existing Git tags
+        id: next
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force --tags
+          VERSION="$(git tag --list 'v0.1.0-beta.*' | python tools/next_release_version.py)"
+          [[ "$VERSION" =~ ^v0\.1\.0-beta\.[1-9][0-9]*$ ]]
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release candidate: $VERSION"
+
   offline-model:
     name: Convert & validate frozen EN-ID model
     runs-on: ubuntu-24.04
+    needs: version
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +66,7 @@ jobs:
       - name: Create standalone offline model ZIP
         shell: bash
         env:
-          VERSION: v0.1.0-beta.1
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           python - <<'PY'
           import os, zipfile
@@ -53,27 +83,29 @@ jobs:
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: cliplingo-offline-model-beta1
-          path: ${{ runner.temp }}/release-model/ClipLingo-v0.1.0-beta.1-en-id-model.zip
+          name: cliplingo-offline-model
+          path: ${{ runner.temp }}/release-model/ClipLingo-${{ needs.version.outputs.version }}-en-id-model.zip
           if-no-files-found: error
           retention-days: 3
 
   portable-windows:
     name: Build distributable OCR-enabled ClipLingo & native acceptance
     runs-on: windows-2022
-    needs: offline-model
+    needs: [version, offline-model]
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: cliplingo-offline-model-beta1
+          name: cliplingo-offline-model
           path: ${{ runner.temp }}/model-artifact
       - name: Extract exact model pack for native acceptance
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Expand-Archive -Path "$env:RUNNER_TEMP/model-artifact/ClipLingo-v0.1.0-beta.1-en-id-model.zip" -DestinationPath "$env:RUNNER_TEMP/model-check"
+          Expand-Archive -Path "$env:RUNNER_TEMP/model-artifact/ClipLingo-$env:VERSION-en-id-model.zip" -DestinationPath "$env:RUNNER_TEMP/model-check"
           if (!(Test-Path "$env:RUNNER_TEMP/model-check/en-id/cliplingo-model.sha256")) { throw 'Model manifest missing' }
       - name: Clone pinned CTranslate2 & SentencePiece, and Windows OCR dependencies
         shell: pwsh
@@ -115,14 +147,14 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          & ./tools/package_release.ps1 -Executable 'build-release/Release/ClipLingo.exe' -NativePrefix "$env:RUNNER_TEMP/deps" -VcpkgPrefix "$env:RUNNER_TEMP/vcpkg/installed/x64-windows" -OutputFolder "$env:RUNNER_TEMP/release-output" -Version 'v0.1.0-beta.1'
+          & ./tools/package_release.ps1 -Executable 'build-release/Release/ClipLingo.exe' -NativePrefix "$env:RUNNER_TEMP/deps" -VcpkgPrefix "$env:RUNNER_TEMP/vcpkg/installed/x64-windows" -OutputFolder "$env:RUNNER_TEMP/release-output" -Version "$env:VERSION"
           if (!$?) { throw 'Packaging failed' }
       - name: Verify actual EXTRACTED release app with real model
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $extract = Join-Path $env:RUNNER_TEMP 'release-extracted'
-          Expand-Archive -Path "$env:RUNNER_TEMP/release-output/ClipLingo-v0.1.0-beta.1-win-x64.zip" -DestinationPath $extract
+          Expand-Archive -Path "$env:RUNNER_TEMP/release-output/ClipLingo-$env:VERSION-win-x64.zip" -DestinationPath $extract
           $exe = Join-Path $extract 'ClipLingo.exe'
           $model = Join-Path $env:RUNNER_TEMP 'model-check/en-id'
           if (!(Test-Path "$extract/tessdata/eng.traineddata")) { throw 'OCR data missing from archive' }
@@ -135,15 +167,15 @@ jobs:
           if ($perf.schema -ne 1 -or $perf.cohorts.sentence.p95_ms -le 0) { throw 'Invalid benchmark report' }
       - uses: actions/upload-artifact@v4
         with:
-          name: cliplingo-windows-beta1
-          path: ${{ runner.temp }}/release-output/ClipLingo-v0.1.0-beta.1-win-x64.zip
+          name: cliplingo-windows
+          path: ${{ runner.temp }}/release-output/ClipLingo-${{ needs.version.outputs.version }}-win-x64.zip
           if-no-files-found: error
           retention-days: 3
 
   publish:
     name: Publish verified GitHub prerelease
     if: github.event_name != 'pull_request'
-    needs: [offline-model, portable-windows]
+    needs: [version, offline-model, portable-windows]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -151,29 +183,30 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: cliplingo-offline-model-beta1
+          name: cliplingo-offline-model
           path: release-assets
       - uses: actions/download-artifact@v4
         with:
-          name: cliplingo-windows-beta1
+          name: cliplingo-windows
           path: release-assets
       - name: Create SHA-256 checksum manifest
         working-directory: release-assets
         run: sha256sum *.zip > SHA256SUMS.txt
-      - name: Create v0.1.0-beta.1 prerelease exactly once
+      - name: Publish validated version exactly once
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          TAG: v0.1.0-beta.1
+          TAG: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists; refusing to replace its assets"
             exit 1
           fi
+          sed "s/__VERSION__/$TAG/g" RELEASE_NOTES.md > release-notes-rendered.md
           gh release create "$TAG" release-assets/*.zip release-assets/SHA256SUMS.txt \
             --target "$GITHUB_SHA" \
-            --title "ClipLingo v0.1.0 Beta 1" \
-            --notes-file RELEASE_NOTES.md \
+            --title "ClipLingo $TAG" \
+            --notes-file release-notes-rendered.md \
             --prerelease --latest=false
           gh release view "$TAG" --json url,isPrerelease,assets --jq '{url,isPrerelease,assets: [.assets[].name]}'

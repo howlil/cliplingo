@@ -72,7 +72,9 @@ Get-ChildItem $share -Directory | ForEach-Object {
   }
 }
 Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/4.1.0/LICENSE' -OutFile (Join-Path $lic 'TessdataFast-LICENSE.txt')
-Copy-Item -LiteralPath 'RELEASE_NOTES.md' -Destination (Join-Path $dist 'README-RELEASE.md')
+# Release notes are a template; do not ship stale filenames or version.
+(Get-Content -LiteralPath 'RELEASE_NOTES.md' -Raw).Replace('__VERSION__', $Version) |
+  Set-Content -LiteralPath (Join-Path $dist 'README-RELEASE.md') -Encoding utf8
 @(
   "ClipLingo $Version - Windows 11 x64 portable beta"
   'Model installation: Settings > Language Models > Install verified model pack'
