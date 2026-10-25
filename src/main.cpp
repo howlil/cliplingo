@@ -1,5 +1,6 @@
 #include "core.h"
 #include "popup.h"
+#include "capture_policy.h"
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <commctrl.h>
@@ -34,6 +35,8 @@ constexpr int kStartupToggle = 107;
 constexpr int kThemeCombo = 108;
 constexpr int kSurfaceCombo = 109;
 constexpr int kPreviewPopup = 110;
+constexpr int kSaveExclusions = 113;
+constexpr int kExcludedAppsEdit = 114;
 constexpr int kHoverEnabled = 111;
 constexpr int kHoverScope = 112;
 constexpr int kTrayPause = 201;
@@ -149,6 +152,13 @@ public:
       prefs_.hover_enabled = GetPrivateProfileIntW(L"capture", L"hover_enabled", 1, cfg.c_str()) != 0;
       prefs_.hover_scope = std::clamp(static_cast<int>(GetPrivateProfileIntW(
           L"capture", L"hover_scope", 0, cfg.c_str())), 0, 2);
+      wchar_t exclusions[4097]{};
+      const DWORD count = GetPrivateProfileStringW(L"privacy", L"excluded_apps", L"",
+                                                   exclusions, 4097, cfg.c_str());
+      // Invalid or truncated user-edited policies are not treated as empty:
+      // validation fails closed and the user can repair entries in Settings.
+      prefs_.excluded_app_names = count >= 4096 ? L"<invalid truncated policy>" :
+                                 std::wstring(exclusions, count);
     }
     WNDCLASSEXW wc{sizeof(wc)};
     wc.hInstance = instance;
@@ -310,6 +320,11 @@ private:
     request.generation = ++generation_;
     request.foreground = GetForegroundWindow();
     GetCursorPos(&request.cursor);
+    if (!capture_source_allowed(request.foreground, prefs_.excluded_app_names)) {
+      failure_ = Failure::ExcludedSource;
+      RefreshSettings();
+      return;
+    }
     {
       std::lock_guard lock(jobs_mutex_);
       pending_ = request;  // replace queued stale request; never unbounded backlog
@@ -340,7 +355,9 @@ private:
       result->cursor = current.cursor;
       const auto scope = !settings.hover_enabled ? CaptureScope::SelectionOnly :
           static_cast<CaptureScope>(settings.hover_scope + 1);
-      const auto captured = capture_isolated(current.foreground, current.cursor, scope);
+      const auto captured = capture_source_allowed(current.foreground, settings.excluded_app_names) ?
+          capture_isolated(current.foreground, current.cursor, scope) :
+          CaptureResult{Failure::ExcludedSource, {}};
       result->failure = captured.failure;
       if (captured) {
         // A newer hotkey may have arrived while the bounded UIA helper ran.
@@ -376,6 +393,7 @@ private:
     WritePrivateProfileStringW(L"appearance", L"surface", std::to_wstring(prefs_.popup_style).c_str(), path.c_str());
     WritePrivateProfileStringW(L"capture", L"hover_enabled", prefs_.hover_enabled ? L"1" : L"0", path.c_str());
     WritePrivateProfileStringW(L"capture", L"hover_scope", std::to_wstring(prefs_.hover_scope).c_str(), path.c_str());
+    WritePrivateProfileStringW(L"privacy", L"excluded_apps", prefs_.excluded_app_names.c_str(), path.c_str());
   }
 
   static LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -453,6 +471,34 @@ private:
         if (scope >= 0 && scope <= 2) { prefs_.hover_scope = scope; SaveSettings(); }
         return 0;
       }
+      if (id == kSaveExclusions && HIWORD(wp) == BN_CLICKED) {
+        if (!excluded_edit_) return 0;
+        const int length = GetWindowTextLengthW(excluded_edit_);
+        if (length < 0 || length > 4096) {
+          MessageBoxW(hwnd, L"Exclusion list must be under 4096 characters.",
+                      L"ClipLingo Privacy", MB_ICONWARNING);
+          return 0;
+        }
+        std::wstring text(static_cast<std::size_t>(length + 1), L'\0');
+        const int received = GetWindowTextW(excluded_edit_, text.data(), length + 1);
+        if (received < 0) return 0;
+        text.resize(static_cast<std::size_t>(received));
+        const auto parsed = capture_policy::parse(text);
+        if (!parsed.valid) {
+          MessageBoxW(hwnd, parsed.error.c_str(), L"ClipLingo Privacy", MB_ICONWARNING);
+          return 0;
+        }
+        prefs_.excluded_app_names = capture_policy::serialize(parsed.names);
+        ++generation_; // older capture may finish, but can no longer show UI
+        {
+          std::lock_guard lock(jobs_mutex_);
+          pending_.reset();
+        }
+        popup_.Hide();
+        SaveSettings();
+        DrawSettingsSection();
+        return 0;
+      }
       if (id == kPreviewPopup && HIWORD(wp) == BN_CLICKED) {
         POINT anchor{}; GetCursorPos(&anchor);
         popup_.ShowText(L"Terjemahan muncul di atas kursor, dengan ukuran sesuai isi teks.", anchor, prefs_);
@@ -528,7 +574,7 @@ private:
       if (child != sidebar_) DestroyWindow(child);
       child = next;
     }
-    width_edit_ = height_edit_ = theme_combo_ = surface_combo_ = nullptr;
+    width_edit_ = height_edit_ = theme_combo_ = surface_combo_ = excluded_edit_ = nullptr;
     const int section = static_cast<int>(SendMessageW(sidebar_, LB_GETCURSEL, 0, 0));
     switch (section) {
       case 0:
@@ -607,8 +653,22 @@ private:
         break;
       case 5:
         Label(L"Privacy", 32);
-        Label(L"Selected text is processed locally. No translation history or content logs.", 80);
-        Label(L"Do not use ClipLingo for elevated or protected application content.", 128);
+        Label(L"Offline text only. No history, clipboard access or content logs.", 78);
+        Label(L"Excluded apps: one executable filename per line (e.g. vault.exe).", 118);
+        Label(L"No paths, wildcards or automatic elevated capture.", 156);
+        {
+          std::wstring lines = prefs_.excluded_app_names;
+          std::wstring replaced;
+          for (wchar_t ch : lines) {
+            if (ch == L';') replaced += L"\r\n";
+            else replaced += ch;
+          }
+          excluded_edit_ = Control(L"EDIT", replaced.c_str(), WS_CHILD | WS_VISIBLE |
+              WS_TABSTOP | WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL,
+              246, 203, 430, 160, kExcludedAppsEdit);
+        }
+        Control(L"BUTTON", L"Save exclusions", WS_CHILD | WS_VISIBLE |
+                WS_TABSTOP | BS_PUSHBUTTON, 246, 385, 170, 34, kSaveExclusions);
         break;
     }
     const auto detail = failure_ == Failure::NoSelection ? L"Ready" : failure_label(failure_);
@@ -646,7 +706,7 @@ private:
   HINSTANCE instance_{nullptr};
   HANDLE single_instance_{nullptr};
   HWND host_{nullptr}, settings_{nullptr}, sidebar_{nullptr}, width_edit_{nullptr}, height_edit_{nullptr};
-  HWND theme_combo_{nullptr}, surface_combo_{nullptr};
+  HWND theme_combo_{nullptr}, surface_combo_{nullptr}, excluded_edit_{nullptr};
   HFONT font_{nullptr}; HICON icon_{nullptr};
   HBRUSH sidebar_brush_{nullptr};
   UINT taskbar_created_{0};
