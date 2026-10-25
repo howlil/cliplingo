@@ -1,13 +1,18 @@
 //! One bounded translation worker; model is never constructed on the hotkey or
 //! Tauri event loop. Only verified translated *target* text reaches PopupOwner.
-use crate::model_pack::{default_pack_dir, verify_pack, ModelError};
+use crate::model_pack::{default_pack_dir, ModelError};
+#[cfg(feature = "offline-ct2")]
+use crate::model_pack::verify_pack;
 use std::{
-    path::Path,
     sync::{Arc, Mutex, mpsc::{self, SyncSender, TrySendError}},
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
+#[cfg(feature = "offline-ct2")]
+use std::{path::Path, time::Instant};
+
+#[cfg(feature = "offline-ct2")]
 const MODEL_IDLE_EVICTION: Duration = Duration::from_secs(90);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -112,6 +117,8 @@ pub struct TranslationEngine {
 }
 impl TranslationEngine {
     pub fn start(on_result: Arc<dyn Fn(TranslationResult) + Send + Sync>) -> Result<Self, String> {
+        #[cfg(not(feature = "offline-ct2"))]
+        let _ = &on_result;
         let (sender, receiver) = mpsc::sync_channel::<TranslationRequest>(1);
         let telemetry = Arc::new(Mutex::new(Telemetry::default()));
         let state = telemetry.clone();
