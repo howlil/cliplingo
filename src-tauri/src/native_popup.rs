@@ -13,7 +13,7 @@ use windows_sys::Win32::{
         BeginPaint, CreateFontW, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint, FillRect,
         GetDC, GetMonitorInfoW, InvalidateRect, MonitorFromPoint, ReleaseDC, SelectObject, SetBkMode,
         SetTextColor, MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT,
-        DT_CALCRECT, DT_LEFT, DT_NOPREFIX, DT_WORDBREAK, TRANSPARENT,
+        DT_CALCRECT, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_WORDBREAK, TRANSPARENT,
     },
     System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentThreadId},
     UI::{
@@ -129,6 +129,15 @@ impl NativePopup {
     /// Preview is ONLY callable from explicit tray/debug proof route, never
     /// the production Ctrl+Alt+T translation shortcut before capture exists.
     pub fn show_preview_at(&self, anchor: (i32, i32)) -> Result<(), String> {
+        self.show_text_at(anchor, PREVIEW)
+    }
+
+    /// Only pass actual target-language inference output from the verified worker.
+    /// HWND painting and resource ownership remain on the Tauri event-loop thread.
+    pub fn show_text_at(&self, anchor: (i32, i32), target: &str) -> Result<(), String> {
+        if target.trim().is_empty() || target.encode_utf16().count() > 4_096 || target.contains('\0') {
+            return Err("Invalid translated text length".into());
+        }
         let hwnd = self.hwnd()?;
         unsafe {
             // SAFETY: HWND created on this UI thread and GDI handles are
@@ -147,7 +156,7 @@ impl NativePopup {
             let max_w = px(MAX_WIDTH_DIP, dpi);
             let max_h = px(MAX_HEIGHT_DIP, dpi);
             let mut rect = RECT { left: 0, top: 0, right: max_w - pad * 2, bottom: 0 };
-            let label = utf16(PREVIEW);
+            let label = utf16(target);
             let hdc = GetDC(hwnd);
             if hdc.is_null() {
                 return Err("GetDC failed".into());
@@ -155,8 +164,14 @@ impl NativePopup {
             let family = utf16("Segoe UI");
             let font = CreateFontW(-px(15, dpi), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 0, 0, family.as_ptr());
             let old = if !font.is_null() { SelectObject(hdc, font) } else { std::ptr::null_mut() };
-            let flags = DT_WORDBREAK | DT_CALCRECT | DT_NOPREFIX | DT_LEFT;
-            let measured = DrawTextW(hdc, label.as_ptr(), (label.len() - 1) as i32, &mut rect, flags);
+            // Size short target text intrinsically; wrap only above width cap.
+            let mut measured = DrawTextW(hdc, label.as_ptr(), (label.len() - 1) as i32, &mut rect,
+                DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX | DT_LEFT);
+            if rect.right - rect.left > max_w - pad * 2 {
+                rect = RECT { left: 0, top: 0, right: max_w - pad * 2, bottom: 0 };
+                measured = DrawTextW(hdc, label.as_ptr(), (label.len() - 1) as i32, &mut rect,
+                    DT_WORDBREAK | DT_CALCRECT | DT_NOPREFIX | DT_LEFT);
+            }
             if !old.is_null() { SelectObject(hdc, old); }
             if !font.is_null() { DeleteObject(font); }
             ReleaseDC(hwnd, hdc);
@@ -185,6 +200,12 @@ impl NativePopup {
             // sufficient proof: a real Windows foreground/focus test is gated.
             let _ = GetForegroundWindow();
             Ok(())
+        }
+    }
+
+    pub fn hide(&self) {
+        if let Ok(hwnd) = self.hwnd() {
+            unsafe { KillTimer(hwnd, 1); ShowWindow(hwnd, SW_HIDE); }
         }
     }
 
