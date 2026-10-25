@@ -127,6 +127,7 @@ int execute_benchmark(const std::filesystem::path& model,
   file.flush();
   if (!file) return 7;
   file.close();
+  if (!file) return 7; // preserve previous report if close/disk flush fails
   if (!MoveFileExW(temporary.c_str(), output.c_str(),
                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return 7;
   return 0;
