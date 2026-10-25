@@ -90,7 +90,7 @@ impl Loaded {
         Ok(Self { translator })
     }
     fn translate(&self, text: &str) -> Result<String, TranslationState> {
-        let options = ct2rs::TranslationOptions::<&str, &str> {
+        let options = ct2rs::TranslationOptions::<String, String> {
             beam_size: 2,
             max_input_length: 1024,
             max_decoding_length: 256,
