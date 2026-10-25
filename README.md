@@ -35,6 +35,31 @@ Run hover tests using the existing smoke build and `ctest`; a **real Windows
 desktop** compatibility matrix remains mandatory before release, especially
 for browser/PDF providers whose UIA text patterns are incomplete.
 
+## M5 — Explicit clipboard translation (opt-in)
+
+This is an **intentional manual action**, not automatic clipboard capture and
+not a simulated Ctrl+C. Enable **Settings → Text Capture → Allow explicit
+clipboard translation from tray** (disabled by default), then choose
+**ClipLingo tray → Translate clipboard (explicit)**. Only the current
+`CF_UNICODETEXT` format is read, at most 8192 UTF-16 units, on a bounded
+one-shot helper process. ClipLingo does not change clipboard ownership or
+contents, create history, or poll the clipboard. A sequence-number check
+rejects clipboard content that changed after the tray action.
+
+When valid, the text uses the existing local EN→ID CTranslate2 path and the
+same text-only native popup anchored at the trigger-time mouse position.
+When the clipboard is busy, empty, over limit, unavailable or changed, no
+result popup is shown; the error status can be read in Settings.
+
+**Privacy limitation:** ClipLingo cannot establish which application created
+historical clipboard content. Only enable the feature if you accept that the
+explicit command may translate text copied from other apps, including text
+you did not intend to process. This function is separate from the live
+foreground-app exclusions being developed in PR #4 (and OCR PR #3).
+
+Native CI exercises bounded Unicode parsing; an interactive Windows desktop
+is still needed to test clipboard owner contention and delayed rendering.
+
 ## Prepare a trusted model pack (developer / release packager)
 
 Conversion requires Python >=3.11, `ctranslate2`, `sentencepiece`, `huggingface_hub`, `transformers<5`, and PyTorch on a **builder machine**, never on the resident Windows app. Choose and pin an immutable commit from [Helsinki-NLP/opus-mt-en-id](https://huggingface.co/Helsinki-NLP/opus-mt-en-id/tree/main). Then:
@@ -101,6 +126,8 @@ Windows CI runs geometry test, model-package integrity regression test, and an M
 | --- | --- |
 | `src/main.cpp` | event loop, tray, settings projection, serialized requests, lifecycle |
 | `src/capture.cpp` | UI Automation selection and input validation |
+| `src/clipboard.cpp` | isolated one-shot Windows clipboard data acquisition |
+| `src/clipboard_text.h` | bounded Unicode clipboard parsing without Windows dependencies |
 | `src/hover.cpp` | on-demand UIA hover hit-testing and Word/Sentence/Paragraph acquisition |
 | `src/scope_text.h` | pure bounds validation and sentence segmentation |
 | `src/capture_helper.cpp` | bounded helper process, IPC memory mapping, timeout and crash containment |
