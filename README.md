@@ -1,6 +1,6 @@
-# ClipLingo — Native Windows Selection & Hover Translation
+# ClipLingo — Native Windows Selection, Hover & Explicit Clipboard Translation
 
-Milestones: M1 merged to master; M2 hover extension on `feat/m2-hover-text-capture` · C++20 · Win32 · DirectWrite/Direct2D · UI Automation · CTranslate2 · SentencePiece.
+Milestones: M1/M2 merged to `master`; M3 OCR and M4 Privacy remain separate Draft PRs; M5 clipboard on `feat/m5-explicit-clipboard-translation`. C++20 · Win32 · DirectWrite/Direct2D · UI Automation · CTranslate2 · SentencePiece.
 
 ## What M1 actually implements
 
@@ -9,11 +9,11 @@ Milestones: M1 merged to master; M2 hover extension on `feat/m2-hover-text-captu
 - The capture helper shares **one bounded memory mapping handle** with the host, runs UIA on COM MTA, exits after capture, and is forcibly terminated after 1.8 s when blocked. This adds a per-request process-startup cost; profile before deciding whether to add a persistent child process.
 - Native content-fit popup (DirectWrite/Direct2D), 420×300-DIP maximum by default, placed above cursor without focus. Translation text **only**: no popup controls or header.
 - Long results are readable by mouse wheel or `Ctrl+Alt+Up/Down` without activating the popup. Exposes full target text via a native UI Automation live-region *Name* property; actual NVDA/Narrator behavior must be checked on Windows.
-- Native six-section Settings shell (General, Text Capture, Translation Popup, Appearance, Language Models, Privacy). Functional: Pause/Resume, launch at login, verified model pack import, max popup bounds, light/dark, solid/tinted, and interactive popup preview. Unimplemented hover/OCR/Glass settings are explicitly labeled or disabled.
+- Native six-section Settings shell (General, Text Capture, Translation Popup, Appearance, Language Models, Privacy). Functional: Pause/Resume, launch at login, verified model pack import, max popup bounds, light/dark, solid/tinted, and interactive popup preview. OCR/Glass remain disabled on this branch; hover and clipboard opt-in are available in Text Capture.
 - EN→ID model is prepared by a separate developer-side conversion tool and imported into `%LOCALAPPDATA%\ClipLingo\models`. SHA-256 file manifest validates source and staged content. Versioned rename activates pack atomically. Model stays warm between uses and can be unloaded after about two minutes idle.
-- No browser processes, network on translation path, account, OCR or clipboard hook. M2 adds shortcut-only hover fallback.
+- No browser processes, network on translation path, accounts, continuous OCR or clipboard hooks. M2 adds shortcut-only hover fallback; M5 adds opt-in tray clipboard reading.
 
-## M2 — Hover fallback (branch: feat/m2-hover-text-capture)
+## M2 — Hover fallback (merged)
 
 When Ctrl+Alt+T is pressed, ClipLingo still translates a valid selection **exactly**.
 If the UI Automation selection is confirmed empty and hover fallback is enabled,
