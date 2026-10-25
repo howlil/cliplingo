@@ -35,6 +35,39 @@ Run hover tests using the existing smoke build and `ctest`; a **real Windows
 desktop** compatibility matrix remains mandatory before release, especially
 for browser/PDF providers whose UIA text patterns are incomplete.
 
+## M6 — Native performance baseline (headless)
+
+Build the real C++ application with the same **CTranslate2 + SentencePiece**
+dependencies as the tray app; the inference stub used by Windows smoke CI is
+**not a valid performance target**. Prepare/verify the EN→ID pack as described
+below, then run the production executable on Windows:
+
+```powershell
+# Usage: ClipLingo.exe --benchmark-model <model-pack-dir> <output.json> [iterations]
+.\build-full\Release\ClipLingo.exe --benchmark-model "C:\models\en-id" "C:\temp\cliplingo-perf.json" 20
+# Exit code 0 means an atomic, schema-1 report was written.
+Get-Content "C:\temp\cliplingo-perf.json"
+```
+
+M6 is a **diagnostic**, not a new Settings panel, background profiler, or
+automatic telemetry system. It uses only fixed public English test phrases,
+not clipboard content, captured user text, app identities or model paths.
+Reports include first/cold translation (including model loading),
+warm p50/p95/p99 for fixed word/sentence/paragraph inputs, process CPU
+time, private bytes/working-set snapshots and peak working set.
+Iterations are limited to 5–200 **for each of three cohorts** (default 20).
+Invalid model, invalid iteration count or report write errors exit nonzero;
+there is no invented fallback metric or success popup.
+
+**Interpreting the data:** one headless execution measures inference and
+model loading, **not** end-to-end hotkey-to-result, real tray idle RAM, OCR
+accuracy, GUI DPI behaviour, battery impact or cold Windows boot. Compare
+the same model, OS build, CPU, power plan, thread count and background
+load before considering an architectural change. Keep raw per-run reports
+for repeated measurements; don't publish a single number as universal.
+The baseline itself is accepted only when a real model pack and Windows
+machine successfully complete this command.
+
 ## Prepare a trusted model pack (developer / release packager)
 
 Conversion requires Python >=3.11, `ctranslate2`, `sentencepiece`, `huggingface_hub`, `transformers<5`, and PyTorch on a **builder machine**, never on the resident Windows app. Choose and pin an immutable commit from [Helsinki-NLP/opus-mt-en-id](https://huggingface.co/Helsinki-NLP/opus-mt-en-id/tree/main). Then:
@@ -104,6 +137,8 @@ Windows CI runs geometry test, model-package integrity regression test, and an M
 | `src/hover.cpp` | on-demand UIA hover hit-testing and Word/Sentence/Paragraph acquisition |
 | `src/scope_text.h` | pure bounds validation and sentence segmentation |
 | `src/capture_helper.cpp` | bounded helper process, IPC memory mapping, timeout and crash containment |
+| `src/model_benchmark.cpp` | native on-demand model benchmark, OS resource counters and versioned JSON |
+| `src/benchmark_stats.h` | pure deterministic latency percentile calculations |
 | `src/translation.cpp` | local model/tokenizer loading, inference and warm lifecycle |
 | `src/model_package.cpp` | SHA-256 package validation, staging and atomic activation |
 | `src/popup.cpp` | native DirectWrite text renderer, placement, accessible name |
