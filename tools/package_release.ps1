@@ -31,8 +31,12 @@ foreach ($dllFolder in @($nativeBin, $vcpkgBin)) {
   }
 }
 $dllNames = @(Get-ChildItem $dist -File -Filter '*.dll' | ForEach-Object Name)
-foreach ($required in @('ctranslate2.dll', 'sentencepiece.dll')) {
-  if ($dllNames -notcontains $required) { throw "Runtime DLL missing: $required" }
+# CTranslate2 is built as a shared DLL. SentencePiece 0.2.1 is
+# installed as a static library with the pinned source build; it is linked
+# into ClipLingo.exe and therefore has NO sentencepiece.dll to distribute.
+# Never invent or require a DLL that the verified linkage does not import.
+if ($dllNames -notcontains 'ctranslate2.dll') {
+  throw 'Runtime DLL missing: ctranslate2.dll'
 }
 if (!(@($dllNames | Where-Object { $_ -like '*tesseract*.dll' }).Count)) {
   throw 'Tesseract runtime DLL not included'
