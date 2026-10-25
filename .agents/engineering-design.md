@@ -279,3 +279,11 @@ Do not activate online merely because the user is connected to the internet. Onl
 - Microsoft UIA threading: https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-threading
 - Official cloud language support: https://learn.microsoft.com/en-us/azure/ai-services/translator/language-support and https://docs.cloud.google.com/translate/docs/languages
 - Signed Tauri updater: https://v2.tauri.app/plugin/updater/
+
+## 10. F1 implementation delta and verification boundary (2026-10-26)
+
+- `capture_policy.rs`: default deny list and fail-closed source identity; exact selection preservation up to 8,192 UTF-16 units. No configurable list or hover/clipboard/OCR yet.
+- `capture.rs`: one named MTA thread initialized with `CoInitializeEx(COINIT_MULTITHREADED)`, COM-owned `IUIAutomation`, focused `TextPattern.GetSelection` with a single contiguous range, foreground root/PID attribution and password-field denial. Pending queue capacity **one**; no unbounded worker spawning.
+- `CaptureCoordinator`: atomic generation increments before every trigger; late responses dropped. Captured string never escapes worker. Settings gets only typed status and count via existing `get_status` IPC. Exact foreground HWND and cursor are frozen at hotkey-time; source foreground is revalidated before/after UIA operation.
+- **Expected limitations:** Chrome/Edge renderer processes can expose UIA child identity different from top window; if no verifiable root/foreground attribution is available, F1 denies (correctness prioritized over compatibility). Synchronous UIA provider calls can hang a thread and `try_send` only bounds the queue; a helper process is still conditional on real evidence.
+- [F1 interactive acceptance](f1-acceptance.md) remains pending; GitHub Windows cargo compile/unit checks do not validate real UIA provider responses or focus semantics.
