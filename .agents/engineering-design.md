@@ -211,3 +211,32 @@ Links are reference material, not claims of completed platform compatibility tes
 | Windows minimum version | **Windows 11 x64 candidate** | app audience and compatibility tests |
 
 Record an ADR under `.agents/decisions/` only when a consequential alternative is actually chosen with evidence. Do not implement all candidates or pre-create folders/modules because they appear in this document.
+
+## M5 — Clipboard read boundary (opt-in)
+
+`clipboard.cpp` exclusively owns a single Win32 `CF_UNICODETEXT` read using
+RAII for `OpenClipboard/CloseClipboard` and `GlobalLock/GlobalUnlock`.
+It bounds clipboard allocation inspection, copies at most 8192 UTF-16 units,
+rejects missing NUL and overlong data, and never calls
+`EmptyClipboard`, `SetClipboardData` or keyboard synthesis.
+`clipboard_text.h` is a small pure parser tested under Release.
+
+A read is allowed only after explicit user opt-in plus the dedicated tray
+command. Coordinator captures `GetClipboardSequenceNumber` at trigger time
+so changed clipboard content is not mistakenly translated later.
+`capture_helper.cpp` reuses the existing **short-lived isolated capture
+subprocess** with versioned `CLU5` shared memory to guard against delayed
+clipboard rendering or native application hangs. There is no permanent
+clipboard listener or extra resident worker.
+
+The authoritative preference is `Preferences::clipboard_enabled` in
+`main.cpp`, persisted to the local INI file, disabled by default.
+Turning it off advances the request generation and discards pending work.
+The UI thread never blocks waiting for `OpenClipboard`.
+
+Open evidence: actual Windows clipboard owner contention and delayed
+render behavior, foreground state while tray menu is open, mixed-DPI cursor
+anchoring, and integration with M3 CLU3 / M4 app exclusions.
+**Clipboard provenance cannot be inferred from `GetClipboardOwner`** and
+must not be claimed; source-app exclusions cover live app capture but not
+historically copied clipboard content.
