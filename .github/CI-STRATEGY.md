@@ -37,3 +37,5 @@ GitHub even when new triggers are narrowed.
 **Boundary:** only native compilation and release packaging are automated.
 Physical Windows GUI/UAI capture, OCR accuracy, Narrator, real memory/latency
 and installer acceptance still require separate manual verification.
+
+**Latest-master wins:** superseding master pushes cancel stale in-flight release builds; release tag freshness gate prevents publishing a different commit than was tested. Manual workflow runs are not auto-cancelled.
