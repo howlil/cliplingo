@@ -1,9 +1,9 @@
 //! Tauri owns shell/tray/global shortcuts. Native tooltip owns its HWND.
-//! F1 adds strictly gated Windows UIA selection capture; no OCR, model,
-//! cloud provider or clipboard access. Selection is dropped without translation.
+//! Capture is policy-checked in the UIA worker; optional CPU CTranslate2
+//! translates offline. The Tauri WebView never receives raw source text.
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
-    Mutex,
+    Mutex, Arc,
 };
 use serde::Serialize;
 use tauri::{
@@ -14,6 +14,7 @@ use tauri::{
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 use crate::capture::CaptureCoordinator;
+use crate::translation::{TranslationEngine, TranslationResult};
 use crate::native_popup::{self, NativePopup};
 
 struct ShellState {
@@ -22,6 +23,7 @@ struct ShellState {
     hotkey_count: AtomicU64,
     preview_count: AtomicU64,
     capture: CaptureCoordinator,
+    translator: Arc<TranslationEngine>,
 }
 
 #[derive(Serialize)]
@@ -34,11 +36,15 @@ struct ShellStatus {
     capture_generation: u64,
     capture_verified_count: u64,
     capture_selection_units: usize,
+    model_state: &'static str,
+    translations_completed: u64,
+    model_install_path: String,
 }
 
 #[tauri::command]
 fn get_status(state: tauri::State<'_, ShellState>) -> ShellStatus {
     let captured = state.capture.status();
+    let translated = state.translator.status();
     ShellStatus {
         shortcut_registered: state.shortcut_registered.load(Ordering::Relaxed),
         hotkey_count: state.hotkey_count.load(Ordering::Relaxed),
@@ -48,6 +54,9 @@ fn get_status(state: tauri::State<'_, ShellState>) -> ShellStatus {
         capture_generation: captured.generation,
         capture_verified_count: captured.verified_count,
         capture_selection_units: captured.selection_units,
+        model_state: translated.state.label(),
+        translations_completed: translated.successful,
+        model_install_path: state.translator.pack_dir().unwrap_or_default(),
     }
 }
 
@@ -104,13 +113,37 @@ pub fn run() {
         .setup(|app| {
             let popup = NativePopup::create()
                 .map_err(std::io::Error::other)?;
-            let capture = CaptureCoordinator::start().map_err(std::io::Error::other)?;
+            let ui = app.handle().clone();
+            let on_translation = Arc::new(move |message: TranslationResult| {
+                let inner_ui = ui.clone();
+                let current_ui = inner_ui.clone();
+                let _ = inner_ui.run_on_main_thread(move || {
+                    let state = current_ui.state::<ShellState>();
+                    // Authoritative latest generation AND foreground provenance
+                    // are required again immediately before native presentation.
+                    if !crate::capture::is_foreground_hwnd(message.source_hwnd) {
+                        return;
+                    }
+                    state.capture.with_current(message.generation, || {
+                        if let Ok(popup) = state.popup.lock() {
+                            if let Err(err) = popup.show_text_at(message.anchor, &message.target) {
+                                eprintln!("Unable to show native target text: {err}");
+                            }
+                        }
+                    });
+                });
+            });
+            let translator = Arc::new(TranslationEngine::start(on_translation).map_err(std::io::Error::other)?);
+            let pipe = translator.clone();
+            let capture = CaptureCoordinator::start(Arc::new(move |request| pipe.submit(request)))
+                .map_err(std::io::Error::other)?;
             app.manage(ShellState {
                 popup: Mutex::new(popup),
                 shortcut_registered: AtomicBool::new(false),
                 hotkey_count: AtomicU64::new(0),
                 preview_count: AtomicU64::new(0),
                 capture,
+                translator,
             });
 
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
@@ -150,11 +183,19 @@ pub fn run() {
                         }
                         if shortcut == &expected_hotkey {
                             // Capture snapshot occurs at hotkey-time; worker owns all UIA.
-                            // F1 deliberately never displays or logs source text.
+                            // Translation occurs only after verified capture + model pack.
                             let cursor = native_popup::cursor_snapshot();
                             let state = app.state::<ShellState>();
                             state.hotkey_count.fetch_add(1, Ordering::Relaxed);
                             state.capture.capture_hotkey(cursor);
+                            // Hide prior translated content while replacing with a new request.
+                            let ui = app.clone();
+                            let inner = ui.clone();
+                            let _ = ui.run_on_main_thread(move || {
+                                if let Some(state) = inner.try_state::<ShellState>() {
+                                    if let Ok(popup) = state.popup.lock() { popup.hide(); }
+                                }
+                            });
                         } else if cfg!(debug_assertions) && shortcut == &expected_preview {
                             // Developer-only proof: press Ctrl+Alt+P while reading
                             // another app to test non-activation and positioning.

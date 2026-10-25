@@ -31,6 +31,7 @@ use windows_sys::Win32::{
     },
 };
 use crate::capture_policy::{authorize_process, validate_selection, CaptureDenied, MAX_SELECTION_UNITS};
+use crate::translation::TranslationRequest;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -50,7 +51,7 @@ impl CaptureState {
         match self {
             Self::Idle => "idle",
             Self::Queued => "capturing",
-            Self::Verified => "selection_verified_no_translation_engine",
+            Self::Verified => "selection_verified",
             Self::Empty => "no_selection",
             Self::Denied => "source_denied",
             Self::Unsupported => "selection_unsupported",
@@ -169,7 +170,7 @@ pub struct CaptureCoordinator {
     telemetry: Arc<Mutex<Telemetry>>,
 }
 impl CaptureCoordinator {
-    pub fn start() -> Result<Self, String> {
+    pub fn start(on_selection: Arc<dyn Fn(TranslationRequest) + Send + Sync>) -> Result<Self, String> {
         let (sender, receiver) = mpsc::sync_channel::<Request>(1);
         let telemetry = Arc::new(Mutex::new(Telemetry::default()));
         let status = telemetry.clone();
@@ -196,7 +197,21 @@ impl CaptureCoordinator {
                 let result = read_selection(&automation, &request.source);
                 // Serialized status owner: a late result cannot win between
                 // a generation check and the final status write.
-                status.lock().unwrap().complete(request.generation, result);
+                let allowed = status.lock().unwrap().generation == request.generation;
+                if allowed {
+                    match result {
+                        Ok(text) => {
+                            status.lock().unwrap().complete(request.generation, Ok(text.clone()));
+                            on_selection(TranslationRequest {
+                                generation: request.generation,
+                                anchor: request.source.cursor,
+                                source_hwnd: request.source.hwnd,
+                                text,
+                            });
+                        }
+                        Err(err) => status.lock().unwrap().complete(request.generation, Err(err)),
+                    }
+                }
             }
         }).map_err(|e| format!("Could not start UIA thread: {e}"))?;
         Ok(Self { sender, telemetry })
@@ -233,6 +248,19 @@ impl CaptureCoordinator {
         }
     }
 
+    pub fn with_current<F: FnOnce()>(&self, generation: u64, present: F) {
+        // Hold generation owner until native presentation has completed.
+        // Otherwise a hotkey could invalidate after a check but before ShowWindow.
+        let guard = self.telemetry.lock().unwrap();
+        if guard.generation == generation {
+            present();
+        }
+    }
+
+    pub fn is_current(&self, generation: u64) -> bool {
+        self.telemetry.lock().unwrap().generation == generation
+    }
+
     pub fn invalidate(&self) {
         let mut state = self.telemetry.lock().unwrap();
         state.generation = state.generation.wrapping_add(1);
@@ -250,6 +278,13 @@ fn state_for_error(error: CaptureDenied) -> CaptureState {
         CaptureDenied::ExcludedApp | CaptureDenied::OwnProcess |
         CaptureDenied::PasswordField | CaptureDenied::UnverifiableSource |
         CaptureDenied::ForegroundChanged => CaptureState::Denied,
+    }
+}
+
+pub fn is_foreground_hwnd(window: isize) -> bool {
+    unsafe {
+        let current = GetForegroundWindow();
+        !current.is_null() && current as isize == window
     }
 }
 
