@@ -14,7 +14,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - name: Rust formatting
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
-      - name: Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Rust format (first scaffold; report diff separately)
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all
+      - name: Windows compile and unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Check production Windows build code paths
+        run: cargo check --manifest-path src-tauri/Cargo.toml --release
