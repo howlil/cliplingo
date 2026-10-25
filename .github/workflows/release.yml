@@ -248,14 +248,32 @@ jobs:
           TAG: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
+          # A workflow commit can receive more merges while native libraries
+          # compile. GitHub's built-in GITHUB_TOKEN cannot tag an *older*
+          # workflow-changing commit without Workflows:write permission.
+          # Publish only an artifact built from the current default HEAD.
+          CURRENT_MASTER="$(gh api "repos/$GH_REPO/git/ref/heads/master" --jq '.object.sha')"
+          if [[ "$CURRENT_MASTER" != "$GITHUB_SHA" ]]; then
+            echo "::error::Stale release build $GITHUB_SHA; master is $CURRENT_MASTER. Refusing to tag unrelated code. The latest master workflow must publish instead."
+            exit 1
+          fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists; refusing to replace its assets"
             exit 1
           fi
           sed "s/__VERSION__/$TAG/g" RELEASE_NOTES.md > release-notes-rendered.md
+          # Explicitly target the DEFAULT BRANCH, not a commit SHA. Targeting
+          # an older workflow-file commit can return 403 even with
+          # GITHUB_TOKEN Contents:write (it would require Workflows:write).
+          # Current master HEAD was checked above to match the tested binary.
           gh release create "$TAG" release-assets/*.zip release-assets/SHA256SUMS.txt \
-            --target "$GITHUB_SHA" \
+            --target master \
             --title "ClipLingo $TAG" \
             --notes-file release-notes-rendered.md \
             --prerelease --latest=false
           gh release view "$TAG" --json url,isPrerelease,assets --jq '{url,isPrerelease,assets: [.assets[].name]}'
+          RELEASE_TAG_SHA="$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" --jq '.object.sha')"
+          if [[ "$RELEASE_TAG_SHA" != "$GITHUB_SHA" ]]; then
+            echo "::error::Tag $TAG points to $RELEASE_TAG_SHA; build was $GITHUB_SHA"
+            exit 1
+          fi
