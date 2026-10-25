@@ -16,7 +16,7 @@ Status: **approved product behavior baseline + explicit open research** (2026-10
 
 ## 2. Job / intended outcome (J)
 
-> While reading in a Windows app, I can understand a selected English word, sentence or paragraph in Indonesian quickly, offline, without switching context or manipulating a large translation UI.
+> While reading in a Windows app, I can understand a selected English word, sentence or paragraph in Indonesian quickly, **offline by default or through a consented online provider**, without switching context or a large UI.
 
 Additional job: configure the utility once via Windows system tray, then let it stay unobtrusive with minimal idle resource usage.
 
@@ -29,7 +29,7 @@ Reading inside source app
   → ClipLingo captures a valid target and the trigger cursor location
        ├─ no text/unsupported → no translation popup
        └─ valid
-            → local EN→ID translation
+            → configured EN→ID route: offline model or explicitly consented online provider
                  ├─ failure → no fake result; actionable state via tray/Settings
                  └─ successful result
                       → intrinsic text-only container above frozen cursor
@@ -37,7 +37,7 @@ Reading inside source app
                       → dismisses/continues reading
 ```
 
-**Selection semantics:** translate precisely the selected span, even if it includes multiple words, sentences or paragraphs. Do not automatically expand a manual selection. **Hover semantics:** use configured Word/Sentence/Paragraph extraction, with hit-testing and context. **OCR semantics:** user explicitly chooses a screen region; no perpetual screen scanning. Default direction EN→ID; reversed direction is optional and requires its valid model. No network request for selected content during translation.
+**Selection semantics:** translate precisely the selected span, even if it includes multiple words, sentences or paragraphs. Do not automatically expand a manual selection. **Hover semantics:** use configured Word/Sentence/Paragraph extraction, with hit-testing and context. **OCR semantics:** user explicitly chooses a screen region; no perpetual screen scanning. Default direction EN→ID; reversed direction is optional and requires its valid model. Offline-only never sends source text to a network. Online-only and explicit Smart fallback require user permission for the chosen provider before uploading selected text.
 
 ## 4. Failure and edge-state behavior
 
@@ -46,7 +46,7 @@ Reading inside source app
 | Shortcut with no accessible selected text | No result popup; no empty loading card |
 | Capture provider unavailable / protected content | Do not bypass OS security; surface explanation in diagnostics when needed |
 | UIA returns nearest text not actually under cursor | Reject incorrect hover target rather than translate unrelated text |
-| Offline model missing/corrupt | Settings shows status and recovery/install action; no result popup |
+| Offline model missing/corrupt | Offline-only: Settings shows repair/install action, no fake popup and no automatic cloud upload |
 | Translation failed or returned empty | No fabricated translation; non-intrusive actionable status outside the popup |
 | Repeated hotkeys / moving cursor during inference | Most recent request wins; popup anchors to its trigger-time cursor snapshot |
 | Word/Sentence/Paragraph long result | Content-fit until maximum width/height; accessible overflow afterward |
@@ -63,7 +63,7 @@ Errors classified as silent (no selection), recoverable/actionable (model missin
 ### Accepted
 
 - Windows-first, single-user desktop utility, no account, no cloud inference requirement.
-- Offline local translation after model assets are present. Explicit model installation and signed app updates may use network; captured text is never uploaded to a translation service.
+- Offline-only is the default after local model installation. Optional online translation explicitly uploads selected text over TLS to a user-chosen official provider after informed consent. Model installation and signed updates use separate network paths.
 - Background tray app rather than a constantly visible main window.
 - Approved Apple-inspired design tokens applied in native Windows UI (not copied Apple resources).
 - Translation popup contains **only translated target text**, no original, buttons, language badges, or settings controls.
@@ -78,7 +78,7 @@ Errors classified as silent (no selection), recoverable/actionable (model missin
 - OCR backend and packaging identity requirements.
 - Supported target apps, privileged/elevated app limitations, accessibility variants.
 - Numeric latency/RAM thresholds: define only after representative benchmarks; don't invent performance claims.
-- Tauri v2 desktop shell with Rust-owned native Windows integrations is the **accepted future engineering direction** ([ADR-0002](decisions/0002-tauri-rust-windows-hybrid.md)); Settings uses WebView2, while result-popup backend requires real Windows no-focus-steal and resource proof. The tracked codebase remains documentation-only. Historical C++/CMake functionality is archived on `archive/pre-rust-clean-slate-20261026`; no current executable is supplied by this branch. A new Rust implementation must meet all listed acceptance behavior; native Windows and model integration remain verification gates. See [engineering contract](engineering-design.md) and [ADR-0001](decisions/0001-rust-first-native-windows.md).
+- Tauri v2 desktop shell with Rust-owned native Windows integrations is the **accepted future engineering direction** ([ADR-0002](decisions/0002-tauri-rust-windows-hybrid.md)); Settings uses lazy WebView2, while a Rust-owned native Win32/DirectWrite result popup is the new low-latency implementation direction, subject to real Windows no-focus-steal, DPI and accessibility proof ([ADR-0003](decisions/0003-latency-first-dual-mode-translation.md)). The tracked codebase remains documentation-only. Historical C++/CMake functionality is archived on `archive/pre-rust-clean-slate-20261026`; no current executable is supplied by this branch. A new Rust implementation must meet all listed acceptance behavior; native Windows and model integration remain verification gates. See [engineering contract](engineering-design.md) and [ADR-0001](decisions/0001-rust-first-native-windows.md).
 
 ## 6. Smallest coherent release scope
 
@@ -89,18 +89,19 @@ Errors classified as silent (no selection), recoverable/actionable (model missin
 - Explicit selection capture; request ordering, empty-selection silent stop.
 - Text-only auto-fit popup above trigger-time cursor; sensible dismiss; mixed-DPI readiness.
 - Windows desktop UI consistent with `DESIGN.md` (Tauri WebView2 Settings, popup backend after native acceptance); no mandatory model download for merely opening Settings.
-- Basic privacy settings and excluded-app handling.
+- Basic privacy settings and excluded-app handling. The existing Language Models/Privacy sections will also host the Offline/Online/Smart route, provider selection and consent; there is no new top-level Settings section.
 
 ### After M1 — additional compatibility where research justifies it
 
 - Hover Word/Sentence/Paragraph using geometry-validated text ranges and segmentation.
 - Manual region OCR for inaccessible text; clipboard fallback **opt-in**.
 - Optional ID→EN model and language direction.
+- Optional official online EN↔ID provider for consenting users (BYOK/auth compatible); no offline model is needed in Online-only mode.
 - Accessibility and rendering refinements that preserve text-only popup contract.
 
 ### Explicitly out of scope
 
-Cloud accounts/sync, chat assistant, translation history and usage tracking by default, constant OCR/background screen surveillance, forced elevation, on-popup toolbars, arbitrary plugin architecture, in-app web backend, speculative multi-model marketplaces.
+Cloud accounts/sync, chat assistant, translation history and usage tracking by default, constant OCR/background screen surveillance, forced elevation, on-popup toolbars, arbitrary plugin architecture, *unconsented* cloud fallback, scraped consumer translation endpoints, in-app web backend and speculative multi-model marketplaces.
 
 ## 7. Proof (P) — acceptance traces
 
@@ -114,6 +115,17 @@ Cloud accounts/sync, chat assistant, translation history and usage tracking by d
 8. **Given** ClipLingo is idle/paused **when** there is no trigger **then** it performs no continuous OCR/inference or continuous input polling.
 9. **Given** the user opens the tray **when** Settings is selected **then** the six-section window is accessible regardless of model state.
 10. **Given** Windows is offline after the model is installed **when** a valid selection is translated **then** translation succeeds without a network service.
+
+## 7A. New online/offline acceptance cases
+
+1. Fresh install without model: Offline-only is default, tray/Settings works, no cloud text request and there is a model-install action.
+2. Installed verified model with network disabled: EN→ID succeeds without network.
+3. Online-only: after choosing official vendor, explicit disclosure/consent and supported user credentials, selected text can go over TLS to that vendor; no local model needed.
+4. No consent, excluded/unknown/protected window or no selection: zero captured text leaves device.
+5. Smart: local-first; explicit provider-specific network fallback only for allowed failure classes, not permission denial/corrupt model.
+6. Online timeout/401/429/5xx/revoked consent: typed failure/diagnostics outside popup, no fake output/no hidden provider switching. Already transmitted text cannot be recalled.
+7. Cache hit or out-of-order requests: validate privacy/policy and newest generation; only latest authorized target text may show.
+8. Native popup stays target-text-only with no focus theft; benchmark its real Windows latency/idle/process-tree against WebView prototype before claiming performance.
 
 ## 8. Research questions and falsification
 
@@ -137,7 +149,7 @@ right-click cancels without translation. A successfully chosen region is
 read locally using an optional CPU OCR backend and passed to the same EN→ID
 translator and target-text-only popup. The popup anchors to the frozen
 drag-release cursor. No full-screen background scanning, clipboard
-interception, image history or network text upload is introduced.
+interception, or image history is introduced. OCR pixels remain local; recognized text follows the separately consented offline/online translation mode rather than an implicit upload.
 
 Additional acceptance traces:
 - Given OCR is unavailable, selecting OCR shows actionable status in Settings
@@ -203,8 +215,7 @@ This explicit manual action is not equivalent to source selection and may
 contain sensitive data from any program. Privacy explanations must state
 this directly; when the separate M4 app-exclusion work is integrated, its
 policy must not be misrepresented as protecting arbitrary historical
-clipboard content. No clipboard history, network upload, logging or account
-is introduced.
+clipboard content. No clipboard history, automatic network upload, raw-text logging or account is introduced. If the user selects a consented Online-only translation mode, explicit clipboard text may be sent to that provider only after warning that its app of origin cannot be verified.
 
 Live Win11 clipboard owner/delayed-rendering and UI validation remain pending.
 
