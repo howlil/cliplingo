@@ -1,7 +1,7 @@
 # ClipLingo — Tauri v2 + Rust + Native Windows Engineering Contract
 
-Status: **research-based target architecture, NOT implemented or benchmarked** (2026-10-26).
-Decision: [ADR-0003](decisions/0003-latency-first-dual-mode-translation.md) refines [ADR-0002](decisions/0002-tauri-rust-windows-hybrid.md) for a native-first tooltip and opt-in online translation; Rust-first [ADR-0001](decisions/0001-rust-first-native-windows.md) remains valid. No new executable, Cargo project, WebView UI, model package or CI currently exists on `master`.
+Status: **research-based target with a partial F0 Tauri shell/native preview scaffold** (2026-10-26). Translation and performance are NOT implemented or verified.
+Decision: [ADR-0003](decisions/0003-latency-first-dual-mode-translation.md) refines [ADR-0002](decisions/0002-tauri-rust-windows-hybrid.md) for a native-first tooltip and opt-in online translation; Rust-first [ADR-0001](decisions/0001-rust-first-native-windows.md) remains valid. F0 feature branch now contains Cargo/Tauri Windows shell, static WebView Settings, native Win32/GDI preview, and CI. No capture, translation model, official online provider, native E2E evidence or release exists. The documentation-only `master` statement describes the prior baseline.
 Source of truth: [Product contract](product.md), root [DESIGN.md](../DESIGN.md), root [AGENTS.md](../AGENTS.md). The archived C++ project is preserved at branch `archive/pre-rust-clean-slate-20261026`, commit `24b8e3c30f390e6d571e2b15d1e1a56ba4781846`. It is a historical reference, not a current runtime.
 
 ## 1. Job and constraints (before technology)
