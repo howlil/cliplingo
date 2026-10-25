@@ -1,6 +1,6 @@
 # ADR-0003 — Latency-first tooltip and explicit dual-mode translation
 
-Status: **Accepted direction; experimental F0 Tauri/native GDI preview code exists, but no translation implementation or measured performance evidence**
+Status: **Accepted direction; experimental F0/F1 and feature-gated F2 CTranslate2 code exists, but genuine model-loaded Windows E2E and measured performance are not yet proven**
 Date: 2026-10-26
 Refines: [ADR-0002](0002-tauri-rust-windows-hybrid.md); retains [ADR-0001](0001-rust-first-native-windows.md) Rust-first language choice.
 

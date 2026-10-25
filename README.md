@@ -1,11 +1,11 @@
-# ClipLingo (F1 — experimental Windows UIA selection capture)
+# ClipLingo (F2 — experimental offline CTranslate2 EN→ID)
 
-**Experimental capture scaffold, not a working translator or public beta.** Read [product contract](.agents/product.md), [engineering contract](.agents/engineering-design.md) and [DESIGN.md](DESIGN.md) before adding translation.
+**Experimental offline translator path, not a public beta.** Read [product contract](.agents/product.md), [engineering contract](.agents/engineering-design.md) and [DESIGN.md](DESIGN.md) before adding translation.
 
 ## What is implemented
 
 - Tauri v2 Rust tray application and single-instance handler.
-- Global hotkey `Ctrl+Alt+T` captures a bounded real UIA selection using a separate COM MTA thread after foreground process authorization. It **does not translate, store, print or display captured text**.
+- Global hotkey `Ctrl+Alt+T` captures a bounded real UIA selection using a separate COM MTA thread after foreground process authorization. When built with the optional `offline-ct2` feature and a verified local model pack, it translates locally and sends **only Indonesian target text** to the native popup; no source text is logged/uploaded.
 - Lazily created, six-section read-only Settings UI; it is intentionally static HTML/CSS/JS for F0 to avoid bringing in a frontend build tool before the native feasibility gate.
 - Explicit tray **Preview native tooltip (F0 only)** and debug-only `Ctrl+Alt+P`. These display fixed **preview text, never a purported translation**, through one Rust-owned Win32 HWND using `WS_EX_NOACTIVATE` and `SWP_NOACTIVATE`.
 - Current F0 text renderer is Win32 GDI with measured wrap. **DirectWrite, accessible overflow, mixed-DPI polish, real focus and E2E acceptance remain unverified.**
@@ -23,7 +23,7 @@ cargo run --manifest-path src-tauri/Cargo.toml
 
 Cargo uses the Tauri generated context; there is no frontend bundler or cloud API in F0. `src-tauri/tauri.conf.json` sets `bundle.active=false` because no installer or release has been verified. Future Tauri CLI builds/NSIS packaging require their own release gate.
 
-Open Settings from the tray. For a native tooltip preview, choose the explicit tray command. On debug builds, hover Chrome/Notepad and press **Ctrl+Alt+P** to see the sample preview without opening the tray. **Ctrl+Alt+T runs F1 selection capture, but does not show a translated result until the local/online translation engine is implemented.**
+Open Settings from the tray. For a native tooltip preview, choose the explicit tray command. On debug builds, hover Chrome/Notepad and press **Ctrl+Alt+P** to see the sample preview without opening the tray. **Ctrl+Alt+T uses F1 capture and, when explicitly built with offline-ct2 and a valid installed model, runs local EN→ID inference before showing target text. Without the feature/model, there is no fabricated output.**
 
 ## Measure
 
@@ -39,6 +39,28 @@ This measures ClipLingo + descendant processes' working set and private bytes. T
 ## F0 acceptance still pending
 
 - A Windows desktop host test must assert `GetForegroundWindow` and keyboard focus remain in the source app after `Ctrl+Alt+P`, and verify placement at mixed monitor DPIs and negative virtual-screen coordinates.
-- Windows UIA selection and default deny policy are implemented. Foreground/focused-control attribution, multi-process browser compatibility, genuine interactive Windows E2E, provider hang containment, configurable exclusions, clipboard, OCR, language models, offline inference, online provider consent, cache, Settings persistence and signed updater remain **unverified or not implemented**.
+- Windows UIA selection and default deny policy are implemented. Foreground/focused-control attribution, multi-process browser compatibility, genuine interactive Windows E2E, provider hang containment, configurable exclusions, clipboard, OCR, Windows live model quality/latency acceptance, online provider consent, cache, Settings persistence and signed updater remain **unverified or not implemented**.
 - DirectWrite/shaping, screen reader readable overflow, high-contrast adaptation, power draw, screenshot-based geometry and native handle leak soak are later work.
 - CI passing only establishes a compilable Rust shell and unit test behavior; it does not substitute for interactive Windows/E2E verification.
+
+
+## F2: prepare a verified EN→ID model pack
+
+Default `cargo run` remains a lightweight shell build **without CTranslate2**, and cannot translate. Building the optional offline feature requires MSVC, CMake and time to compile native dependencies. No Python runtime, network service, model download or cloud credential is required by the running app.
+
+Developer machine (one-time model preparation only):
+
+```powershell
+python -m pip install ctranslate2==4.8.3 "transformers>=4.49,<5" huggingface_hub sentencepiece torch
+python scripts/prepare-en-id-pack.py --output "$env:LOCALAPPDATA\ClipLingo\models\en-id"
+```
+
+The script converts the Apache-2.0 [Helsinki-NLP OPUS-MT EN→ID model](https://huggingface.co/Helsinki-NLP/opus-mt-en-id) to CTranslate2 INT8 and writes a SHA-256 manifest for the weights and SentencePiece files. It refuses to overwrite an existing pack. The Rust runtime checks the manifest before first load.
+
+Build with real CPU backend:
+
+```powershell
+cargo run --manifest-path src-tauri/Cargo.toml --features offline-ct2
+```
+
+Then select English text in a supported Windows editor and press `Ctrl+Alt+T`. The native popup is shown only if foreground policy, model validation, inference and latest-generation checks succeed. No text is sent online. The CPU model is lazy-loaded on first use, uses at most two engine threads per replica and is evicted after roughly 90 seconds idle. Note: model generation/performance on a real Windows desktop and screen-reader/long-text popup behavior still require acceptance testing; Windows Cargo checks cannot prove those behaviors.

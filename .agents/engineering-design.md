@@ -1,7 +1,7 @@
 # ClipLingo — Tauri v2 + Rust + Native Windows Engineering Contract
 
-Status: **research-based target with a partial F0 Tauri shell/native preview scaffold** (2026-10-26). Translation and performance are NOT implemented or verified.
-Decision: [ADR-0003](decisions/0003-latency-first-dual-mode-translation.md) refines [ADR-0002](decisions/0002-tauri-rust-windows-hybrid.md) for a native-first tooltip and opt-in online translation; Rust-first [ADR-0001](decisions/0001-rust-first-native-windows.md) remains valid. F0 feature branch now contains Cargo/Tauri Windows shell, static WebView Settings, native Win32/GDI preview, and CI. No capture, translation model, official online provider, native E2E evidence or release exists. The documentation-only `master` statement describes the prior baseline.
+Status: **F2 experimental offline EN→ID model pipeline integrated with F1 UIA capture and native popup** (2026-10-26). Actual model-loaded Windows inference, visual focus, quality and performance still require acceptance.
+Decision: [ADR-0003](decisions/0003-latency-first-dual-mode-translation.md) refines [ADR-0002](decisions/0002-tauri-rust-windows-hybrid.md) for a native-first tooltip and opt-in online translation; Rust-first [ADR-0001](decisions/0001-rust-first-native-windows.md) remains valid. F0 shell, F1 COM UIA selection and optional F2 CTranslate2 CPU model worker now exist in source. No signed installer, cloud provider, automated model download, verified interactive Windows model E2E or release exists.
 Source of truth: [Product contract](product.md), root [DESIGN.md](../DESIGN.md), root [AGENTS.md](../AGENTS.md). The archived C++ project is preserved at branch `archive/pre-rust-clean-slate-20261026`, commit `24b8e3c30f390e6d571e2b15d1e1a56ba4781846`. It is a historical reference, not a current runtime.
 
 ## 1. Job and constraints (before technology)
@@ -287,3 +287,13 @@ Do not activate online merely because the user is connected to the internet. Onl
 - `CaptureCoordinator`: atomic generation increments before every trigger; late responses dropped. Captured string never escapes worker. Settings gets only typed status and count via existing `get_status` IPC. Exact foreground HWND and cursor are frozen at hotkey-time; source foreground is revalidated before/after UIA operation.
 - **Expected limitations:** Chrome/Edge renderer processes can expose UIA child identity different from top window; if no verifiable root/foreground attribution is available, F1 denies (correctness prioritized over compatibility). Synchronous UIA provider calls can hang a thread and `try_send` only bounds the queue; a helper process is still conditional on real evidence.
 - [F1 interactive acceptance](f1-acceptance.md) remains pending; GitHub Windows cargo compile/unit checks do not validate real UIA provider responses or focus semantics.
+
+
+## 11. F2 code ownership and remaining gates (2026-10-26)
+
+- `src-tauri/src/model_pack.rs`: strict JSON manifest schema, recognized filename allowlist, SHA-256 streaming checks for `model.bin`, `config.json` and source/target SentencePiece, symlink denial, missing/corrupt errors. Pack path `%LOCALAPPDATA%/ClipLingo/models/en-id`; installed by a developer-assisted external script rather than runtime download.
+- `src-tauri/src/translation.rs`: one bounded translator worker. `offline-ct2` optional feature enables real `ct2rs` CPU translator with SentencePiece. Model is lazy-loaded, uses two threads per replica, and unloaded after approximately 90s idle. Without feature, it reports unavailable and **never fabricates a translation**.
+- `capture.rs` transfers authorized selected source text directly to the Rust worker, not to WebView or cloud. `shell.rs` checks current generation and original foreground HWND just before presenting target output. `native_popup.rs` now supports dynamic translated output, but renderer remains GDI rather than final DirectWrite.
+- **Not proven:** optional C++ dependency build unless F2 CI is green; model conversion and inference on real Windows with a verified model; translation quality, latency/RAM, browser UIA attribution, screen reader/paragraph overflow and mixed-DPI native UI acceptance.
+
+Reference: [F2 acceptance](f2-acceptance.md), [CTranslate2 quickstart](https://opennmt.net/CTranslate2/quickstart.html), [ct2rs 0.10.2](https://docs.rs/crate/ct2rs/0.10.2), [Helsinki OPUS-MT EN→ID](https://huggingface.co/Helsinki-NLP/opus-mt-en-id).
