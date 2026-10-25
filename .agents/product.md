@@ -63,7 +63,7 @@ Errors classified as silent (no selection), recoverable/actionable (model missin
 ### Accepted
 
 - Windows-first, single-user desktop utility, no account, no cloud inference requirement.
-- Offline local translation after model assets are present.
+- Offline local translation after model assets are present. Explicit model installation and signed app updates may use network; captured text is never uploaded to a translation service.
 - Background tray app rather than a constantly visible main window.
 - Approved Apple-inspired design tokens applied in native Windows UI (not copied Apple resources).
 - Translation popup contains **only translated target text**, no original, buttons, language badges, or settings controls.
@@ -78,7 +78,7 @@ Errors classified as silent (no selection), recoverable/actionable (model missin
 - OCR backend and packaging identity requirements.
 - Supported target apps, privileged/elevated app limitations, accessibility variants.
 - Numeric latency/RAM thresholds: define only after representative benchmarks; don't invent performance claims.
-- Rust-first native Windows implementation is the **accepted future engineering direction**, and the tracked codebase is intentionally cleared to documentation only. Historical C++/CMake functionality is archived on `archive/pre-rust-clean-slate-20261026`; no current executable is supplied by this branch. A new Rust implementation must meet all listed acceptance behavior; native Windows and model integration remain verification gates. See [engineering contract](engineering-design.md) and [ADR-0001](decisions/0001-rust-first-native-windows.md).
+- Tauri v2 desktop shell with Rust-owned native Windows integrations is the **accepted future engineering direction** ([ADR-0002](decisions/0002-tauri-rust-windows-hybrid.md)); Settings uses WebView2, while result-popup backend requires real Windows no-focus-steal and resource proof. The tracked codebase remains documentation-only. Historical C++/CMake functionality is archived on `archive/pre-rust-clean-slate-20261026`; no current executable is supplied by this branch. A new Rust implementation must meet all listed acceptance behavior; native Windows and model integration remain verification gates. See [engineering contract](engineering-design.md) and [ADR-0001](decisions/0001-rust-first-native-windows.md).
 
 ## 6. Smallest coherent release scope
 
@@ -88,7 +88,7 @@ Errors classified as silent (no selection), recoverable/actionable (model missin
 - EN→ID model installation/status; offline translation.
 - Explicit selection capture; request ordering, empty-selection silent stop.
 - Text-only auto-fit popup above trigger-time cursor; sensible dismiss; mixed-DPI readiness.
-- Native UI consistent with `DESIGN.md`; no mandatory model download for merely opening Settings.
+- Windows desktop UI consistent with `DESIGN.md` (Tauri WebView2 Settings, popup backend after native acceptance); no mandatory model download for merely opening Settings.
 - Basic privacy settings and excluded-app handling.
 
 ### After M1 — additional compatibility where research justifies it
