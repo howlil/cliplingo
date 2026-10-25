@@ -17,8 +17,15 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 MODEL = "Helsinki-NLP/opus-mt-en-id"
+# Explicit upstream revision to keep tokenizer/weights reproducible.
+REVISION = "052fd659487dd0d1a655969050e97950f83dc903"
+UPSTREAM_FILES = [
+    "config.json", "generation_config.json", "pytorch_model.bin",
+    "source.spm", "target.spm", "tokenizer_config.json", "vocab.json",
+]
 ACCEPT = {
     "model.bin", "config.json", "source.spm", "target.spm",
     "shared_vocabulary.json", "source_vocabulary.json", "target_vocabulary.json",
@@ -37,7 +44,21 @@ def main() -> None:
     from huggingface_hub import snapshot_download
     with tempfile.TemporaryDirectory(prefix="cliplingo-model-") as tmp:
         root = Path(tmp)
-        original = Path(snapshot_download(repo_id=MODEL, local_dir=root / "upstream"))
+        # Download only checkpoint + tokenizer: never fetch the duplicate ~280 MB
+        # TensorFlow checkpoint. Xet transfers are chunked/resumable when installed.
+        original = None
+        for attempt in range(3):
+            try:
+                original = Path(snapshot_download(
+                    repo_id=MODEL, revision=REVISION, local_dir=root / "upstream",
+                    allow_patterns=UPSTREAM_FILES, max_workers=2,
+                ))
+                break
+            except Exception:
+                if attempt == 2:
+                    raise
+                time.sleep(4 * (attempt + 1))
+        assert original is not None
         converted = root / "converted"
         converter = shutil.which("ct2-transformers-converter")
         if converter is None:
