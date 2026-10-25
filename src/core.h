@@ -8,7 +8,7 @@
 enum class CaptureScope : std::uint32_t {
   SelectionOnly = 0, Word = 1, Sentence = 2, Paragraph = 3
 };
-enum class Failure { None, NoSelection, Unsupported, TooLong, CaptureFailed, ModelMissing, ModelInvalid, TranslationFailed };
+enum class Failure { None, NoSelection, Unsupported, TooLong, CaptureFailed, ModelMissing, ModelInvalid, TranslationFailed, ClipboardUnavailable, ClipboardChanged };
 struct CaptureResult {
   Failure failure{Failure::None};
   std::wstring text;
@@ -19,7 +19,10 @@ struct TranslationResult {
   std::wstring text;
   explicit operator bool() const { return failure == Failure::None && !text.empty(); }
 };
+enum class CaptureKind : std::uint8_t { SelectionOrHover, ExplicitClipboard };
 struct Request {
+  CaptureKind kind{CaptureKind::SelectionOrHover};
+  DWORD clipboard_sequence{0};
   std::uint64_t generation{0};
   HWND foreground{nullptr};
   POINT cursor{};  // physical virtual-screen pixels captured at hotkey time
@@ -28,6 +31,7 @@ struct Preferences {
   int max_width_dip{420};
   int max_height_dip{300};
   int theme{0}; // 0 light, 1 dark
+  bool clipboard_enabled{false}; // explicit user action only; default disabled
   bool hover_enabled{true};    // invoked only by the translation hotkey
   int hover_scope{0};        // 0 word, 1 sentence, 2 paragraph
   int popup_style{0}; // 0 solid, 1 tinted (glass deferred)
@@ -41,6 +45,8 @@ struct ModelInstallResult {
 };
 bool verify_model_pack(const std::filesystem::path& folder);
 ModelInstallResult install_model_pack(const std::filesystem::path& source);
+CaptureResult capture_clipboard_text(DWORD expected_sequence);
+CaptureResult capture_clipboard_isolated(DWORD expected_sequence);
 CaptureResult capture_selected_text(HWND expected_foreground);
 CaptureResult capture_hover_text(HWND expected_foreground, POINT cursor, CaptureScope scope);
 CaptureResult capture_with_hover(HWND expected_foreground, POINT cursor, CaptureScope scope);
