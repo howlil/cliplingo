@@ -1,6 +1,7 @@
 #include "core.h"
 #include "popup.h"
 #include "region_selector.h"
+#include "capture_policy.h"
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <commctrl.h>
@@ -15,6 +16,8 @@
 #include <thread>
 #include <memory>
 #include <string>
+
+int run_benchmark_if_requested(); // explicit headless diagnostic
 
 using Microsoft::WRL::ComPtr;
 namespace {
@@ -37,10 +40,14 @@ constexpr int kSurfaceCombo = 109;
 constexpr int kPreviewPopup = 110;
 constexpr int kHoverEnabled = 111;
 constexpr int kHoverScope = 112;
+constexpr int kClipboardEnabled = 113;
+constexpr int kSaveExclusions = 114;
+constexpr int kExcludedAppsEdit = 115;
 constexpr int kTrayPause = 201;
 constexpr int kTraySettings = 202;
 constexpr int kTrayQuit = 203;
 constexpr int kTrayCapture = 204;
+constexpr int kTrayClipboard = 205;
 constexpr UINT kDismissTimer = 1;
 
 struct JobResult {
@@ -150,6 +157,12 @@ public:
       prefs_.hover_enabled = GetPrivateProfileIntW(L"capture", L"hover_enabled", 1, cfg.c_str()) != 0;
       prefs_.hover_scope = std::clamp(static_cast<int>(GetPrivateProfileIntW(
           L"capture", L"hover_scope", 0, cfg.c_str())), 0, 2);
+      prefs_.clipboard_enabled = GetPrivateProfileIntW(L"capture", L"clipboard_enabled", 0, cfg.c_str()) == 1;
+      wchar_t exclusions[4097]{};
+      const DWORD count = GetPrivateProfileStringW(L"privacy", L"excluded_apps", L"",
+                                                    exclusions, 4097, cfg.c_str());
+      prefs_.excluded_app_names = count >= 4096 ?
+          L"<invalid truncated policy>" : std::wstring(exclusions, count);
     }
     WNDCLASSEXW wc{sizeof(wc)};
     wc.hInstance = instance;
@@ -271,6 +284,7 @@ private:
           case kTrayPause: paused_ = !paused_; ++generation_; popup_.Hide(); RefreshSettings(); break;
           case kTrayQuit: PostQuitMessage(0); break;
           case kTrayCapture: BeginRegionSelection(); break;
+          case kTrayClipboard: BeginClipboardTranslation(); break;
         }
         return 0;
       }
@@ -306,8 +320,40 @@ private:
     PostMessageW(host_, WM_NULL, 0, 0);
     DestroyMenu(menu);
   }
+  void BeginClipboardTranslation() {
+    if (paused_ || !prefs_.clipboard_enabled) return;
+    popup_.Hide();
+    KillTimer(host_, kDismissTimer);
+    Request request{};
+    request.kind = RequestKind::ExplicitClipboard;
+    request.generation = ++generation_;
+    request.clipboard_sequence = GetClipboardSequenceNumber();
+    GetCursorPos(&request.cursor);
+    if (!request.clipboard_sequence) {
+      failure_ = Failure::ClipboardUnavailable;
+      RefreshSettings();
+      return;
+    }
+    {
+      std::lock_guard lock(jobs_mutex_);
+      pending_ = request;
+      worker_prefs_ = prefs_;
+    }
+    jobs_cv_.notify_one();
+  }
+
   void BeginRegionSelection() {
     if (paused_ || selector_.active()) return;
+    // A screen rectangle can contain OTHER visible apps, not just the tray's
+    // invoking process. Do not promise app exclusions we cannot enforce:
+    // with exclusions configured, fail closed for arbitrary screen capture.
+    if (!capture_policy::parse(prefs_.excluded_app_names).valid ||
+        !prefs_.excluded_app_names.empty() ||
+        !capture_source_allowed(tray_previous_foreground_, prefs_.excluded_app_names)) {
+      failure_ = Failure::ExcludedSource;
+      ShowSettings(5);
+      return;
+    }
     if (!ocr_available()) {
       failure_ = Failure::OcrUnavailable;
       ShowSettings(1);
@@ -326,6 +372,7 @@ private:
             Request req{};
             req.kind = RequestKind::ManualOcr;
             req.region = *chosen;
+            req.foreground = tray_previous_foreground_;
             // The drag-release cursor is the interaction anchor. Freeze it
             // before OCR/inference; never chase subsequent pointer movement.
             GetCursorPos(&req.cursor);
@@ -350,6 +397,11 @@ private:
     request.generation = ++generation_;
     request.foreground = GetForegroundWindow();
     GetCursorPos(&request.cursor);
+    if (!capture_source_allowed(request.foreground, prefs_.excluded_app_names)) {
+      failure_ = Failure::ExcludedSource;
+      RefreshSettings();
+      return;
+    }
     {
       std::lock_guard lock(jobs_mutex_);
       pending_ = request;  // replace queued stale request; never unbounded backlog
@@ -382,9 +434,26 @@ private:
           static_cast<CaptureScope>(settings.hover_scope + 1);
       CaptureResult captured;
       try {
-        captured = current.kind == RequestKind::ManualOcr ?
-            capture_ocr_isolated(current.region) :
-            capture_isolated(current.foreground, current.cursor, scope);
+        switch (current.kind) {
+          case RequestKind::Text:
+            captured = capture_source_allowed(current.foreground, settings.excluded_app_names) ?
+                capture_isolated(current.foreground, current.cursor, scope) :
+                CaptureResult{Failure::ExcludedSource, {}};
+            break;
+          case RequestKind::ManualOcr:
+            // No trustworthy per-pixel app provenance exists for screen OCR.
+            if (!capture_policy::parse(settings.excluded_app_names).valid ||
+                !settings.excluded_app_names.empty() ||
+                !capture_source_allowed(current.foreground, settings.excluded_app_names))
+              captured = {Failure::ExcludedSource, {}};
+            else captured = capture_ocr_isolated(current.region);
+            break;
+          case RequestKind::ExplicitClipboard:
+            captured = settings.clipboard_enabled ?
+                capture_clipboard_isolated(current.clipboard_sequence) :
+                CaptureResult{Failure::ClipboardUnavailable, {}};
+            break;
+        }
       } catch (const std::exception&) {
         // Recoverable native library/allocator errors must not unwind out of
         // the jthread entrypoint or terminate the tray application.
@@ -425,6 +494,10 @@ private:
     WritePrivateProfileStringW(L"appearance", L"surface", std::to_wstring(prefs_.popup_style).c_str(), path.c_str());
     WritePrivateProfileStringW(L"capture", L"hover_enabled", prefs_.hover_enabled ? L"1" : L"0", path.c_str());
     WritePrivateProfileStringW(L"capture", L"hover_scope", std::to_wstring(prefs_.hover_scope).c_str(), path.c_str());
+    WritePrivateProfileStringW(L"capture", L"clipboard_enabled",
+                              prefs_.clipboard_enabled ? L"1" : L"0", path.c_str());
+    WritePrivateProfileStringW(L"privacy", L"excluded_apps",
+                              prefs_.excluded_app_names.c_str(), path.c_str());
   }
 
   static LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -502,6 +575,46 @@ private:
         if (scope >= 0 && scope <= 2) { prefs_.hover_scope = scope; SaveSettings(); }
         return 0;
       }
+      if (id == kClipboardEnabled && HIWORD(wp) == BN_CLICKED) {
+        prefs_.clipboard_enabled = SendMessageW(reinterpret_cast<HWND>(lp),
+                                                BM_GETCHECK, 0, 0) == BST_CHECKED;
+        ++generation_;
+        {
+          std::lock_guard lock(jobs_mutex_);
+          pending_.reset();
+        }
+        popup_.Hide();
+        SaveSettings();
+        DrawSettingsSection();
+        return 0;
+      }
+      if (id == kSaveExclusions && HIWORD(wp) == BN_CLICKED) {
+        if (!excluded_edit_) return 0;
+        const int length = GetWindowTextLengthW(excluded_edit_);
+        if (length < 0 || length > 4096) {
+          MessageBoxW(hwnd, L"Exclusion list exceeds 4096 characters.",
+                      L"ClipLingo Privacy", MB_ICONWARNING); return 0;
+        }
+        std::wstring text(static_cast<std::size_t>(length + 1), L'\0');
+        const int read = GetWindowTextW(excluded_edit_, text.data(), length + 1);
+        if (read < 0) return 0;
+        text.resize(static_cast<std::size_t>(read));
+        const auto parsed = capture_policy::parse(text);
+        if (!parsed.valid) {
+          MessageBoxW(hwnd, parsed.error.c_str(), L"ClipLingo Privacy", MB_ICONWARNING);
+          return 0;
+        }
+        prefs_.excluded_app_names = capture_policy::serialize(parsed.names);
+        ++generation_;
+        {
+          std::lock_guard lock(jobs_mutex_);
+          pending_.reset();
+        }
+        popup_.Hide();
+        SaveSettings();
+        DrawSettingsSection();
+        return 0;
+      }
       if (id == kPreviewPopup && HIWORD(wp) == BN_CLICKED) {
         POINT anchor{}; GetCursorPos(&anchor);
         popup_.ShowText(L"Terjemahan muncul di atas kursor, dengan ukuran sesuai isi teks.", anchor, prefs_);
@@ -577,7 +690,7 @@ private:
       if (child != sidebar_) DestroyWindow(child);
       child = next;
     }
-    width_edit_ = height_edit_ = theme_combo_ = surface_combo_ = nullptr;
+    width_edit_ = height_edit_ = theme_combo_ = surface_combo_ = excluded_edit_ = nullptr;
     const int section = static_cast<int>(SendMessageW(sidebar_, LB_GETCURSEL, 0, 0));
     switch (section) {
       case 0:
@@ -612,6 +725,13 @@ private:
               L"Region OCR: available. Choose Capture screen text from the tray." :
               L"Region OCR unavailable: install optional Tesseract OCR + eng.traineddata.", 304);
         Label(L"OCR is manual only. No clipboard monitoring or saved screenshots.", 348);
+        {
+          const auto check = Control(L"BUTTON", L"Allow explicit clipboard translation from tray",
+              WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+              246, 396, 435, 28, kClipboardEnabled);
+          SendMessageW(check, BM_SETCHECK,
+                       prefs_.clipboard_enabled ? BST_CHECKED : BST_UNCHECKED, 0);
+        }
         break;
       case 2:
         Label(L"Translation Popup", 32);
@@ -659,8 +779,20 @@ private:
         break;
       case 5:
         Label(L"Privacy", 32);
-        Label(L"Selected text is processed locally. No translation history or content logs.", 80);
-        Label(L"Do not use ClipLingo for elevated or protected application content.", 128);
+        Label(L"No cloud, history or content logging. Clipboard source is unknowable.", 78);
+        Label(L"Exclude foreground apps by executable name, one per line.", 115);
+        Label(L"With exclusions configured, screen-region OCR is disabled.", 151);
+        {
+          std::wstring entries;
+          for (wchar_t ch : prefs_.excluded_app_names) {
+            if (ch == L';') entries += L"\r\n"; else entries += ch;
+          }
+          excluded_edit_ = Control(L"EDIT", entries.c_str(), WS_CHILD | WS_VISIBLE |
+              WS_TABSTOP | WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL,
+              246, 196, 440, 160, kExcludedAppsEdit);
+        }
+        Control(L"BUTTON", L"Save exclusions", WS_CHILD | WS_VISIBLE |
+                WS_TABSTOP | BS_PUSHBUTTON, 246, 375, 170, 34, kSaveExclusions);
         break;
     }
     const auto detail = failure_ == Failure::NoSelection ? L"Ready" : failure_label(failure_);
@@ -698,7 +830,7 @@ private:
   HINSTANCE instance_{nullptr};
   HANDLE single_instance_{nullptr};
   HWND host_{nullptr}, settings_{nullptr}, sidebar_{nullptr}, width_edit_{nullptr}, height_edit_{nullptr};
-  HWND theme_combo_{nullptr}, surface_combo_{nullptr};
+  HWND theme_combo_{nullptr}, surface_combo_{nullptr}, excluded_edit_{nullptr};
   HFONT font_{nullptr}; HICON icon_{nullptr};
   HBRUSH sidebar_brush_{nullptr};
   UINT taskbar_created_{0};
@@ -741,6 +873,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
   int child_exit = 1;
   if (maybe_run_capture_helper(child_exit)) return child_exit;
   if (const int diagnostic = native_model_probe(); diagnostic >= 0) return diagnostic;
+  if (const int benchmark = run_benchmark_if_requested(); benchmark >= 0) return benchmark;
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   if (FAILED(com)) return 1;
