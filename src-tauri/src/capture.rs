@@ -51,7 +51,7 @@ impl CaptureState {
         match self {
             Self::Idle => "idle",
             Self::Queued => "capturing",
-            Self::Verified => "selection_verified_no_translation_engine",
+            Self::Verified => "selection_verified",
             Self::Empty => "no_selection",
             Self::Denied => "source_denied",
             Self::Unsupported => "selection_unsupported",
