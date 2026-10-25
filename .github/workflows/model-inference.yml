@@ -1,15 +1,16 @@
 name: M1 real EN-ID model integration
 on:
-  push:
-    branches: ['feat/m1-native-translation']
-    paths:
-      - 'tools/**'
-      - '.github/workflows/model-inference.yml'
   pull_request:
     paths:
-      - 'tools/**'
+      - 'tools/build_en_id_pack.py'
+      - 'tools/verify_en_id_pack.py'
       - '.github/workflows/model-inference.yml'
   workflow_dispatch:
+
+concurrency:
+  group: cliplingo-model-test-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   real-model:
     runs-on: ubuntu-24.04
