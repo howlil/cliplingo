@@ -8,6 +8,7 @@ mod sentence_pipeline;
 mod translation;
 mod native_popup;
 mod native_accessibility;
+mod native_text_document;
 mod shell;
 
 fn main() {
