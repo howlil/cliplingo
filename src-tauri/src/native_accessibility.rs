@@ -169,7 +169,7 @@ mod tests {
         let name_property = unsafe { provider.GetPropertyValue(UIA_NamePropertyId) }
             .expect("COM Name property");
         let exposed = BSTR::try_from(&name_property).expect("Name must be BSTR");
-        assert_eq!(exposed.to_string(), "Selamat datang. Paragraf kedua.\\nBaris terakhir.");
+        assert_eq!(exposed.to_string(), "Selamat datang. Paragraf kedua.\nBaris terakhir.");
         set_target("Hasil B");
         POPUP_UIA.with(|slot| {
             let slot = slot.borrow();
