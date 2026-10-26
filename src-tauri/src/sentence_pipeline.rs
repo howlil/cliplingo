@@ -156,7 +156,7 @@ mod tests {
     #[test]
     fn refuses_oversized_or_empty_instead_of_truncating() {
         assert_eq!(source_sentences("   "), Err(PipelineFailure::Empty));
-        assert_eq!(source_sentences(&"A. ".repeat(MAX_SENTENCES+1)),
+        assert_eq!(source_sentences(&"A complete sentence. ".repeat(MAX_SENTENCES+1)),
                    Err(PipelineFailure::TooManySentences));
         assert_eq!(translate_complete("Hello.", |_| Ok::<_,()>(" ".into()), || false),
                    Err(PipelineFailure::EmptyTarget));
