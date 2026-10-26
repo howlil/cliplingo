@@ -14,8 +14,9 @@ use windows_sys::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
     Graphics::Gdi::{
         BeginPaint, CreateFontW, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint, FillRect,
-        GetDC, GetMonitorInfoW, InvalidateRect, MonitorFromPoint, ReleaseDC, SelectObject, SetBkMode,
-        SetTextColor, MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT,
+        GetDC, GetMonitorInfoW, IntersectClipRect, InvalidateRect, MonitorFromPoint, ReleaseDC,
+        RestoreDC, SaveDC, SelectObject, SetBkMode, SetTextColor, MONITORINFO,
+        MONITOR_DEFAULTTONEAREST, PAINTSTRUCT,
         DT_CALCRECT, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_WORDBREAK, TRANSPARENT,
     },
     System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentThreadId},
@@ -88,6 +89,18 @@ fn clear_display_state() {
     RENDER_DPI.with(|cell| cell.set(96));
     PREVIEW_START.with(|cell| cell.set(None));
     native_accessibility::clear_target();
+}
+
+// The scrolling text is clipped to this inset, never to the entire HWND.
+// Keep the padding clear even when content is offset above or below the viewport.
+fn text_viewport(client: RECT, padding: i32) -> Option<RECT> {
+    let rect = RECT {
+        left: client.left.saturating_add(padding),
+        top: client.top.saturating_add(padding),
+        right: client.right.saturating_sub(padding),
+        bottom: client.bottom.saturating_sub(padding),
+    };
+    (rect.left < rect.right && rect.top < rect.bottom).then_some(rect)
 }
 
 fn utf16(s: &str) -> Vec<u16> {
@@ -374,19 +387,31 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM
                 SetBkMode(hdc, TRANSPARENT as i32);
                 SetTextColor(hdc, 0x0030_241D);
                 let pad = px(PADDING_DIP, dpi);
-                bounds.left += pad;
-                bounds.top += pad;
-                bounds.right -= pad;
-                bounds.bottom -= pad;
-                let scroll = SCROLL.with(|cell| cell.get());
-                bounds.top -= scroll.offset_px;
-                bounds.bottom = bounds.top + scroll.content_px;
-                DISPLAY_TEXT.with(|cell| {
-                    let text = cell.borrow();
-                    if text.len() > 1 {
-                        DrawTextW(hdc, text.as_ptr(), (text.len() - 1) as i32, &mut bounds, DT_WORDBREAK | DT_NOPREFIX | DT_LEFT);
+                if let Some(viewport) = text_viewport(bounds, pad) {
+                    // BeginPaint clips only to the HWND's client/update region.
+                    // Intersect with the padded *text* viewport before drawing
+                    // scrolled lines, then restore the original GDI clip state.
+                    let saved = SaveDC(hdc);
+                    if saved != 0 {
+                        if IntersectClipRect(
+                            hdc, viewport.left, viewport.top,
+                            viewport.right, viewport.bottom
+                        ) != 0 {
+                            let scroll = SCROLL.with(|cell| cell.get());
+                            let mut text_bounds = viewport;
+                            text_bounds.top -= scroll.offset_px;
+                            text_bounds.bottom = text_bounds.top + scroll.content_px;
+                            DISPLAY_TEXT.with(|cell| {
+                                let text = cell.borrow();
+                                if text.len() > 1 {
+                                    DrawTextW(hdc, text.as_ptr(), (text.len() - 1) as i32,
+                                        &mut text_bounds, DT_WORDBREAK | DT_NOPREFIX | DT_LEFT);
+                                }
+                            });
+                        }
+                        RestoreDC(hdc, saved);
                     }
-                });
+                }
                 if !old.is_null() { SelectObject(hdc, old); }
                 if !font.is_null() { DeleteObject(font); }
             }
@@ -420,6 +445,19 @@ mod tests {
         let (x, y) = layout_position((500, 500), (0, 0, 100, 80), (90, 70), 12);
         assert!((0..=10).contains(&x));
         assert!((0..=10).contains(&y));
+    }
+    #[test]
+    fn scrolled_text_viewport_preserves_inner_padding() {
+        let full = RECT { left: 0, top: 0, right: 420, bottom: 300 };
+        let viewport = text_viewport(full, 14).expect("valid padded viewport");
+        assert_eq!((viewport.left, viewport.top, viewport.right, viewport.bottom),
+                   (14, 14, 406, 286));
+        let too_small = RECT { left: 0, top: 0, right: 27, bottom: 28 };
+        assert!(text_viewport(too_small, 14).is_none());
+        let negative = RECT { left: -300, top: -200, right: 120, bottom: 100 };
+        let viewport = text_viewport(negative, 14).unwrap();
+        assert_eq!((viewport.left, viewport.top, viewport.right, viewport.bottom),
+                   (-286, -186, 106, 86));
     }
     #[test]
     fn long_translation_keeps_full_content_and_scrolls_to_last_line() {
