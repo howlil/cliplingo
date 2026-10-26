@@ -7,14 +7,15 @@ use std::{
     sync::{Arc, Mutex},
 };
 use windows::{
-    core::{implement, BSTR, Error, IUnknown, Interface, Result, VARIANT},
+    core::{implement, BSTR, Error, IUnknown, Interface, Result},
     Win32::{
         Foundation::HWND,
+        System::Variant::VARIANT,
         UI::Accessibility::{
             IRawElementProviderSimple, IRawElementProviderSimple_Impl,
             ProviderOptions, ProviderOptions_ServerSideProvider,
             UiaHostProviderFromHwnd, UiaRootObjectId,
-            UIA_CONTROLTYPE_ID, UIA_PATTERN_ID, UIA_PROPERTY_ID,
+            UIA_PATTERN_ID, UIA_PROPERTY_ID,
             UIA_ControlTypePropertyId, UIA_IsContentElementPropertyId,
             UIA_IsControlElementPropertyId, UIA_IsKeyboardFocusablePropertyId,
             UIA_NamePropertyId, UIA_TextControlTypeId,
