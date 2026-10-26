@@ -7,7 +7,7 @@
 - `native_popup.rs` owns one HWND and the translated target only. Text is measured with GDI using the **trigger cursor's monitor DPI** (also reused at paint time) and monitor work area, with bounded popup geometry and separately maintained **complete translated output** (up to existing 4,096 UTF-16 units). Full translated text is never shortened to fit the viewport.
 - If the content is taller than the 300-DIP popup, the window shows a viewport of the original text and handles `WM_MOUSEWHEEL` using a bounded scroll position. Each mouse-wheel notch advances three native text lines. Fine-grained wheel deltas accumulate. A newly arrived result resets offset to 0; no extra model inference or threads are started.
 - For long targets, the automatic dismissal interval is 20 seconds, refreshed when the user scrolls. Short translations preserve the previous timeout. The popup stays `WS_EX_NOACTIVATE` and uses `SWP_NOACTIVATE`; `WM_MOUSEACTIVATE` explicitly returns `MA_NOACTIVATE`.
-- On timeout or explicit hide, the native thread-local displayed translation text and scroll state are cleared, avoiding keeping a translation history.
+- On timeout, explicit hide, HWND destruction or failed replacement, the native thread-local displayed translation text and scroll state are cleared, avoiding keeping a translation history. A failed wheel timer rearm hides the popup rather than leaving a stale result indefinitely.
 - The popup is **translated target only**. No hidden web app, clipboard writes, cloud request, active content selection or new Windows model behavior.
 
 ## Automated evidence (CI)
