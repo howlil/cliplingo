@@ -77,3 +77,10 @@ A [Windows CI run](https://github.com/howlil/cliplingo/actions/runs/40243341975)
 When many shortcuts arrive while a model inference is running, only the **newest pending** selection is retained; obsolete pending sensitive text is dropped. The already-running native inference is not forcibly interrupted. Source generation and original foreground-window checks remain required before native presentation.
 
 The native Windows model workflow runs one **cold** load/inference and twelve **warm** public English fixtures to report p50/p95/max **inference-only** timing. The result is not hotkey-to-popup latency or an application SLO. On a real Windows session, collect separate process-tree private/working memory samples with `scripts/measure-f25.ps1` and follow [.agents/f25-acceptance.md](.agents/f25-acceptance.md) for Notepad/Chrome/PDF focus/DPI testing. Interactive desktop acceptance has **not** passed merely because GitHub CI is green.
+
+
+## F2.7 measured model quality and resource footprint
+
+The [F2.7 Windows run](https://github.com/howlil/cliplingo/actions/runs/40251146437) compared the real EN→ID CTranslate2 model on 28 public test cases and measured sampled CPU/working/private memory. Current default `beam=2, threads=2` scored 71.96 chrF vs 69.00 for greedy `beam=1, threads=2`; greedy took 37.891s vs 40.656s for the complete headless test. These are exploratory figures, **not** actual hotkey-to-popup latency, battery impact or a human quality rating.
+
+**Known beta blocker:** both profiles can omit meaningful information when translating multiple sentences; the greedy output was particularly incomplete on one paragraph. See [Issue #28](https://github.com/howlil/cliplingo/issues/28) and [F2.7 evidence](.agents/f27-acceptance.md). No production default change, no online text upload, and no public installer/release should be inferred from these tests.
