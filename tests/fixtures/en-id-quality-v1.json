@@ -1,0 +1,170 @@
+[
+  {
+    "id": "greeting",
+    "category": "simple",
+    "source": "Good morning.",
+    "reference": "Selamat pagi."
+  },
+  {
+    "id": "thanks",
+    "category": "simple",
+    "source": "Thank you for your help.",
+    "reference": "Terima kasih atas bantuan Anda."
+  },
+  {
+    "id": "apology",
+    "category": "simple",
+    "source": "I am sorry for the delay.",
+    "reference": "Maaf atas keterlambatannya."
+  },
+  {
+    "id": "request",
+    "category": "simple",
+    "source": "Could you send me the document?",
+    "reference": "Bisakah Anda mengirimkan dokumen itu kepada saya?"
+  },
+  {
+    "id": "question",
+    "category": "simple",
+    "source": "Where can I find the settings?",
+    "reference": "Di mana saya dapat menemukan pengaturannya?"
+  },
+  {
+    "id": "workflow",
+    "category": "technical",
+    "source": "The request failed because the server timed out.",
+    "reference": "Permintaan gagal karena waktu tunggu server habis."
+  },
+  {
+    "id": "cache",
+    "category": "technical",
+    "source": "The cache expires after five minutes.",
+    "reference": "Cache kedaluwarsa setelah lima menit."
+  },
+  {
+    "id": "backend",
+    "category": "technical",
+    "source": "The application sends requests to the backend service.",
+    "reference": "Aplikasi mengirim permintaan ke layanan backend."
+  },
+  {
+    "id": "shortcut",
+    "category": "technical",
+    "source": "Press Ctrl+Alt+T to translate the selected text.",
+    "reference": "Tekan Ctrl+Alt+T untuk menerjemahkan teks yang dipilih."
+  },
+  {
+    "id": "security",
+    "category": "technical",
+    "source": "Do not share your password with anyone.",
+    "reference": "Jangan bagikan kata sandi Anda kepada siapa pun."
+  },
+  {
+    "id": "deployment",
+    "category": "technical",
+    "source": "The deployment was rolled back after an error.",
+    "reference": "Deployment dibatalkan dan dikembalikan ke versi sebelumnya setelah terjadi kesalahan."
+  },
+  {
+    "id": "latency",
+    "category": "technical",
+    "source": "The response time decreased, but memory usage increased.",
+    "reference": "Waktu respons menurun, tetapi penggunaan memori meningkat."
+  },
+  {
+    "id": "numbers",
+    "category": "numbers",
+    "source": "The price is $25.50, including tax.",
+    "reference": "Harganya $25,50, termasuk pajak."
+  },
+  {
+    "id": "meeting_time",
+    "category": "numbers",
+    "source": "The meeting starts at 09:30 on Monday.",
+    "reference": "Rapat dimulai pukul 09.30 pada hari Senin."
+  },
+  {
+    "id": "quantity",
+    "category": "numbers",
+    "source": "There are 12 items and 3 categories.",
+    "reference": "Ada 12 item dan 3 kategori."
+  },
+  {
+    "id": "range",
+    "category": "numbers",
+    "source": "The temperature is between 20 and 25 degrees.",
+    "reference": "Suhunya antara 20 dan 25 derajat."
+  },
+  {
+    "id": "proper_noun",
+    "category": "names",
+    "source": "OpenAI released an update in San Francisco.",
+    "reference": "OpenAI merilis pembaruan di San Francisco."
+  },
+  {
+    "id": "place",
+    "category": "names",
+    "source": "The train leaves Jakarta for Bandung tomorrow.",
+    "reference": "Kereta berangkat dari Jakarta menuju Bandung besok."
+  },
+  {
+    "id": "ambiguous_bank",
+    "category": "ambiguity",
+    "source": "I need to go to the bank before noon.",
+    "reference": "Saya harus pergi ke bank sebelum tengah hari."
+  },
+  {
+    "id": "ambiguous_light",
+    "category": "ambiguity",
+    "source": "This laptop is light but powerful.",
+    "reference": "Laptop ini ringan tetapi bertenaga."
+  },
+  {
+    "id": "ambiguous_charge",
+    "category": "ambiguity",
+    "source": "Please charge the device before you leave.",
+    "reference": "Harap isi daya perangkat sebelum Anda pergi."
+  },
+  {
+    "id": "negation",
+    "category": "logic",
+    "source": "Do not delete the file unless you have a backup.",
+    "reference": "Jangan hapus berkas tersebut kecuali Anda memiliki cadangannya."
+  },
+  {
+    "id": "conditional",
+    "category": "logic",
+    "source": "If the network is unavailable, use the offline model.",
+    "reference": "Jika jaringan tidak tersedia, gunakan model offline."
+  },
+  {
+    "id": "contrast",
+    "category": "logic",
+    "source": "Although the app is small, it supports multiple languages.",
+    "reference": "Meskipun aplikasinya kecil, aplikasi itu mendukung banyak bahasa."
+  },
+  {
+    "id": "multisentence",
+    "category": "paragraph",
+    "source": "Select the text first. Then press the shortcut. The result appears near the cursor.",
+    "reference": "Pilih teks terlebih dahulu. Kemudian tekan pintasan. Hasilnya muncul di dekat kursor."
+  },
+  {
+    "id": "paragraph",
+    "category": "paragraph",
+    "source": "The report summarizes the experiment. We tested several settings, recorded the response time, and compared the results.",
+    "reference": "Laporan ini merangkum eksperimen tersebut. Kami menguji beberapa pengaturan, mencatat waktu respons, dan membandingkan hasilnya."
+  },
+  {
+    "id": "quotation",
+    "category": "punctuation",
+    "source": "She said, \"Please try again.\"",
+    "reference": "Dia berkata, \"Silakan coba lagi.\""
+  },
+  {
+    "id": "question_mark",
+    "category": "punctuation",
+    "source": "Are you sure you want to continue?",
+    "reference": "Apakah Anda yakin ingin melanjutkan?"
+  }
+]
