@@ -64,6 +64,25 @@ impl Default for Telemetry {
     fn default() -> Self { Self { state: TranslationState::Idle, successful: 0 } }
 }
 
+/// A restricted CPU inference profile. The default matches F2.5 production
+/// behavior until verified benchmark+translation quality evidence supports
+/// selecting another profile. Benchmark profiles are not user Settings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OfflineProfile {
+    pub beam_size: usize,
+    pub cpu_threads: usize,
+}
+impl Default for OfflineProfile {
+    fn default() -> Self {
+        Self { beam_size: 2, cpu_threads: 2 }
+    }
+}
+impl OfflineProfile {
+    pub fn validate(self) -> bool {
+        matches!(self.beam_size, 1 | 2) && matches!(self.cpu_threads, 1 | 2 | 4)
+    }
+}
+
 pub struct TranslationRequest {
     pub generation: u64,
     pub anchor: (i32, i32),
@@ -84,11 +103,11 @@ struct Loaded {
 }
 #[cfg(feature = "offline-ct2")]
 impl Loaded {
-    fn load(model_dir: &Path) -> Result<Self, TranslationState> {
+    fn load(model_dir: &Path, profile: OfflineProfile) -> Result<Self, TranslationState> {
         verify_pack(model_dir).map_err(classify_pack)?;
         let config = ct2rs::Config {
             device: ct2rs::Device::CPU,
-            num_threads_per_replica: 2,
+            num_threads_per_replica: profile.cpu_threads,
             ..Default::default()
         };
         let tokenizer = ct2rs::tokenizers::sentencepiece::Tokenizer::from_file(
@@ -101,7 +120,7 @@ impl Loaded {
             .map_err(|_| TranslationState::InvalidModel)?;
         Ok(Self { translator, source_tokenizer })
     }
-    fn translate(&self, text: &str) -> Result<String, TranslationState> {
+    fn translate(&self, text: &str, profile: OfflineProfile) -> Result<String, TranslationState> {
         // CTranslate2 can truncate max_input_length silently. Reject oversized
         // tokenized inputs instead; short UTF-8 strings cannot exceed this budget.
         if text.len() > 128 {
@@ -112,7 +131,7 @@ impl Loaded {
             }
         }
         let options = ct2rs::TranslationOptions::<String, String> {
-            beam_size: 2,
+            beam_size: profile.beam_size,
             max_input_length: 0, // disable silent input truncation
             max_decoding_length: 512,
             ..Default::default()
@@ -138,8 +157,20 @@ pub struct TranslationEngine {
 }
 impl TranslationEngine {
     pub fn start(on_result: Arc<dyn Fn(TranslationResult) + Send + Sync>) -> Result<Self, String> {
+        Self::start_with_profile(on_result, OfflineProfile::default())
+    }
+
+    /// Separately exercised by the headless native benchmark harness.
+    /// Never accept arbitrary unbounded thread counts or decoding modes.
+    pub fn start_with_profile(
+        on_result: Arc<dyn Fn(TranslationResult) + Send + Sync>,
+        profile: OfflineProfile,
+    ) -> Result<Self, String> {
+        if !profile.validate() {
+            return Err("Unsupported offline CPU benchmark profile".into());
+        }
         #[cfg(not(feature = "offline-ct2"))]
-        let _ = &on_result;
+        let _ = (&on_result, profile);
         let pending = Arc::new(LatestSlot::<TranslationRequest>::new());
         let worker_pending = pending.clone();
         let telemetry = Arc::new(Mutex::new(Telemetry::default()));
@@ -180,7 +211,7 @@ impl TranslationEngine {
                     };
                     if loaded.is_none() {
                         state.lock().unwrap().state = TranslationState::Loading;
-                        match Loaded::load(&model_path) {
+                        match Loaded::load(&model_path, profile) {
                             Ok(value) => loaded = Some(value),
                             Err(reason) => {
                                 state.lock().unwrap().state = reason;
@@ -189,7 +220,7 @@ impl TranslationEngine {
                         }
                     }
                     state.lock().unwrap().state = TranslationState::Translating;
-                    let result = loaded.as_ref().expect("loaded above").translate(&request.text);
+                    let result = loaded.as_ref().expect("loaded above").translate(&request.text, profile);
                     // Translation input is dropped here. No source text in events.
                     last_used = Instant::now();
                     match result {
@@ -236,6 +267,19 @@ impl Drop for TranslationEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn inference_profile_is_bounded_and_preserves_existing_default() {
+        assert_eq!(OfflineProfile::default(), OfflineProfile {beam_size: 2, cpu_threads: 2});
+        for beam in [1, 2] {
+            for threads in [1, 2, 4] {
+                assert!(OfflineProfile {beam_size:beam, cpu_threads:threads}.validate());
+            }
+        }
+        assert!(!OfflineProfile {beam_size:0, cpu_threads:2}.validate());
+        assert!(!OfflineProfile {beam_size:3, cpu_threads:2}.validate());
+        assert!(!OfflineProfile {beam_size:1, cpu_threads:64}.validate());
+    }
+
     #[test]
     fn model_errors_never_create_fake_success() {
         assert_eq!(classify_pack(ModelError::Missing), TranslationState::MissingModel);
