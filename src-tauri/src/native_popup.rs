@@ -1,4 +1,5 @@
-//! F0-only native tooltip renderer. It never captures or translates text.
+//! Native, no-focus translation result renderer with bounded scrollable text.
+//! Only translated target text is provided; never source text or history.
 //! All HWND/GDI calls are confined to the Tauri event-loop (creator) thread.
 //! Later milestones can replace the GDI text backend with DirectWrite without
 //! changing caller ownership or the no-activation policy.
@@ -22,7 +23,7 @@ use windows_sys::Win32::{
             CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, GetForegroundWindow,
             KillTimer, RegisterClassW, SetTimer, SetWindowPos, ShowWindow, WNDCLASSW,
             HWND_TOPMOST, MA_NOACTIVATE, SW_HIDE, SWP_NOACTIVATE, SWP_SHOWWINDOW,
-            WM_MOUSEACTIVATE, WM_PAINT, WM_TIMER, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+            WM_MOUSEACTIVATE, WM_MOUSEWHEEL, WM_PAINT, WM_TIMER, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
             WS_POPUP,
         },
     },
@@ -35,9 +36,44 @@ const GAP_DIP: i32 = 12;
 const PREVIEW: &str = "Pratinjau ClipLingo — bukan hasil terjemahan.";
 static LAST_PAINT_US: AtomicU64 = AtomicU64::new(0);
 
+// No Windows controls or focusable child elements. Mouse wheel events are
+// processed only when the OS routes them to this no-activate native HWND.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ScrollState {
+    content_px: i32,
+    viewport_px: i32,
+    offset_px: i32,
+    line_step_px: i32,
+    wheel_remainder: i32,
+}
+impl ScrollState {
+    fn new(content_px: i32, viewport_px: i32, line_step_px: i32) -> Self {
+        Self { content_px, viewport_px, line_step_px: line_step_px.max(1),
+               offset_px: 0, wheel_remainder: 0 }
+    }
+    fn max_offset(self) -> i32 {
+        (self.content_px - self.viewport_px).max(0)
+    }
+    fn can_scroll(self) -> bool { self.max_offset() > 0 }
+    fn apply_wheel(&mut self, delta: i32) -> bool {
+        if !self.can_scroll() { return false; }
+        self.wheel_remainder = self.wheel_remainder.saturating_add(delta);
+        let notches = self.wheel_remainder / 120;
+        self.wheel_remainder %= 120;
+        if notches == 0 { return false; }
+        let old = self.offset_px;
+        // Three text lines per wheel notch, bounded to the complete text height.
+        self.offset_px = self.offset_px.saturating_sub(
+            notches.saturating_mul(self.line_step_px).saturating_mul(3)
+        ).clamp(0, self.max_offset());
+        old != self.offset_px
+    }
+}
+
 thread_local! {
     static DISPLAY_TEXT: RefCell<Vec<u16>> = const { RefCell::new(Vec::new()) };
     static PREVIEW_START: Cell<Option<Instant>> = const { Cell::new(None) };
+    static SCROLL: Cell<ScrollState> = const { Cell::new(ScrollState { content_px: 0, viewport_px: 0, offset_px: 0, line_step_px: 1, wheel_remainder: 0 }) };
 }
 
 fn utf16(s: &str) -> Vec<u16> {
@@ -153,8 +189,12 @@ impl NativePopup {
             }
             let dpi = GetDpiForWindow(hwnd).max(96) as i32;
             let pad = px(PADDING_DIP, dpi);
-            let max_w = px(MAX_WIDTH_DIP, dpi);
-            let max_h = px(MAX_HEIGHT_DIP, dpi);
+            let area = monitor_info.rcWork;
+            let max_w = px(MAX_WIDTH_DIP, dpi).min(area.right - area.left);
+            let max_h = px(MAX_HEIGHT_DIP, dpi).min(area.bottom - area.top);
+            if max_w <= pad * 2 || max_h <= pad * 2 {
+                return Err("Monitor work area too small for readable native popup".into());
+            }
             let mut rect = RECT { left: 0, top: 0, right: max_w - pad * 2, bottom: 0 };
             let label = utf16(target);
             let hdc = GetDC(hwnd);
@@ -167,7 +207,9 @@ impl NativePopup {
             // Size short target text intrinsically; wrap only above width cap.
             let mut measured = DrawTextW(hdc, label.as_ptr(), (label.len() - 1) as i32, &mut rect,
                 DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX | DT_LEFT);
-            if target.contains('\n') || target.contains('\r') || rect.right - rect.left > max_w - pad * 2 {
+            let wrapped = target.contains('\n') || target.contains('\r') ||
+                rect.right - rect.left > max_w - pad * 2;
+            if wrapped {
                 rect = RECT { left: 0, top: 0, right: max_w - pad * 2, bottom: 0 };
                 measured = DrawTextW(hdc, label.as_ptr(), (label.len() - 1) as i32, &mut rect,
                     DT_WORDBREAK | DT_CALCRECT | DT_NOPREFIX | DT_LEFT);
@@ -178,29 +220,37 @@ impl NativePopup {
             if measured == 0 {
                 return Err("Native text measurement failed".into());
             }
-            let area = monitor_info.rcWork;
-            let width = rect.right - rect.left + pad * 2;
-            let height = rect.bottom - rect.top + pad * 2;
-            // Never clamp a complete translation to 300 DIP and silently
-            // hide its final lines. Until there is an accessible scrolling
-            // surface, refusing a result is safer than partial display.
-            if width <= 0 || height <= 0 || width > max_w || height > max_h ||
-               width > area.right - area.left || height > area.bottom - area.top {
-                return Err("Native translated text exceeds available popup area; no partial output shown".into());
+            let content_height = rect.bottom - rect.top;
+            // DT_CALCRECT may shrink the rectangle width. Wrapped text must
+            // paint at the SAME width used for measurement or it can reflow
+            // and hide bottom lines. Very long unbroken words fail closed.
+            let measured_width = rect.right - rect.left + pad * 2;
+            if content_height <= 0 || measured_width <= 0 || measured_width > max_w {
+                return Err("Native target contains an unrenderable long word or invalid dimensions".into());
             }
+            let width = if wrapped { max_w } else { measured_width };
+            // Entire target stays in DISPLAY_TEXT; only the visible viewport is
+            // painted. Never discard the unshown lines or silently truncate.
+            let height = (content_height + pad * 2).min(max_h);
+            let viewport_height = height - pad * 2;
+            let scroll = ScrollState::new(content_height, viewport_height, px(24, dpi));
             let (x, y) = layout_position(
                 (cursor.x, cursor.y), (area.left, area.top, area.right, area.bottom),
                 (width, height), px(GAP_DIP, dpi),
             );
             DISPLAY_TEXT.with(|cell| *cell.borrow_mut() = label);
+            SCROLL.with(|cell| cell.set(scroll)); // reset scroll when result is replaced
             PREVIEW_START.with(|start| start.set(Some(Instant::now())));
             if SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW) == 0 {
                 return Err("SetWindowPos failed".into());
             }
             InvalidateRect(hwnd, std::ptr::null(), 1);
             KillTimer(hwnd, 1);
-            // Preview is brief; actual target text scales readability time with length.
-            let dismissal_ms = if target == PREVIEW { 2_500 } else {
+            // Longer output remains readable while the user scrolls;
+            // each wheel interaction refreshes the inactivity deadline.
+            let dismissal_ms = if target == PREVIEW { 2_500 } else if scroll.can_scroll() {
+                20_000
+            } else {
                 4_500 + (target.chars().count() as u32).saturating_mul(40).min(8_000)
             };
             if SetTimer(hwnd, 1, dismissal_ms, None) == 0 {
@@ -217,6 +267,8 @@ impl NativePopup {
     pub fn hide(&self) {
         if let Ok(hwnd) = self.hwnd() {
             unsafe { KillTimer(hwnd, 1); ShowWindow(hwnd, SW_HIDE); }
+            DISPLAY_TEXT.with(|cell| cell.borrow_mut().clear());
+            SCROLL.with(|cell| cell.set(ScrollState::default()));
         }
     }
 
@@ -233,7 +285,31 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM
         WM_TIMER if w == 1 => {
             KillTimer(hwnd, 1);
             ShowWindow(hwnd, SW_HIDE);
+            DISPLAY_TEXT.with(|cell| cell.borrow_mut().clear());
+            SCROLL.with(|cell| cell.set(ScrollState::default()));
             0
+        },
+        WM_MOUSEWHEEL => {
+            let delta = ((w >> 16) as u16 as i16) as i32;
+            let mut scrollable = false;
+            let changed = SCROLL.with(|cell| {
+                let mut state = cell.get();
+                scrollable = state.can_scroll();
+                let moved = state.apply_wheel(delta);
+                cell.set(state);
+                moved
+            });
+            if scrollable {
+                if changed {
+                    InvalidateRect(hwnd, std::ptr::null(), 1);
+                }
+                // Even a wheel attempt at the first/last line indicates
+                // active reading; do not dismiss while the user is trying.
+                KillTimer(hwnd, 1);
+                SetTimer(hwnd, 1, 20_000, None);
+                return 0;
+            }
+            DefWindowProcW(hwnd, msg, w, l)
         },
         WM_PAINT => {
             // SAFETY: dispatched by Windows on the owning window thread.
@@ -256,6 +332,9 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM
                 bounds.top += pad;
                 bounds.right -= pad;
                 bounds.bottom -= pad;
+                let scroll = SCROLL.with(|cell| cell.get());
+                bounds.top -= scroll.offset_px;
+                bounds.bottom = bounds.top + scroll.content_px;
                 DISPLAY_TEXT.with(|cell| {
                     let text = cell.borrow();
                     if text.len() > 1 {
@@ -295,5 +374,37 @@ mod tests {
         let (x, y) = layout_position((500, 500), (0, 0, 100, 80), (90, 70), 12);
         assert!((0..=10).contains(&x));
         assert!((0..=10).contains(&y));
+    }
+    #[test]
+    fn long_translation_keeps_full_content_and_scrolls_to_last_line() {
+        let mut state = ScrollState::new(1300, 250, 20);
+        assert_eq!(state.max_offset(), 1050);
+        assert!(state.apply_wheel(-120));
+        assert_eq!(state.offset_px, 60);
+        assert!(state.apply_wheel(-6000));
+        assert_eq!(state.offset_px, 1050);
+        assert!(!state.apply_wheel(-120)); // at end, not silently wrapped
+        assert!(state.apply_wheel(120));
+        assert_eq!(state.offset_px, 990);
+        assert!(state.apply_wheel(99999));
+        assert_eq!(state.offset_px, 0);
+    }
+    #[test]
+    fn short_text_is_not_scrollable_and_partial_wheel_deltas_accumulate() {
+        let mut short = ScrollState::new(100, 250, 20);
+        assert!(!short.can_scroll());
+        assert!(!short.apply_wheel(-120));
+        let mut long = ScrollState::new(600, 250, 20);
+        assert!(!long.apply_wheel(-60));
+        assert!(long.apply_wheel(-60));
+        assert_eq!(long.offset_px, 60);
+    }
+    #[test]
+    fn new_translation_restarts_at_top() {
+        let mut previous = ScrollState::new(1200, 250, 20);
+        previous.apply_wheel(-240);
+        let next = ScrollState::new(800, 250, 20);
+        assert_eq!(next.offset_px, 0);
+        assert_eq!(next.max_offset(), 550);
     }
 }
