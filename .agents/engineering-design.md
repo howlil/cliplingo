@@ -305,3 +305,12 @@ Reference: [F2 acceptance](f2-acceptance.md), [CTranslate2 quickstart](https://o
 - `capture.rs::finish_and_forward` holds the capture generation owner while forwarding the verified String to the translation worker. This prevents an older UIA callback from overtaking a newer hotkey and removes a duplicate source String copy.
 - `offline_model_smoke --benchmark`: one cold load plus twelve sequential warm model inferences on fixed public inputs. These numbers exclude UIA capture, foreground checks, DWM display and all live Windows application paths.
 - `scripts/measure-f25.ps1` records only Windows process-tree private/working memory by named workload phase. Full native GUI focus/latency/DPI acceptance remains required; see [F2.5 acceptance](f25-acceptance.md).
+
+
+## 13. F2.8 lossless source segmentation and atomic local inference result
+
+- `sentence_pipeline.rs` uses UAX#29 `split_sentence_bounds`, verifies original UTF-8 source reassembly, and conservatively coalesces common abbreviations; maximum eight sentences and UTF-16 translated target bound 4,096 units. Parsing is bounded; no new model threads.
+- `translation.rs` maps every source sentence into a sequential CTranslate2 call with a real tokenizer check before each call. No target is handed to the callback until all sentences succeed; a newer **pending** hotkey can abort between calls. Already-running synchronous native calls remain non-preemptible.
+- `native_popup.rs` now rejects content exceeding measured client dimensions or work area instead of clamping 420×300 DIP and concealing some lines. This is a fail-closed bridge, not the finished accessible full-paragraph presentation.
+- **Proof:** [Windows unit CI](https://github.com/howlil/cliplingo/actions/runs/40254834535) 21/21 passed, [native model CI](https://github.com/howlil/cliplingo/actions/runs/40254834448) real model semantic regression and quality suite passed; [F2.8 results](f28-acceptance.md).
+- **Unverified:** live Windows source-focus/accessible popup acceptance, full meaning retention across arbitrary clauses/abbreviations, energy/low-end hardware and readable oversize-result UX. [Issue #28](https://github.com/howlil/cliplingo/issues/28) remains open as a beta gate. Current `beam=2,2 threads` unchanged.
