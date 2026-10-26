@@ -13,6 +13,27 @@ mod translation;
 #[cfg(feature = "offline-ct2")]
 fn main() {
     use std::{sync::{mpsc, Arc}, time::{Duration, Instant}};
+    use sha2::{Digest, Sha256};
+    let mut beam_size = 2usize;
+    let mut cpu_threads = 2usize;
+    let mut benchmark = false;
+    let mut arguments = std::env::args().skip(1);
+    while let Some(flag) = arguments.next() {
+        match flag.as_str() {
+            "--benchmark" => benchmark = true,
+            "--beam" => {
+                beam_size = arguments.next().expect("--beam requires integer")
+                    .parse::<usize>().expect("invalid --beam");
+            }
+            "--threads" => {
+                cpu_threads = arguments.next().expect("--threads requires integer")
+                    .parse::<usize>().expect("invalid --threads");
+            }
+            _ => panic!("Unknown benchmark argument: {flag}"),
+        }
+    }
+    let profile = translation::OfflineProfile { beam_size, cpu_threads };
+    assert!(profile.validate(), "Unsupported model profile");
     let pack = model_pack::default_pack_dir().expect("LOCALAPPDATA model directory");
     model_pack::verify_pack(&pack).expect("actual converted model pack must verify");
 
@@ -20,7 +41,7 @@ fn main() {
     let callback = Arc::new(move |result: translation::TranslationResult| {
         let _ = sender.send(result);
     });
-    let engine = translation::TranslationEngine::start(callback)
+    let engine = translation::TranslationEngine::start_with_profile(callback, profile)
         .expect("spawn CPU translation worker");
     let started = Instant::now();
     let source = "Good morning.";
@@ -39,7 +60,7 @@ fn main() {
     println!("ClipLingo real model smoke: success; target chars={}, elapsed_ms={}",
         target.target.chars().count(), cold_ms);
 
-    if std::env::args().any(|arg| arg == "--benchmark") {
+    if benchmark {
         // Same verified model, same native worker, sequential fixture runs.
         // This is an inference-only diagnostic: no UIA, hotkey or DWM paint.
         let fixtures = [
@@ -50,6 +71,7 @@ fn main() {
             "The model is ready.", "Close the window.", "Keep it private.",
         ];
         let mut latency_ms = Vec::with_capacity(fixtures.len());
+        let mut output_digest = Sha256::new();
         for (i, fixture) in fixtures.iter().enumerate() {
             let started = Instant::now();
             engine.submit(translation::TranslationRequest {
@@ -62,6 +84,10 @@ fn main() {
                 .unwrap_or_else(|err| panic!("warm inference {} failed: {err}; state={:?}", i, engine.status()));
             assert_eq!(output.generation, (i + 2) as u64);
             assert!(!output.target.trim().is_empty());
+            assert!(!output.target.contains('\0'));
+            // Compare output digests across profiles without revealing strings.
+            output_digest.update((output.target.len() as u64).to_le_bytes());
+            output_digest.update(output.target.as_bytes());
             latency_ms.push(started.elapsed().as_millis());
         }
         latency_ms.sort_unstable();
@@ -70,8 +96,8 @@ fn main() {
             latency_ms[rank.saturating_sub(1).min(latency_ms.len()-1)]
         };
         // No sensitive user text, host details or model output is logged.
-        println!("cliplingo_headless_benchmark={{\"schema\":1,\"boundary\":\"native_inference_only\",\"sample_type\":\"fixed_public_fixtures\",\"cold_ms\":{},\"warm_n\":{},\"warm_p50_ms\":{},\"warm_p95_ms\":{},\"warm_max_ms\":{}}}",
-            cold_ms, latency_ms.len(), percentile(0.50), percentile(0.95), latency_ms[latency_ms.len()-1]);
+        println!("cliplingo_headless_benchmark={{\"schema\":2,\"boundary\":\"native_inference_only\",\"sample_type\":\"fixed_public_fixtures\",\"beam_size\":{},\"cpu_threads\":{},\"cold_ms\":{},\"warm_n\":{},\"warm_p50_ms\":{},\"warm_p95_ms\":{},\"warm_max_ms\":{},\"target_sha256\":\"{:x}\"}}",
+            beam_size, cpu_threads, cold_ms, latency_ms.len(), percentile(0.50), percentile(0.95), latency_ms[latency_ms.len()-1], output_digest.finalize());
     }
 }
 
