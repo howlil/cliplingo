@@ -16,6 +16,7 @@
 | --- | --- |
 | Geometry stays inside available work area, including negative monitor coordinates | `native_popup.rs` existing tests; target-monitor DPI correction requires real mixed-scale monitor verification |
 | Large target has finite scroll range, reaches final line, clamps at both ends | New deterministic `ScrollState` tests |
+| Text viewport excludes the padded margins, including negative rectangle coordinates | Deterministic viewport geometry test; real GDI draw/clipping still requires desktop verification |
 | High-resolution wheel partial notches are accumulated | New deterministic `ScrollState` test |
 | Every new translation starts at the first line | New `ScrollState` reset test |
 | Existing UIA, model, latest request, F2.8 sentence correctness remain compatible | Windows Rust compile/unit tests + production code check |
