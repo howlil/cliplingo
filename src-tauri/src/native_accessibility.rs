@@ -4,10 +4,10 @@
 use std::{
     cell::RefCell,
     ffi::c_void,
-    sync::{Arc, Mutex},
+    sync::{atomic::{AtomicU32, Ordering, fence}, Arc, Mutex},
 };
 use windows::{
-    core::{implement, BSTR, Error, IUnknown, Interface, Result},
+    core::{implement, BSTR, Error, GUID, HRESULT, IUnknown, Interface, Result},
     Win32::{
         Foundation::HWND,
         System::Variant::VARIANT,
@@ -49,9 +49,11 @@ impl IRawElementProviderSimple_Impl for NativeTargetProvider_Impl {
     }
 
     fn GetPatternProvider(&self, _pattern: UIA_PATTERN_ID) -> Result<IUnknown> {
-        // Intentionally no fake TextPattern until full range/navigation semantics
-        // are implemented and verified on an interactive Windows desktop.
-        Err(Error::from(windows::core::HRESULT(0)))
+        // windows-rs' generated return type is non-nullable IUnknown and
+        // cannot represent the required S_OK + null output. This delegate
+        // is never returned to UIA directly: PatternSafeProvider wraps its
+        // COM ABI and explicitly zeroes unsupported pattern outputs.
+        Err(Error::from(HRESULT(0x80004001u32 as i32))) // E_NOTIMPL
     }
 
     fn GetPropertyValue(&self, property: UIA_PROPERTY_ID) -> Result<VARIANT> {
@@ -80,6 +82,131 @@ impl IRawElementProviderSimple_Impl for NativeTargetProvider_Impl {
     }
 }
 
+// The generated windows-rs trait represents GetPatternProvider as
+// Result<IUnknown>, which cannot express success with a NULL COM pointer.
+// A thin, reference-counted ABI wrapper exposes the generated provider's
+// three implemented operations but owns the unsupported-pattern ABI exactly.
+// Only the wrapper is returned to UI Automation.
+const S_OK: HRESULT = HRESULT(0);
+const E_POINTER: HRESULT = HRESULT(0x80004003u32 as i32);
+const E_NOINTERFACE: HRESULT = HRESULT(0x80004002u32 as i32);
+
+#[repr(C)]
+struct PatternSafeVtable {
+    query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT,
+    add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
+    release: unsafe extern "system" fn(*mut c_void) -> u32,
+    provider_options: unsafe extern "system" fn(*mut c_void, *mut ProviderOptions) -> HRESULT,
+    get_pattern: unsafe extern "system" fn(*mut c_void, UIA_PATTERN_ID, *mut *mut c_void) -> HRESULT,
+    get_property: unsafe extern "system" fn(*mut c_void, UIA_PROPERTY_ID, *mut VARIANT) -> HRESULT,
+    host_provider: unsafe extern "system" fn(*mut c_void, *mut *mut c_void) -> HRESULT,
+}
+
+#[repr(C)]
+struct PatternSafeProvider {
+    vtable: *const PatternSafeVtable,
+    refs: AtomicU32,
+    delegate: IRawElementProviderSimple,
+}
+
+unsafe extern "system" fn abi_query_interface(
+    this: *mut c_void, iid: *const GUID, output: *mut *mut c_void
+) -> HRESULT {
+    if output.is_null() { return E_POINTER; }
+    unsafe {
+        *output = std::ptr::null_mut();
+        if iid.is_null() { return E_POINTER; }
+        if *iid == IRawElementProviderSimple::IID || *iid == IUnknown::IID {
+            abi_add_ref(this);
+            *output = this;
+            S_OK
+        } else {
+            E_NOINTERFACE
+        }
+    }
+}
+
+unsafe extern "system" fn abi_add_ref(this: *mut c_void) -> u32 {
+    let this = unsafe { &*(this as *const PatternSafeProvider) };
+    this.refs.fetch_add(1, Ordering::Relaxed) + 1
+}
+
+unsafe extern "system" fn abi_release(this: *mut c_void) -> u32 {
+    let provider = unsafe { &*(this as *const PatternSafeProvider) };
+    let refs = provider.refs.fetch_sub(1, Ordering::Release) - 1;
+    if refs == 0 {
+        fence(Ordering::Acquire);
+        unsafe { drop(Box::from_raw(this as *mut PatternSafeProvider)); }
+    }
+    refs
+}
+
+unsafe extern "system" fn abi_provider_options(
+    this: *mut c_void, output: *mut ProviderOptions
+) -> HRESULT {
+    if output.is_null() { return E_POINTER; }
+    let provider = unsafe { &*(this as *const PatternSafeProvider) };
+    match unsafe { provider.delegate.ProviderOptions() } {
+        Ok(value) => { unsafe { output.write(value); } S_OK },
+        Err(error) => error.code(),
+    }
+}
+
+unsafe extern "system" fn abi_get_pattern(
+    _this: *mut c_void, _pattern: UIA_PATTERN_ID, output: *mut *mut c_void
+) -> HRESULT {
+    if output.is_null() { return E_POINTER; }
+    // Windows passes uninitialized output storage. Initialize it even when
+    // the requested pattern has never been supported by this GDI renderer.
+    unsafe { *output = std::ptr::null_mut(); }
+    S_OK
+}
+
+unsafe extern "system" fn abi_get_property(
+    this: *mut c_void, property: UIA_PROPERTY_ID, output: *mut VARIANT
+) -> HRESULT {
+    if output.is_null() { return E_POINTER; }
+    let provider = unsafe { &*(this as *const PatternSafeProvider) };
+    match unsafe { provider.delegate.GetPropertyValue(property) } {
+        Ok(value) => { unsafe { output.write(value); } S_OK },
+        Err(error) => error.code(),
+    }
+}
+
+unsafe extern "system" fn abi_host_provider(
+    this: *mut c_void, output: *mut *mut c_void
+) -> HRESULT {
+    if output.is_null() { return E_POINTER; }
+    unsafe { *output = std::ptr::null_mut(); }
+    let provider = unsafe { &*(this as *const PatternSafeProvider) };
+    match unsafe { provider.delegate.HostRawElementProvider() } {
+        Ok(value) => { unsafe { *output = value.into_raw(); } S_OK },
+        Err(error) => error.code(),
+    }
+}
+
+static PATTERN_SAFE_VTABLE: PatternSafeVtable = PatternSafeVtable {
+    query_interface: abi_query_interface,
+    add_ref: abi_add_ref,
+    release: abi_release,
+    provider_options: abi_provider_options,
+    get_pattern: abi_get_pattern,
+    get_property: abi_get_property,
+    host_provider: abi_host_provider,
+};
+
+fn wrap_pattern_safe(delegate: IRawElementProviderSimple) -> IRawElementProviderSimple {
+    let boxed = Box::new(PatternSafeProvider {
+        vtable: &PATTERN_SAFE_VTABLE,
+        refs: AtomicU32::new(1),
+        delegate,
+    });
+    // SAFETY: PatternSafeProvider starts with the seven-method COM vtable
+    // for IRawElementProviderSimple, owns one reference, and implements
+    // QueryInterface/AddRef/Release with atomic lifetime management.
+    unsafe { IRawElementProviderSimple::from_raw(Box::into_raw(boxed).cast()) }
+}
+
 struct PopupUiaState {
     target: Target,
     provider: IRawElementProviderSimple,
@@ -93,10 +220,11 @@ thread_local! {
 
 pub(super) fn install(hwnd: isize) {
     let target = Arc::new(Mutex::new(String::new()));
-    let provider: IRawElementProviderSimple = NativeTargetProvider {
+    let delegate: IRawElementProviderSimple = NativeTargetProvider {
         hwnd,
         target: target.clone(),
     }.into();
+    let provider = wrap_pattern_safe(delegate);
     POPUP_UIA.with(|state| {
         *state.borrow_mut() = Some(PopupUiaState { target, provider });
     });
@@ -151,6 +279,46 @@ pub(super) fn window_destroyed(hwnd: *mut c_void) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unsupported_pattern_returns_s_ok_and_initializes_null_output() {
+        let target = Arc::new(Mutex::new(String::new()));
+        let delegate: IRawElementProviderSimple = NativeTargetProvider {
+            hwnd: 0,
+            target,
+        }.into();
+        let provider = wrap_pattern_safe(delegate);
+        // This assertion must exercise the actual COM vtable, not the
+        // convenience method (which rejects a NULL IUnknown on success).
+        let vtable = unsafe {
+            *(provider.as_raw() as *const *const PatternSafeVtable)
+        };
+        let mut output = 1usize as *mut c_void; // deliberate non-null sentinel
+        let result = unsafe {
+            ((*vtable).get_pattern)(
+                provider.as_raw(), UIA_PATTERN_ID(10014), &mut output
+            )
+        };
+        assert_eq!(result, S_OK);
+        assert!(output.is_null());
+
+        let null_output = unsafe {
+            ((*vtable).get_pattern)(
+                provider.as_raw(), UIA_PATTERN_ID(10014), std::ptr::null_mut()
+            )
+        };
+        assert_eq!(null_output, E_POINTER);
+
+        let mut queried = std::ptr::null_mut();
+        let qi = unsafe {
+            ((*vtable).query_interface)(provider.as_raw(),
+                &IRawElementProviderSimple::IID, &mut queried)
+        };
+        assert_eq!(qi, S_OK);
+        assert_eq!(queried, provider.as_raw());
+        let refs = unsafe { ((*vtable).release)(queried) };
+        assert!(refs >= 1);
+    }
 
     #[test]
     fn provider_target_follows_replacement_and_is_cleared() {
