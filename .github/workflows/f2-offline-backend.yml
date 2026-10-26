@@ -38,7 +38,17 @@ jobs:
         shell: pwsh
         run: |
           python scripts/prepare-en-id-pack.py --output "$env:LOCALAPPDATA\ClipLingo\models\en-id"
-      - name: Verify model load and native inference end to end
+      - name: A/B measure verified model with baseline and greedy CPU inference profiles
         shell: pwsh
         run: |
-          cargo run --manifest-path src-tauri/Cargo.toml --features offline-ct2 --bin offline_model_smoke -- --benchmark
+          $profiles = @(
+            @{ Beam = 2; Threads = 2 },
+            @{ Beam = 1; Threads = 2 },
+            @{ Beam = 1; Threads = 1 },
+            @{ Beam = 1; Threads = 4 }
+          )
+          foreach ($profile in $profiles) {
+            Write-Host "Native EN-ID profile: beam=$($profile.Beam) threads=$($profile.Threads)"
+            cargo run --manifest-path src-tauri/Cargo.toml --features offline-ct2 --bin offline_model_smoke -- --benchmark --beam $profile.Beam --threads $profile.Threads
+            if ($LASTEXITCODE -ne 0) { throw "Native model benchmark failed for beam=$($profile.Beam) threads=$($profile.Threads)" }
+          }
