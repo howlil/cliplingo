@@ -32,6 +32,12 @@
 6. Measure cold/warm hotkey-to-visible, idle whole-process-tree RSS/private memory and long-paragraph CPU using the existing F2.5 and F2.7 scripts. No numerical production SLO is claimed from CI.
 7. Rapid requests A→B when the first result is scrolled: popup must reset to the start of B; no stale partial result should remain visible.
 
+### Experimental F2.10 UIA property surface
+
+- The native HWND now offers a custom `IRawElementProviderSimple` response for `WM_GETOBJECT` with `UIA_NamePropertyId` containing the **complete translated target**. Its `Text` control type remains non-keyboard-focusable and adds no rendered controls.
+- Unit/compile CI verifies the provider's build and retained-text replacement/clear logic. A raw-vtable regression must check that unsupported `GetPatternProvider` returns `S_OK`, overwrites a non-NULL sentinel with NULL, handles a missing output pointer with `E_POINTER`, and preserves COM `QueryInterface`/reference counting. The manual UIA probe should see a nonempty Name property only while a real translated result is displayed. It must not save the Name content. The lack of `TextPattern` is a **known unsatisfied accessibility requirement**.
+- Screen-reader announcements, TextPattern navigation, COM provider threading, no-focus behavior and actual UIA element discovery require real interactive Windows verification. Never interpret this stage as full screen-reader acceptance.
+
 **Decision:** This increment fixes the prior all-or-nothing overflow refusal for ordinary long paragraphs when the OS routes scrolling. It **does not close** the product accessibility, screen-reader, mouse-wheel routing, GUI focus, or full Windows E2E gates. Do not publish beta or close Issue #28 based solely on CI.
 
 Related: [F2.8 regression](f28-acceptance.md), [F2.5 GUI acceptance](f25-acceptance.md), [Product contract](product.md).

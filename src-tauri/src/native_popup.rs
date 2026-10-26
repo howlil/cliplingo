@@ -1,8 +1,10 @@
 //! Native, no-focus translation result renderer with bounded scrollable text.
+//! Text-only UIA Name property is exposed separately; TextPattern pending.
 //! Only translated target text is provided; never source text or history.
 //! All HWND/GDI calls are confined to the Tauri event-loop (creator) thread.
 //! Later milestones can replace the GDI text backend with DirectWrite without
 //! changing caller ownership or the no-activation policy.
+use crate::native_accessibility;
 use std::{
     cell::{Cell, RefCell},
     sync::atomic::{AtomicU64, Ordering},
@@ -24,7 +26,7 @@ use windows_sys::Win32::{
             CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, GetForegroundWindow,
             KillTimer, RegisterClassW, SetTimer, SetWindowPos, ShowWindow, WNDCLASSW,
             HWND_TOPMOST, MA_NOACTIVATE, SW_HIDE, SWP_NOACTIVATE, SWP_SHOWWINDOW,
-            WM_MOUSEACTIVATE, WM_MOUSEWHEEL, WM_PAINT, WM_TIMER, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+            WM_DESTROY, WM_GETOBJECT, WM_MOUSEACTIVATE, WM_MOUSEWHEEL, WM_PAINT, WM_TIMER, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
             WS_POPUP,
         },
     },
@@ -86,6 +88,7 @@ fn clear_display_state() {
     SCROLL.with(|cell| cell.set(ScrollState::default()));
     RENDER_DPI.with(|cell| cell.set(96));
     PREVIEW_START.with(|cell| cell.set(None));
+    native_accessibility::clear_target();
 }
 
 // The scrolling text is clipped to this inset, never to the entire HWND.
@@ -174,6 +177,7 @@ impl NativePopup {
             if hwnd.is_null() {
                 return Err("Could not create no-activate native preview HWND".into());
             }
+            native_accessibility::install(hwnd as isize);
             Ok(Self { hwnd: hwnd as isize, creator_thread: GetCurrentThreadId() })
         }
     }
@@ -280,6 +284,7 @@ impl NativePopup {
                 (width, height), px(GAP_DIP, dpi),
             );
             DISPLAY_TEXT.with(|cell| *cell.borrow_mut() = label);
+            native_accessibility::set_target(target);
             SCROLL.with(|cell| cell.set(scroll)); // reset scroll when result is replaced
             RENDER_DPI.with(|cell| cell.set(dpi));
             PREVIEW_START.with(|start| start.set(Some(Instant::now())));
@@ -324,6 +329,14 @@ impl NativePopup {
 
 unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     match msg {
+        WM_GETOBJECT => {
+            native_accessibility::get_object(hwnd, w, l)
+                .unwrap_or_else(|| DefWindowProcW(hwnd, msg, w, l))
+        },
+        WM_DESTROY => {
+            native_accessibility::window_destroyed(hwnd);
+            0
+        },
         WM_MOUSEACTIVATE => MA_NOACTIVATE as LRESULT,
         WM_TIMER if w == 1 => {
             KillTimer(hwnd, 1);
