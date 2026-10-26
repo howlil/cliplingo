@@ -3,6 +3,8 @@
 use crate::model_pack::{default_pack_dir, ModelError};
 use crate::latest_slot::{LatestSlot, Next};
 #[cfg(feature = "offline-ct2")]
+use crate::sentence_pipeline::{self, PipelineFailure};
+#[cfg(feature = "offline-ct2")]
 use crate::model_pack::verify_pack;
 #[cfg(feature = "offline-ct2")]
 use ct2rs::Tokenizer as _;
@@ -33,6 +35,7 @@ pub enum TranslationState {
     BackendUnavailable,
     QueueFull,
     InputTooLong,
+    Superseded,
 }
 impl TranslationState {
     pub fn label(self) -> &'static str {
@@ -47,6 +50,7 @@ impl TranslationState {
             Self::BackendUnavailable => "backend_not_compiled",
             Self::QueueFull => "translation_busy",
             Self::InputTooLong => "input_too_long",
+            Self::Superseded => "superseded_by_new_request",
         }
     }
 }
@@ -120,15 +124,25 @@ impl Loaded {
             .map_err(|_| TranslationState::InvalidModel)?;
         Ok(Self { translator, source_tokenizer })
     }
-    fn translate(&self, text: &str, profile: OfflineProfile) -> Result<String, TranslationState> {
-        // CTranslate2 can truncate max_input_length silently. Reject oversized
-        // tokenized inputs instead; short UTF-8 strings cannot exceed this budget.
-        if text.len() > 128 {
-            let source_tokens = self.source_tokenizer.encode(text)
-                .map_err(|_| TranslationState::Failed)?;
-            if source_tokens.len() > MAX_SOURCE_TOKENS {
-                return Err(TranslationState::InputTooLong);
-            }
+    fn translate(&self, text: &str, profile: OfflineProfile, is_superseded: impl Fn() -> bool) -> Result<String, TranslationState> {
+        sentence_pipeline::translate_complete(
+            text,
+            |segment| self.translate_one(segment, profile),
+            is_superseded,
+        ).map_err(|error| match error {
+            PipelineFailure::Empty | PipelineFailure::EmptyTarget | PipelineFailure::Model(TranslationState::Failed) => TranslationState::Failed,
+            PipelineFailure::TooManySentences | PipelineFailure::OutputTooLong => TranslationState::InputTooLong,
+            PipelineFailure::Model(reason) => reason,
+            PipelineFailure::Superseded => TranslationState::Superseded,
+        })
+    }
+
+    fn translate_one(&self, text: &str, profile: OfflineProfile) -> Result<String, TranslationState> {
+        // Enforce model token budget for EVERY sentence; no silent truncation.
+        let source_tokens = self.source_tokenizer.encode(text)
+            .map_err(|_| TranslationState::Failed)?;
+        if source_tokens.len() > MAX_SOURCE_TOKENS {
+            return Err(TranslationState::InputTooLong);
         }
         let options = ct2rs::TranslationOptions::<String, String> {
             beam_size: profile.beam_size,
@@ -220,7 +234,7 @@ impl TranslationEngine {
                         }
                     }
                     state.lock().unwrap().state = TranslationState::Translating;
-                    let result = loaded.as_ref().expect("loaded above").translate(&request.text, profile);
+                    let result = loaded.as_ref().expect("loaded above").translate(&request.text, profile, || worker_pending.has_pending());
                     // Translation input is dropped here. No source text in events.
                     last_used = Instant::now();
                     match result {
@@ -233,6 +247,11 @@ impl TranslationEngine {
                                 source_hwnd: request.source_hwnd,
                                 target,
                             });
+                        }
+                        Err(TranslationState::Superseded) => {
+                            // A newer pending request owns presentation; it is not
+                            // a model failure and should be processed next.
+                            continue;
                         }
                         Err(reason) => state.lock().unwrap().state = reason,
                     }

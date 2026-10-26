@@ -7,6 +7,9 @@ mod latest_slot;
 #[path = "../model_pack.rs"]
 mod model_pack;
 #[cfg(feature = "offline-ct2")]
+#[path = "../sentence_pipeline.rs"]
+mod sentence_pipeline;
+#[cfg(feature = "offline-ct2")]
 #[path = "../translation.rs"]
 mod translation;
 

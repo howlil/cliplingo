@@ -178,9 +178,16 @@ impl NativePopup {
             if measured == 0 {
                 return Err("Native text measurement failed".into());
             }
-            let width = (rect.right - rect.left + pad * 2).clamp(1, max_w);
-            let height = (rect.bottom - rect.top + pad * 2).clamp(1, max_h);
             let area = monitor_info.rcWork;
+            let width = rect.right - rect.left + pad * 2;
+            let height = rect.bottom - rect.top + pad * 2;
+            // Never clamp a complete translation to 300 DIP and silently
+            // hide its final lines. Until there is an accessible scrolling
+            // surface, refusing a result is safer than partial display.
+            if width <= 0 || height <= 0 || width > max_w || height > max_h ||
+               width > area.right - area.left || height > area.bottom - area.top {
+                return Err("Native translated text exceeds available popup area; no partial output shown".into());
+            }
             let (x, y) = layout_position(
                 (cursor.x, cursor.y), (area.left, area.top, area.right, area.bottom),
                 (width, height), px(GAP_DIP, dpi),
