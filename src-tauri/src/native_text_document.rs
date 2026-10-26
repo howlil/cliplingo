@@ -234,7 +234,7 @@ impl NativeTextDocument {
                 current == *query
             }
         });
-        let positions = 0..=(clusters.len() - wanted.len());
+        let mut positions = 0..=(clusters.len() - wanted.len());
         let found = if backward {
             positions.rev().find(|&i| matches_at(i))
         } else {
