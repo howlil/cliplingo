@@ -134,7 +134,7 @@ mod tests {
         let result = translate_complete("First sentence. Second sentence.", |_| {
             calls += 1;
             if calls == 2 { Err("model_failed") }
-            else { Ok("Translated first") }
+            else { Ok("Translated first".to_owned()) }
         }, || false);
         assert_eq!(calls, 2);
         assert_eq!(result, Err(PipelineFailure::Model("model_failed")));
