@@ -7,6 +7,7 @@ mod model_pack;
 mod sentence_pipeline;
 mod translation;
 mod native_popup;
+mod native_accessibility;
 mod shell;
 
 fn main() {
