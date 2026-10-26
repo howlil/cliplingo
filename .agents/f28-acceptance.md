@@ -1,6 +1,6 @@
 # F2.8 — Preserve complete EN→ID sentence coverage
 
-Scope: [Issue #28](https://github.com/howlil/cliplingo/issues/28). The existing Marian/OPUS-MT translator can omit a whole sentence in one-shot paragraph inference. **This milestone segments sentence boundaries and translates each nonempty segment independently; it does not claim semantic infallibility.** The production beam=2/2 CPU threads default is unchanged.
+Scope: [Issue #28](https://github.com/howlil/cliplingo/issues/28). The existing Marian/OPUS-MT translator can omit a whole sentence in one-shot paragraph inference. **This milestone segments sentence boundaries and translates each nonempty segment independently; Windows native model regression PASSED, but semantic infallibility and desktop acceptance are not claimed.** The production beam=2/2 CPU threads default is unchanged.
 
 ## Changed execution contract
 
@@ -15,12 +15,12 @@ Scope: [Issue #28](https://github.com/howlil/cliplingo/issues/28). The existing 
 
 | Property | Faithful boundary | State |
 | --- | --- | --- |
-| Lossless source segmentation; decimals, honorifics, quotation; 8-sentence limit | Rust sentence_pipeline unit tests | Await Windows CI |
-| Error in sentence N never yields partial result from sentence 1…N−1 | Native pure orchestration test with controlled failure | Await Windows CI |
-| New hotkey between sentences suppresses stale translation | Native orchestration test and latest-slot unit tests | Await Windows CI |
-| Complete source paragraphs translated with same real OPUS-MT model | Windows CTranslate2/CPU feature-run, 28 public fixtures | Await Windows CI |
-| Original Issue #28 paragraph retains report + settings + response time + results | `scripts/check-f28-coverage.py` run against baseline model output, **not mocks** | Await Windows CI |
-| Existing short text output regression and latency/RAM comparison | Headless benchmark and F2.7 artifact; before/after comparison | Await Windows CI |
+| Lossless source segmentation; decimals, honorifics, quotation; 8-sentence limit | Rust sentence_pipeline unit tests | **PASS — Windows CI #40254834535 / #40254834448** |
+| Error in sentence N never yields partial result from sentence 1…N−1 | Native pure orchestration test with controlled failure | **PASS — Windows CI #40254834535 / #40254834448** |
+| New hotkey between sentences suppresses stale translation | Native orchestration test and latest-slot unit tests | **PASS — Windows CI #40254834535 / #40254834448** |
+| Complete source paragraphs translated with same real OPUS-MT model | Windows CTranslate2/CPU feature-run, 28 public fixtures | **PASS — Windows CI #40254834535 / #40254834448** |
+| Original Issue #28 paragraph retains report + settings + response time + results | `scripts/check-f28-coverage.py` run against baseline model output, **not mocks** | **PASS — Windows CI #40254834535 / #40254834448** |
+| Existing short text output regression and latency/RAM comparison | Headless benchmark and F2.7 artifact; before/after comparison | **PASS — Windows CI #40254834535 / #40254834448** |
 | Correct native focus, mixed DPI, long target presentation and actual DWM-visible time | **Interactive Windows desktop** (Notepad/Chrome/PDF) | Not run |
 
 ## Important limitations and next work
@@ -32,3 +32,31 @@ Scope: [Issue #28](https://github.com/howlil/cliplingo/issues/28). The existing 
 - Do **not** close Issue #28 or publish a beta until broader human translation coverage and interactive GUI acceptance have been demonstrated. A CI success proves a bounded regression, not general correctness.
 
 Background: [UAX#29 sentence boundaries](https://docs.rs/unicode-segmentation/latest/unicode_segmentation/trait.UnicodeSegmentation.html), [F2.7 measured regression](f27-acceptance.md), [F2.5 GUI acceptance](f25-acceptance.md).
+
+## Measured F2.8 Windows evidence — 2026-10-26
+
+- [Windows Rust unit tests and release-check](https://github.com/howlil/cliplingo/actions/runs/40254834535): **PASS**, 21/21 tests, including two-sentence Issue #28 split/byte preservation, abbreviation and decimal boundaries, all-or-nothing on failure and latest-request cancellation.
+- [Optional native CTranslate2 Windows run](https://github.com/howlil/cliplingo/actions/runs/40254834448): **PASS**. Verified pinned OPUS-MT INT8 pack, model smoke, four native CPU profiles, 28-case quality/resource evaluation, and `scripts/check-f28-coverage.py` on **real model** outputs.
+- The Issue #28 regression now emits baseline: `Laporan itu meringkaskan eksperimen. Kami menguji beberapa pengaturan, mencatat waktu respon, dan membandingkan hasilnya.` This contains the formerly omitted report summary **and** the independently translated settings, response-time and comparison clauses. Greedy also preserved these four public-case anchors. There is **no user-selected content** in the fixture outputs.
+
+| Headless metric | F2.7 before segmentation | F2.8 with bounded sentence segmentation |
+| --- | ---: | ---: |
+| Beam2/2 baseline 28-item single-reference chrF | 71.96 | **72.92** |
+| Beam1/2 greedy chrF | 69.00 | **72.68** |
+| Baseline suite wall time | 40.656 s | **42.328 s** |
+| Greedy suite wall time | 37.891 s | **38.891 s** |
+| Baseline sampled CPU time | 76.875 s | 80.000 s |
+| Greedy sampled CPU time | 70.031 s | 72.719 s |
+| Baseline sampled peak working set | 137.2 MiB | 136.9 MiB |
+| Greedy sampled peak working set | 135.7 MiB | 135.9 MiB |
+
+These are **single-run headless observations**, not statistically supported quality, battery, whole-app footprint, or actual perceived hotkey-to-popup p95. Multi-sentence model inference adds sequential work: the baseline full-suite wall time increased by about 4.1%, while the 12 short-sentence warm smoke profile was similar to the earlier run (beam2/2 p95 889ms). Do not extrapolate from the fixed public sample to production traffic.
+
+### Acceptance decision and remaining blocker
+
+- **Code path / known Issue #28 reproduction:** PASS. The exact regression no longer drops the opening sentence; source span and full-result logic are tested.
+- **Human semantic quality, difficult abbreviations, single-sentence clause omissions:** NOT PROVEN. Model can still mistranslate or omit meaning *inside* an individual source segment.
+- **Oversized UI:** fail-closed rather than clipping, but currently offers **no readable full-text alternative or clear user-visible error**; retain product/UI blocker before beta.
+- **Actual Windows UIA → inference → native popup focus/DPI/accessible text:** NOT RUN on an interactive desktop.
+
+Therefore Issue #28 remains OPEN as the broader beta-quality and UX acceptance item. Do not treat a narrowly passing model regression as a public release gate being complete.
