@@ -38,6 +38,14 @@
 - Unit/compile CI verifies the provider's build and retained-text replacement/clear logic. A raw-vtable regression must check that unsupported `GetPatternProvider` returns `S_OK`, overwrites a non-NULL sentinel with NULL, handles a missing output pointer with `E_POINTER`, and preserves COM `QueryInterface`/reference counting. The manual UIA probe should see a nonempty Name property only while a real translated result is displayed. It must not save the Name content. The lack of `TextPattern` is a **known unsatisfied accessibility requirement**.
 - Screen-reader announcements, TextPattern navigation, COM provider threading, no-focus behavior and actual UIA element discovery require real interactive Windows verification. Never interpret this stage as full screen-reader acceptance.
 
+
+### F2.11 range backing: automated but not yet a UIA TextPattern
+
+- [x] Range backing contains the full UTF-16 target (including emoji, newlines and final paragraph); the UIA `Name` property is generated from that same current-target document.
+- [x] Replacing or clearing a translation invalidates all retained range-generation tokens. Extraction never returns historical text, malformed surrogate halves, or out-of-bounds substrings.
+- [x] The character-unit helper recognizes surrogate pairs and combining marks as complete user-perceived characters.
+- [ ] **Still missing:** actual `ITextProvider`/`ITextRangeProvider` COM interfaces, text changed notifications, on-screen/visible ranges, Narrator/NVDA verification, and focus-neutral behavior on a real Windows desktop. Do not mark accessible or beta-ready based on these model tests.
+
 **Decision:** This increment fixes the prior all-or-nothing overflow refusal for ordinary long paragraphs when the OS routes scrolling. It **does not close** the product accessibility, screen-reader, mouse-wheel routing, GUI focus, or full Windows E2E gates. Do not publish beta or close Issue #28 based solely on CI.
 
 Related: [F2.8 regression](f28-acceptance.md), [F2.5 GUI acceptance](f25-acceptance.md), [Product contract](product.md).
