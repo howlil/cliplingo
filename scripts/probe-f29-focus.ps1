@@ -37,19 +37,19 @@ Write-Host "Focus source editor, select text and press Ctrl+Alt+T during samplin
 Write-Host "Scroll over the native result if tall. Only HWND/PID/focus transitions are saved."
 while ($elapsed.Elapsed.TotalSeconds -lt $Seconds) {
     $foreground = [ClipLingoFocusProbe]::GetForegroundWindow()
-    $pid = [uint32]0
+    $foregroundProcessId = [uint32]0
     $tid = if ($foreground -eq [IntPtr]::Zero) { [uint32]0 }
-           else { [ClipLingoFocusProbe]::GetWindowThreadProcessId($foreground, [ref]$pid) }
+           else { [ClipLingoFocusProbe]::GetWindowThreadProcessId($foreground, [ref]$foregroundProcessId) }
     $info = [ClipLingoFocusProbe]::NewInfo()
     $focusOk = $tid -ne 0 -and [ClipLingoFocusProbe]::GetGUIThreadInfo($tid, [ref]$info)
     $f = "0x$($foreground.ToInt64().ToString('X'))"
     $focused = if ($focusOk) { "0x$($info.hwndFocus.ToInt64().ToString('X'))" } else { "" }
-    $key = "$($f):$($pid):$($focused)"
+    $key = "$($f):$($foregroundProcessId):$($focused)"
     if ($key -ne $last) {
         $events.Add([pscustomobject]@{
             elapsedMs = [int]$elapsed.ElapsedMilliseconds
             foregroundHwnd = $f
-            foregroundPid = $pid
+            foregroundPid = $foregroundProcessId
             focusedHwnd = $focused
             focusQuerySucceeded = [bool]$focusOk
         })
