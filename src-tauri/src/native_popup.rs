@@ -207,7 +207,9 @@ impl NativePopup {
             // Size short target text intrinsically; wrap only above width cap.
             let mut measured = DrawTextW(hdc, label.as_ptr(), (label.len() - 1) as i32, &mut rect,
                 DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX | DT_LEFT);
-            if target.contains('\n') || target.contains('\r') || rect.right - rect.left > max_w - pad * 2 {
+            let wrapped = target.contains('\n') || target.contains('\r') ||
+                rect.right - rect.left > max_w - pad * 2;
+            if wrapped {
                 rect = RECT { left: 0, top: 0, right: max_w - pad * 2, bottom: 0 };
                 measured = DrawTextW(hdc, label.as_ptr(), (label.len() - 1) as i32, &mut rect,
                     DT_WORDBREAK | DT_CALCRECT | DT_NOPREFIX | DT_LEFT);
@@ -219,11 +221,14 @@ impl NativePopup {
                 return Err("Native text measurement failed".into());
             }
             let content_height = rect.bottom - rect.top;
+            // DT_CALCRECT may shrink the rectangle width. Wrapped text must
+            // paint at the SAME width used for measurement or it can reflow
+            // and hide bottom lines. Very long unbroken words fail closed.
             let measured_width = rect.right - rect.left + pad * 2;
             if content_height <= 0 || measured_width <= 0 || measured_width > max_w {
-                return Err("Invalid native translation layout".into());
+                return Err("Native target contains an unrenderable long word or invalid dimensions".into());
             }
-            let width = measured_width;
+            let width = if wrapped { max_w } else { measured_width };
             // Entire target stays in DISPLAY_TEXT; only the visible viewport is
             // painted. Never discard the unshown lines or silently truncate.
             let height = (content_height + pad * 2).min(max_h);
@@ -297,10 +302,11 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM
             if scrollable {
                 if changed {
                     InvalidateRect(hwnd, std::ptr::null(), 1);
-                    KillTimer(hwnd, 1);
-                    // Continue reading after the last scroll, without focus.
-                    SetTimer(hwnd, 1, 20_000, None);
                 }
+                // Even a wheel attempt at the first/last line indicates
+                // active reading; do not dismiss while the user is trying.
+                KillTimer(hwnd, 1);
+                SetTimer(hwnd, 1, 20_000, None);
                 return 0;
             }
             DefWindowProcW(hwnd, msg, w, l)
