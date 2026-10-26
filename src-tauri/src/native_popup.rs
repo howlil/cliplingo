@@ -18,7 +18,7 @@ use windows_sys::Win32::{
     },
     System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentThreadId},
     UI::{
-        HiDpi::GetDpiForWindow,
+        HiDpi::{GetDpiForMonitor, GetDpiForWindow, MDT_EFFECTIVE_DPI},
         WindowsAndMessaging::{
             CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, GetForegroundWindow,
             KillTimer, RegisterClassW, SetTimer, SetWindowPos, ShowWindow, WNDCLASSW,
@@ -74,6 +74,8 @@ thread_local! {
     static DISPLAY_TEXT: RefCell<Vec<u16>> = const { RefCell::new(Vec::new()) };
     static PREVIEW_START: Cell<Option<Instant>> = const { Cell::new(None) };
     static SCROLL: Cell<ScrollState> = const { Cell::new(ScrollState { content_px: 0, viewport_px: 0, offset_px: 0, line_step_px: 1, wheel_remainder: 0 }) };
+    // Keep paint font/padding at the same DPI as measurement for each result.
+    static RENDER_DPI: Cell<i32> = const { Cell::new(96) };
 }
 
 fn utf16(s: &str) -> Vec<u16> {
@@ -187,7 +189,16 @@ impl NativePopup {
             if GetMonitorInfoW(monitor, &mut monitor_info) == 0 {
                 return Err("GetMonitorInfoW failed".into());
             }
-            let dpi = GetDpiForWindow(hwnd).max(96) as i32;
+            // The current HWND may still belong to the previous monitor.
+            // Measure for the trigger cursor's monitor, not its old position.
+            let mut monitor_dpi_x = 0u32;
+            let mut monitor_dpi_y = 0u32;
+            let dpi = if GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI,
+                &mut monitor_dpi_x, &mut monitor_dpi_y) >= 0 && monitor_dpi_x > 0 {
+                monitor_dpi_x as i32
+            } else {
+                GetDpiForWindow(hwnd).max(96) as i32
+            };
             let pad = px(PADDING_DIP, dpi);
             let area = monitor_info.rcWork;
             let max_w = px(MAX_WIDTH_DIP, dpi).min(area.right - area.left);
@@ -240,6 +251,7 @@ impl NativePopup {
             );
             DISPLAY_TEXT.with(|cell| *cell.borrow_mut() = label);
             SCROLL.with(|cell| cell.set(scroll)); // reset scroll when result is replaced
+            RENDER_DPI.with(|cell| cell.set(dpi));
             PREVIEW_START.with(|start| start.set(Some(Instant::now())));
             if SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW) == 0 {
                 return Err("SetWindowPos failed".into());
@@ -321,7 +333,7 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM
                 let white = CreateSolidBrush(0x00FF_FFFF);
                 FillRect(hdc, &bounds, white);
                 DeleteObject(white);
-                let dpi = GetDpiForWindow(hwnd).max(96) as i32;
+                let dpi = RENDER_DPI.with(|cell| cell.get());
                 let family = utf16("Segoe UI");
                 let font = CreateFontW(-px(15, dpi), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 0, 0, family.as_ptr());
                 let old = if !font.is_null() { SelectObject(hdc, font) } else { std::ptr::null_mut() };

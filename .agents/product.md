@@ -49,7 +49,7 @@ Reading inside source app
 | Offline model missing/corrupt | Offline-only: Settings shows repair/install action, no fake popup and no automatic cloud upload |
 | Translation failed or returned empty | No fabricated translation; non-intrusive actionable status outside the popup |
 | Repeated hotkeys / moving cursor during inference | Most recent request wins; popup anchors to its trigger-time cursor snapshot |
-| Word/Sentence/Paragraph long result | Content-fit until maximum width/height; accessible overflow afterward |
+| Word/Sentence/Paragraph long result | Require readable overflow without truncation or forced focus. F2.9 currently implements a wheel-scrollable **GDI-only** viewport when Windows delivers `WM_MOUSEWHEEL`; screen-reader accessibility and wheel routing are **not yet accepted**. |
 | Cursor at screen edge, mixed-DPI monitor | Popup stays within correct monitor work area, above or below anchor |
 | App paused | Hotkey does not start new translation; Settings/tray remain reachable |
 | Session locked / app exited | Popup hidden; no background capture |
@@ -106,7 +106,7 @@ Cloud accounts/sync, chat assistant, translation history and usage tracking by d
 ## 7. Proof (P) — acceptance traces
 
 1. **Given** a browser selection of one English word **when** the shortcut is invoked **then** a compact, accurately placed, Indonesian text-only popup appears.
-2. **Given** a long selected paragraph **when** translation completes **then** the popup wraps and grows to configured max bounds, with readable overflow; it is not stretched to max dimensions for short content.
+2. **Given** a long selected paragraph **when** translation completes **then** the popup wraps and grows to configured max bounds, with readable overflow; it is not stretched to max dimensions for short content. Native wheel scroll alone is provisional until inactive-window routing, accessibility and focus are verified on interactive Windows.
 3. **Given** no selection **when** the shortcut is invoked **then** no result popup appears and no inference is unnecessarily invoked.
 4. **Given** request A followed quickly by request B **when** A finishes last **then** only B may update the popup.
 5. **Given** a non-selectable/protected target **when** capture is attempted **then** ClipLingo doesn't elevate or leak content; Settings remains usable.
@@ -125,7 +125,7 @@ Cloud accounts/sync, chat assistant, translation history and usage tracking by d
 5. Smart: local-first; explicit provider-specific network fallback only for allowed failure classes, not permission denial/corrupt model.
 6. Online timeout/401/429/5xx/revoked consent: typed failure/diagnostics outside popup, no fake output/no hidden provider switching. Already transmitted text cannot be recalled.
 7. Cache hit or out-of-order requests: validate privacy/policy and newest generation; only latest authorized target text may show.
-8. Native popup stays target-text-only with no focus theft; benchmark its real Windows latency/idle/process-tree against WebView prototype before claiming performance.
+8. Native popup stays target-text-only with no focus theft; benchmark its real Windows latency/idle/process-tree against WebView prototype before claiming performance. A successful unit test of F2.9 scroll geometry does not satisfy mouse-wheel, Narrator/NVDA, per-monitor DPI or focus acceptance.
 
 ## 8. Research questions and falsification
 

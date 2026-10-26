@@ -93,6 +93,8 @@ translated target text
 
 **Maximum width and maximum height are limits, not forced dimensions or minimum sizes.** A one-word result should look like a compact label-sized text surface, while a paragraph grows only as far as the configured limits. No arbitrary fixed width, fixed height, giant empty region, minimum container height, or truncation without a readable overflow path.
 
+**F2.9 implementation status (not final accessibility acceptance):** The current Win32/GDI popup keeps the full translated target and clips its *viewport* to at most 420×300 DIP, scrolling through the complete text with `WM_MOUSEWHEEL` only when Windows routes hover wheel events to the non-activating HWND. Target-monitor DPI is used for measurement and painting. There is no extra scrollbar, button or WebView. This is not yet screen-reader readable because no UIA TextPattern/MSAA provider exists; hover wheel behavior with inactive-window scrolling disabled, source focus, mixed-DPI output and text scaling require real Windows acceptance. Do not ship beta by treating the native viewport as accessible overflow.
+
 ### Cursor placement
 
 1. Capture cursor and foreground-app context **once at trigger time**; do not follow subsequent mouse motion.
@@ -111,7 +113,7 @@ translated target text
 | Inference pending | No target-result popup yet; errors/status belong to tray/Settings, not inserted as fake translations |
 | Success: word | Compact intrinsic rectangle containing only target text |
 | Success: sentence | Content-wrapped text rectangle |
-| Success: paragraph | Wrapped container up to max width/height, with accessible overflow |
+| Success: paragraph | Wrapped container up to max width/height; F2.9 currently exposes provisional non-activating wheel scrolling, with accessible overflow still required before beta |
 | Fatal/unrecoverable failure | No success popup; surface actionable status outside the result popup |
 
 ## 4. Tray menu
