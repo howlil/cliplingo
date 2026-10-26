@@ -78,6 +78,15 @@ thread_local! {
     static RENDER_DPI: Cell<i32> = const { Cell::new(96) };
 }
 
+// Native display data never outlives the visible result, including failure paths.
+// Only access these thread-locals from the HWND creator/event-loop thread.
+fn clear_display_state() {
+    DISPLAY_TEXT.with(|cell| cell.borrow_mut().clear());
+    SCROLL.with(|cell| cell.set(ScrollState::default()));
+    RENDER_DPI.with(|cell| cell.set(96));
+    PREVIEW_START.with(|cell| cell.set(None));
+}
+
 fn utf16(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
@@ -173,6 +182,14 @@ impl NativePopup {
     /// Only pass actual target-language inference output from the verified worker.
     /// HWND painting and resource ownership remain on the Tauri event-loop thread.
     pub fn show_text_at(&self, anchor: (i32, i32), target: &str) -> Result<(), String> {
+        let result = self.try_show_text_at(anchor, target);
+        // If validation, GDI measurement, positioning, or timer arming fails,
+        // the previous result must not remain visible or resident in the popup.
+        if result.is_err() { self.hide(); }
+        result
+    }
+
+    fn try_show_text_at(&self, anchor: (i32, i32), target: &str) -> Result<(), String> {
         if target.trim().is_empty() || target.encode_utf16().count() > 4_096 || target.contains('\0') {
             return Err("Invalid translated text length".into());
         }
@@ -279,14 +296,15 @@ impl NativePopup {
     pub fn hide(&self) {
         if let Ok(hwnd) = self.hwnd() {
             unsafe { KillTimer(hwnd, 1); ShowWindow(hwnd, SW_HIDE); }
-            DISPLAY_TEXT.with(|cell| cell.borrow_mut().clear());
-            SCROLL.with(|cell| cell.set(ScrollState::default()));
+            clear_display_state();
         }
     }
 
     pub fn destroy(&self) {
         if let Ok(hwnd) = self.hwnd() {
-            unsafe { KillTimer(hwnd, 1); DestroyWindow(hwnd); }
+            // A closed HWND must not retain target text in event-thread storage.
+            unsafe { KillTimer(hwnd, 1); ShowWindow(hwnd, SW_HIDE); DestroyWindow(hwnd); }
+            clear_display_state();
         }
     }
 }
@@ -297,8 +315,7 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM
         WM_TIMER if w == 1 => {
             KillTimer(hwnd, 1);
             ShowWindow(hwnd, SW_HIDE);
-            DISPLAY_TEXT.with(|cell| cell.borrow_mut().clear());
-            SCROLL.with(|cell| cell.set(ScrollState::default()));
+            clear_display_state();
             0
         },
         WM_MOUSEWHEEL => {
@@ -318,7 +335,11 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM
                 // Even a wheel attempt at the first/last line indicates
                 // active reading; do not dismiss while the user is trying.
                 KillTimer(hwnd, 1);
-                SetTimer(hwnd, 1, 20_000, None);
+                if SetTimer(hwnd, 1, 20_000, None) == 0 {
+                    // Never leave an indefinitely visible popup if rearming fails.
+                    ShowWindow(hwnd, SW_HIDE);
+                    clear_display_state();
+                }
                 return 0;
             }
             DefWindowProcW(hwnd, msg, w, l)
@@ -410,6 +431,22 @@ mod tests {
         assert!(!long.apply_wheel(-60));
         assert!(long.apply_wheel(-60));
         assert_eq!(long.offset_px, 60);
+    }
+    #[test]
+    fn native_display_cleanup_clears_retained_translation_and_scroll_state() {
+        DISPLAY_TEXT.with(|cell| *cell.borrow_mut() = utf16("Target only: rahasia"));
+        SCROLL.with(|cell| {
+            let mut state = ScrollState::new(1200, 250, 20);
+            state.apply_wheel(-240);
+            cell.set(state);
+        });
+        RENDER_DPI.with(|cell| cell.set(192));
+        PREVIEW_START.with(|cell| cell.set(Some(Instant::now())));
+        clear_display_state();
+        DISPLAY_TEXT.with(|cell| assert!(cell.borrow().is_empty()));
+        SCROLL.with(|cell| assert_eq!(cell.get(), ScrollState::default()));
+        RENDER_DPI.with(|cell| assert_eq!(cell.get(), 96));
+        PREVIEW_START.with(|cell| assert!(cell.get().is_none()));
     }
     #[test]
     fn new_translation_restarts_at_top() {
