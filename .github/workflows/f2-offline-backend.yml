@@ -61,6 +61,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Native Rust binary compilation failed" }
           python scripts/evaluate-f27.py --binary "src-tauri/target/debug/offline_model_smoke.exe" --fixtures "tests/fixtures/en-id-quality-v1.json" --output-dir "f27-results"
           if ($LASTEXITCODE -ne 0) { throw "F2.7 native model evaluation failed" }
+      - name: Verify Issue 28 sentence coverage using real local model outputs
+        shell: pwsh
+        run: |
+          python scripts/check-f28-coverage.py --baseline-output "f27-results/baseline-public-results.json"
+          if ($LASTEXITCODE -ne 0) { throw "Known multi-sentence completeness regression" }
       - name: Retain only public fixture evaluation data
         uses: actions/upload-artifact@v4
         with:
