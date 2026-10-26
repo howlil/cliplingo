@@ -17,10 +17,14 @@ fn main() {
     let mut beam_size = 2usize;
     let mut cpu_threads = 2usize;
     let mut benchmark = false;
+    let mut quality_suite: Option<std::path::PathBuf> = None;
+    let mut quality_output: Option<std::path::PathBuf> = None;
     let mut arguments = std::env::args().skip(1);
     while let Some(flag) = arguments.next() {
         match flag.as_str() {
             "--benchmark" => benchmark = true,
+            "--quality-suite" => quality_suite = Some(arguments.next().expect("--quality-suite path required").into()),
+            "--quality-output" => quality_output = Some(arguments.next().expect("--quality-output path required").into()),
             "--beam" => {
                 beam_size = arguments.next().expect("--beam requires integer")
                     .parse::<usize>().expect("invalid --beam");
@@ -31,6 +35,9 @@ fn main() {
             }
             _ => panic!("Unknown benchmark argument: {flag}"),
         }
+    }
+    if quality_suite.is_some() != quality_output.is_some() {
+        panic!("--quality-suite and --quality-output must be used together");
     }
     let profile = translation::OfflineProfile { beam_size, cpu_threads };
     assert!(profile.validate(), "Unsupported model profile");
@@ -59,6 +66,54 @@ fn main() {
     let cold_ms = started.elapsed().as_millis();
     println!("ClipLingo real model smoke: success; target chars={}, elapsed_ms={}",
         target.target.chars().count(), cold_ms);
+
+    if let (Some(suite), Some(output_path)) = (quality_suite, quality_output) {
+        #[derive(serde::Deserialize)]
+        struct PublicFixture {
+            id: String,
+            source: String,
+        }
+        let input = std::fs::read(&suite).expect("read public quality fixture JSON");
+        let fixtures: Vec<PublicFixture> =
+            serde_json::from_slice(&input).expect("valid public quality fixture JSON");
+        assert!(!fixtures.is_empty() && fixtures.len() <= 100,
+            "quality suite must contain 1 to 100 public fixtures");
+        let mut seen = std::collections::HashSet::new();
+        let mut rows = Vec::with_capacity(fixtures.len());
+        for (index, fixture) in fixtures.into_iter().enumerate() {
+            assert!(!fixture.id.is_empty() && !fixture.source.trim().is_empty()
+                    && seen.insert(fixture.id.clone()), "invalid/duplicate quality fixture");
+            let begun = Instant::now();
+            let generation = (index + 2) as u64;
+            engine.submit(translation::TranslationRequest {
+                generation,
+                anchor: (0, 0),
+                source_hwnd: 0,
+                text: fixture.source,
+            });
+            let outcome = receiver.recv_timeout(Duration::from_secs(90))
+                .unwrap_or_else(|err| panic!("quality inference {index} failed: {err}; state={:?}",engine.status()));
+            assert_eq!(outcome.generation, generation, "quality output ordering mismatch");
+            assert!(!outcome.target.trim().is_empty() && !outcome.target.contains('\0'),
+                "invalid translated target");
+            rows.push(serde_json::json!({
+                "id": fixture.id,
+                "target": outcome.target,
+                "elapsed_ms": begun.elapsed().as_millis(),
+            }));
+        }
+        let data = serde_json::json!({
+            "schema": 1,
+            "boundary": "native_offline_fixed_public_fixtures",
+            "beam_size": profile.beam_size,
+            "cpu_threads": profile.cpu_threads,
+            "results": rows,
+        });
+        std::fs::write(&output_path, serde_json::to_vec_pretty(&data).unwrap())
+            .expect("write native quality output");
+        println!("cliplingo_quality_suite_done count={} beam={} threads={}",
+            data["results"].as_array().unwrap().len(), beam_size, cpu_threads);
+    }
 
     if benchmark {
         // Same verified model, same native worker, sequential fixture runs.
