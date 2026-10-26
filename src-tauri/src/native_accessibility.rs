@@ -43,7 +43,7 @@ struct NativeTargetProvider {
     target: Target,
 }
 
-impl IRawElementProviderSimple_Impl for NativeTargetProvider {
+impl IRawElementProviderSimple_Impl for NativeTargetProvider_Impl {
     fn ProviderOptions(&self) -> Result<ProviderOptions> {
         Ok(ProviderOptions_ServerSideProvider)
     }
@@ -51,12 +51,12 @@ impl IRawElementProviderSimple_Impl for NativeTargetProvider {
     fn GetPatternProvider(&self, _pattern: UIA_PATTERN_ID) -> Result<IUnknown> {
         // Intentionally no fake TextPattern until full range/navigation semantics
         // are implemented and verified on an interactive Windows desktop.
-        Err(Error::OK)
+        Err(Error::from(windows::core::HRESULT(0)))
     }
 
     fn GetPropertyValue(&self, property: UIA_PROPERTY_ID) -> Result<VARIANT> {
         match property {
-            UIA_ControlTypePropertyId => Ok(VARIANT::from(UIA_TextControlTypeId)),
+            UIA_ControlTypePropertyId => Ok(VARIANT::from(UIA_TextControlTypeId.0)),
             UIA_NamePropertyId => {
                 // COM/UIA clients may call this on a non-window thread. Never
                 // borrow thread-local GDI state or HWND objects from here.
