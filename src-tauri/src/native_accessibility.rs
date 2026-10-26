@@ -161,12 +161,27 @@ mod tests {
             assert_eq!(slot.as_ref().unwrap().target.lock().unwrap().as_str(),
                 "Selamat datang. Paragraf kedua.\nBaris terakhir.");
         });
+        // Query the *actual COM interface* rather than only checking the Rust
+        // Mutex; this guards the UIA Name property mapping for long content.
+        let provider = POPUP_UIA.with(|slot| {
+            slot.borrow().as_ref().unwrap().provider.clone()
+        });
+        let name_property = unsafe { provider.GetPropertyValue(UIA_NamePropertyId) }
+            .expect("COM Name property");
+        let exposed = BSTR::try_from(&name_property).expect("Name must be BSTR");
+        assert_eq!(exposed.to_string(), "Selamat datang. Paragraf kedua.\\nBaris terakhir.");
         set_target("Hasil B");
         POPUP_UIA.with(|slot| {
             let slot = slot.borrow();
             assert_eq!(slot.as_ref().unwrap().target.lock().unwrap().as_str(), "Hasil B");
         });
+        let name_property = unsafe { provider.GetPropertyValue(UIA_NamePropertyId) }
+            .expect("new COM Name property");
+        assert_eq!(BSTR::try_from(&name_property).unwrap().to_string(), "Hasil B");
         clear_target();
+        let name_property = unsafe { provider.GetPropertyValue(UIA_NamePropertyId) }
+            .expect("hidden COM Name property");
+        assert_eq!(BSTR::try_from(&name_property).unwrap().to_string(), "");
         POPUP_UIA.with(|slot| {
             assert!(slot.borrow().as_ref().unwrap().target.lock().unwrap().is_empty());
         });
