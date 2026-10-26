@@ -331,3 +331,9 @@ Reference: [F2 acceptance](f2-acceptance.md), [CTranslate2 quickstart](https://o
 - The target buffer is replaced on new results and cleared on hide, timeout, failure and destruction. The provider is released on `WM_DESTROY`, with a null `UiaReturnRawElementProvider` call to release Windows' provider event map.
 - This initial provider intentionally does **not** claim `ITextProvider` / `ITextRangeProvider`, live announcement events, or Narrator/NVDA acceptance. Validate the Name property with `scripts/probe-f29-uia.ps1` and build the missing full TextPattern semantics in a follow-up. Full Windows UIA, focus, wheel and accessibility gates remain open before beta.
 
+
+## 16. F2.11 current-target UTF-16 document range model (non-public TextPattern preparation)
+
+- The native accessibility owner now uses `NativeTextDocument` as the *single current-target* buffer under its existing `Arc<Mutex<...>>`. It holds UTF-16 code units and a monotonically changing generation token, with `UIA_NamePropertyId` generated from the same buffer. On result replace or hide/destroy, the generation changes and previous result text is immediately erased.
+- A range is a pair of UTF-16 offsets bound to its generation, not an owned string. `read_range` rejects stale generations, out-of-bounds or malformed surrogate positions; length-limited extraction never emits half a surrogate pair. The `Character` helper expands to grapheme-cluster bounds (including emoji and combining accents). No second copy of an old result is retained by the range object.
+- This increment deliberately **does not advertise UIA_TextPatternId**, does not implement COM `ITextProvider`/`ITextRangeProvider`, change popup focus, or claim screen-reader acceptance. The next implementation must wire a full Windows TextPattern and related methods/events over this source of truth, with real UIA client tests and no retained old translation after hide.

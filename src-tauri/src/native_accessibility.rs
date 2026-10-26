@@ -1,6 +1,7 @@
 //! Minimal native UIA property surface for the existing no-activate GDI popup.
 //! Only the translated TARGET is exposed; no source text, clipboard or history.
 //! Full ITextProvider/ITextRangeProvider and Narrator/NVDA acceptance remain open.
+use crate::native_text_document::NativeTextDocument;
 use std::{
     cell::RefCell,
     ffi::c_void,
@@ -35,7 +36,7 @@ unsafe extern "system" {
     ) -> isize;
 }
 
-type Target = Arc<Mutex<String>>;
+type Target = Arc<Mutex<NativeTextDocument>>;
 
 #[implement(IRawElementProviderSimple)]
 struct NativeTargetProvider {
@@ -63,8 +64,8 @@ impl IRawElementProviderSimple_Impl for NativeTargetProvider_Impl {
                 // COM/UIA clients may call this on a non-window thread. Never
                 // borrow thread-local GDI state or HWND objects from here.
                 let value = match self.target.lock() {
-                    Ok(text) => text.clone(),
-                    Err(poisoned) => poisoned.into_inner().clone(),
+                    Ok(text) => text.name(),
+                    Err(poisoned) => poisoned.into_inner().name(),
                 };
                 Ok(VARIANT::from(BSTR::from(value)))
             }
@@ -219,7 +220,7 @@ thread_local! {
 }
 
 pub(super) fn install(hwnd: isize) {
-    let target = Arc::new(Mutex::new(String::new()));
+    let target = Arc::new(Mutex::new(NativeTextDocument::default()));
     let delegate: IRawElementProviderSimple = NativeTargetProvider {
         hwnd,
         target: target.clone(),
@@ -234,8 +235,7 @@ pub(super) fn set_target(translated: &str) {
     POPUP_UIA.with(|state| {
         if let Some(state) = state.borrow().as_ref() {
             if let Ok(mut value) = state.target.lock() {
-                value.clear();
-                value.push_str(translated);
+                value.replace(translated);
             }
         }
     });
@@ -282,7 +282,7 @@ mod tests {
 
     #[test]
     fn unsupported_pattern_returns_s_ok_and_initializes_null_output() {
-        let target = Arc::new(Mutex::new(String::new()));
+        let target = Arc::new(Mutex::new(NativeTextDocument::default()));
         let delegate: IRawElementProviderSimple = NativeTargetProvider {
             hwnd: 0,
             target,
@@ -326,7 +326,7 @@ mod tests {
         set_target("Selamat datang. Paragraf kedua.\nBaris terakhir.");
         POPUP_UIA.with(|slot| {
             let slot = slot.borrow();
-            assert_eq!(slot.as_ref().unwrap().target.lock().unwrap().as_str(),
+            assert_eq!(slot.as_ref().unwrap().target.lock().unwrap().name(),
                 "Selamat datang. Paragraf kedua.\nBaris terakhir.");
         });
         // Query the *actual COM interface* rather than only checking the Rust
@@ -341,7 +341,7 @@ mod tests {
         set_target("Hasil B");
         POPUP_UIA.with(|slot| {
             let slot = slot.borrow();
-            assert_eq!(slot.as_ref().unwrap().target.lock().unwrap().as_str(), "Hasil B");
+            assert_eq!(slot.as_ref().unwrap().target.lock().unwrap().name(), "Hasil B");
         });
         let name_property = unsafe { provider.GetPropertyValue(UIA_NamePropertyId) }
             .expect("new COM Name property");
