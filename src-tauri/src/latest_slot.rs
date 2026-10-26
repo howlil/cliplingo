@@ -55,6 +55,11 @@ impl<T> LatestSlot<T> {
         }
     }
 
+    /// Detect a newer queued hotkey between sequential sentence calls.
+    pub fn has_pending(&self) -> bool {
+        self.inner.lock().unwrap().pending.is_some()
+    }
+
     pub fn close(&self) {
         let mut state = self.inner.lock().unwrap();
         state.closed = true;
