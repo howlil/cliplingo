@@ -4,7 +4,7 @@
 
 ## Change and ownership
 
-- `native_popup.rs` owns one HWND and the translated target only. Text is measured with GDI for the current DPI and monitor work area, with **bounded popup geometry** and separately maintained **complete translated output** (up to existing 4,096 UTF-16 units). Full translated text is never shortened to fit the viewport.
+- `native_popup.rs` owns one HWND and the translated target only. Text is measured with GDI using the **trigger cursor's monitor DPI** (also reused at paint time) and monitor work area, with bounded popup geometry and separately maintained **complete translated output** (up to existing 4,096 UTF-16 units). Full translated text is never shortened to fit the viewport.
 - If the content is taller than the 300-DIP popup, the window shows a viewport of the original text and handles `WM_MOUSEWHEEL` using a bounded scroll position. Each mouse-wheel notch advances three native text lines. Fine-grained wheel deltas accumulate. A newly arrived result resets offset to 0; no extra model inference or threads are started.
 - For long targets, the automatic dismissal interval is 20 seconds, refreshed when the user scrolls. Short translations preserve the previous timeout. The popup stays `WS_EX_NOACTIVATE` and uses `SWP_NOACTIVATE`; `WM_MOUSEACTIVATE` explicitly returns `MA_NOACTIVATE`.
 - On timeout or explicit hide, the native thread-local displayed translation text and scroll state are cleared, avoiding keeping a translation history.
@@ -14,7 +14,7 @@
 
 | Property | Verification |
 | --- | --- |
-| Geometry stays inside available work area, including negative monitor coordinates | `native_popup.rs` existing tests |
+| Geometry stays inside available work area, including negative monitor coordinates | `native_popup.rs` existing tests; target-monitor DPI correction requires real mixed-scale monitor verification |
 | Large target has finite scroll range, reaches final line, clamps at both ends | New deterministic `ScrollState` tests |
 | High-resolution wheel partial notches are accumulated | New deterministic `ScrollState` test |
 | Every new translation starts at the first line | New `ScrollState` reset test |
