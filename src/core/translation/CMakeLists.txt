@@ -1,0 +1,3 @@
+add_library(cl_core_translation STATIC translation_service.cpp)
+target_link_libraries(cl_core_translation PUBLIC cl_contracts)
+target_include_directories(cl_core_translation PUBLIC ${CMAKE_SOURCE_DIR}/src)

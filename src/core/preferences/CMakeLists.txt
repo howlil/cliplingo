@@ -1,0 +1,3 @@
+add_library(cl_core_preferences STATIC request_policy.cpp)
+target_link_libraries(cl_core_preferences PUBLIC cl_contracts)
+target_include_directories(cl_core_preferences PUBLIC ${CMAKE_SOURCE_DIR}/src)

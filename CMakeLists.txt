@@ -16,4 +16,8 @@ else()
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+add_subdirectory(src/contracts)
+add_subdirectory(src/core/translation)
+add_subdirectory(src/core/preferences)
+add_subdirectory(src/core/session)
 add_subdirectory(src/app)
