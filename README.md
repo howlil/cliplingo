@@ -22,6 +22,15 @@ cmake --build --preset windows-msvc
 
 Run `out/build/windows-msvc/Debug/cliplingo.exe`.
 
+Unit proof (CTest):
+
+```powershell
+ctest --test-dir out/build/windows-msvc -C Debug --output-on-failure
+```
+
+`core_unit` covers the request generation gate and the consent/exclusion policy; `layer_boundaries`
+enforces the include boundary from `.agents/engineering.md` (F1, F3, F4).
+
 This executable is an initial Win32 shell only. See `.agents/engineering.md` for the planned Win32/UI Automation capture boundary and proposed UI toolkit. Slint remains a candidate pending native popup feasibility testing.
 
 ## Boundaries

@@ -104,6 +104,10 @@ K5 Settings/Vocabulary views -> public K8/K6 entries (never direct storage)
 - DEC5 [two-way]: SQLite for settings+vocabulary, OS vault for secrets; centralizes persistence and consistency, adds SQLite binary cost.
 - DEC6 [two-way]: latest-generation-wins with best-effort cancel instead of strict serial full-request completion; saves perceived latency, may incur charges for already-sent stale cloud requests.
 - DEC7 [two-way]: transient selected text and context held only in request memory; no persistent history, cloud cache or raw-content telemetry by default; repeated translations may cost more.
+- D8: `src/contracts/` is a data-only layer (standard library only) shared across K1-K8; it exists so core can carry anchor/text/result values without importing Win32 types. Boundary enforced by `tools/check_boundaries.ps1`.
+- D9: unit proof uses CTest plus a ~40-line assert harness instead of a fetched test framework; no configure-time download or lockfile yet. Revisit only when a second suite justifies a real framework.
+- D10: vocabulary sense identity is not implemented in v1; the dedupe key is (normalized text, source language, target language) with `sense = std::nullopt`, which still satisfies X7 for what the v1 UI can produce.
+- D11: cross-boundary async results use a sink callback (`std::function`) invoked on the UI thread instead of futures/coroutines; staleness is handled by the generation check at publish, not by cancellation.
 
 ## Fitness rules (lightweight CI enforcement)
 - F1: core targets cannot depend on `platform` or `ui` targets and cannot include Win32/Slint/HTTP/SQLite headers | CMake target graph + include-boundary script | enforce on CI/build.
@@ -112,7 +116,7 @@ K5 Settings/Vocabulary views -> public K8/K6 entries (never direct storage)
 - F4: only `platform/storage` can directly access SQL/vault APIs | source path-boundary check | enforce on CI.
 
 ## Verification (test-engineering will own concrete proof plan)
-- `iter`: format/build plus logic unit tests for latest-wins, permission gate, dedupe, prefs/hotkey rollback and popup geometry.
+- `iter`: format/build plus logic unit tests for latest-wins, permission gate, dedupe, prefs/hotkey rollback and popup geometry. Commands: `cmake --build --preset windows-msvc`, `ctest --test-dir out/build/windows-msvc -C Debug --output-on-failure` (runs `core_unit` and `layer_boundaries`).
 - `pr`: Windows integration for UIA failures/response reorder, SQLite durable save, consent outbound gate and capture time bounds.
 - `release`: one real-desktop app compatibility matrix + first-frame/CPU/RAM traces + focus/clipboard/high-DPI exploratory pass.
 - Do not add continuous OCR/E2E browser suites or extra CI workflows merely to validate docs.
