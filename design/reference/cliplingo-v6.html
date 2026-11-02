@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>ClipLingo — Reading Workspace v6</title>
+<style>
+:root{
+  color-scheme:light;
+  --canvas:#e9ebf2;--window:#fff;--sidebar:#f8f8fa;--panel:#fff;--ink:#1d1d1f;
+  --secondary:#64656e;--tertiary:#898b94;--hairline:#e5e5ea;--accent:#007aff;
+  --highlight:#e6f0ff;--control:#f1f2f5;--control-hover:#e8eaf0;
+  --danger:#bd3541;--glass:rgba(252,252,254,.93);
+  --shadow:0 18px 48px rgba(29,36,63,.12),0 2px 8px rgba(29,36,63,.045);
+  --popover-shadow:0 22px 46px rgba(31,39,59,.20),0 4px 12px rgba(31,39,59,.08);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif;
+  --ease:cubic-bezier(.22,1,.36,1);--quick:150ms;--state:210ms;
+}
+body.dark{
+  color-scheme:dark;--canvas:#202127;--window:#292a30;--sidebar:#33343b;--panel:#292a30;--ink:#f5f5f7;
+  --secondary:#c0c0ca;--tertiary:#9898a5;--hairline:#46474e;--accent:#79b5ff;
+  --highlight:#304764;--control:#393b43;--control-hover:#454752;--danger:#ff9ca4;
+  --glass:rgba(45,46,52,.94);--shadow:0 18px 48px rgba(0,0,0,.23);
+  --popover-shadow:0 22px 46px rgba(0,0,0,.40),0 4px 12px rgba(0,0,0,.15);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{font:13px/1.45 var(--font);color:var(--ink);background:var(--canvas)}
+button,input,select,textarea{font:inherit}button{cursor:pointer;color:inherit}button:disabled{opacity:.45;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle;flex-shrink:0}
+[hidden]{display:none!important}
+.lab{max-width:1220px;margin:auto;padding:18px 18px 36px}
+.demo-bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:space-between;margin-bottom:16px}
+.demo-brand{display:flex;align-items:center;gap:12px;white-space:nowrap}
+.demo-brand strong{font-size:15px;letter-spacing:-.35px;font-weight:650}
+.demo-brand small{font-size:11px;color:var(--secondary)}
+.demo-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.segment{display:flex;align-items:center;background:color-mix(in srgb,var(--window) 68%,transparent);padding:3px;border-radius:9px;gap:2px}
+.segment button{border:0;background:transparent;padding:7px 11px;border-radius:7px;font-size:11px;color:var(--secondary);min-height:31px}
+.segment button.active{background:var(--window);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.demo-controls select,.demo-theme{border:0;background:color-mix(in srgb,var(--window) 68%,transparent);min-height:36px;padding:0 10px;border-radius:9px;color:var(--ink);font-size:11px}
+.demo-theme{display:grid;place-items:center;width:36px}
+.demo-theme svg{width:16px;height:16px}
+.canvas{min-height:625px;display:flex;align-items:flex-start;justify-content:center;position:relative}
+.window,.document-window{width:100%;max-width:1080px;height:615px;overflow:hidden;border-radius:18px;background:var(--window);box-shadow:var(--shadow);display:flex;flex-direction:column;transition:width .25s var(--ease),background-color var(--state)}
+.window{height:540px}
+.window.narrow{width:480px;max-width:100%}
+.windowbar{height:54px;display:flex;align-items:center;gap:12px;flex-shrink:0;padding:0 21px;border-bottom:1px solid var(--hairline);background:color-mix(in srgb,var(--window) 94%,var(--sidebar))}
+.traffic{display:flex;align-items:center;gap:8px;margin-right:10px}.traffic span{width:12px;height:12px;border-radius:50%;background:#ff6059;box-shadow:inset 0 0 0 1px #0000000c}.traffic span:nth-child(2){background:#ffbd2e}.traffic span:nth-child(3){background:#2acb41}
+.brand-mark{width:25px;height:25px;display:grid;place-items:center;background:var(--ink);color:var(--window);border-radius:7px;font-weight:600;font-size:13px;letter-spacing:-1px}
+.product-name{font-size:13px;font-weight:660;letter-spacing:-.2px}.bar-title{font-size:12px;color:var(--secondary)}
+.bar-divider{height:18px;background:var(--hairline);width:1px;margin:0 1px}.toolbar-spacer{flex:1}
+.iconbtn{width:32px;height:32px;display:grid;place-items:center;border:0;background:transparent;border-radius:8px;color:var(--secondary);padding:0;transition:background-color var(--quick),color var(--quick)}
+.iconbtn:hover,.textbtn:hover{background:var(--control-hover);color:var(--ink)}
+.main{display:grid;grid-template-columns:336px minmax(0,1fr);flex:1;min-height:0}
+.library{min-width:0;display:flex;flex-direction:column;min-height:0;background:var(--sidebar);border-right:1px solid var(--hairline)}
+.lib-tools{padding:16px 18px 9px;flex-shrink:0}
+.search{height:37px;border:1px solid var(--hairline);background:color-mix(in srgb,var(--window) 85%,var(--sidebar));display:flex;align-items:center;gap:9px;padding:0 10px;border-radius:9px;color:var(--tertiary)}
+.search svg{width:15px;height:15px}.search input{border:0;outline:0;background:none;width:100%;min-width:0;color:var(--ink);font-size:12px}.search input:focus-visible{outline:0}.search:focus-within{box-shadow:0 0 0 1px var(--accent)}
+.search-clear{border:0;background:transparent;color:var(--secondary);padding:2px;display:grid;place-items:center}
+.lib-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:10px;color:var(--secondary);font-size:12px}
+.lib-summary select{font-size:12px;border:0;background:transparent;color:var(--secondary);padding:2px 0;min-width:75px;text-align:right}
+.rows-scroll{position:relative;flex:1;overflow:auto;min-height:0;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--secondary) 40%,transparent) transparent}
+.virtual-track{position:relative}.v-row{position:absolute;left:10px;right:10px;width:calc(100% - 20px);height:53px;display:flex;align-items:center;gap:9px;border:0;border-bottom:1px solid color-mix(in srgb,var(--hairline) 72%,transparent);background:transparent;text-align:left;padding:6px 11px;border-radius:7px;min-width:0;transition:background-color var(--quick),color var(--quick)}
+.v-row:hover{background:var(--control-hover)}.v-row.active{background:var(--highlight)}.v-text{min-width:0;flex:1}.v-term,.v-meaning{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}.v-term{font-size:13px;font-weight:620;line-height:1.35}.v-meaning{font-size:11.5px;color:var(--secondary);margin-top:2px}.v-age{font-size:10px;color:var(--tertiary);align-self:flex-start;margin-top:3px;white-space:nowrap}
+.empty-filter{padding:28px 18px;color:var(--secondary)}.empty-filter b{display:block;color:var(--ink);font-size:13px;margin-bottom:7px}.linkbutton{color:var(--accent);border:0;background:transparent;padding:0;font-weight:550}
+.detail{min-width:0;min-height:0;overflow:auto;scrollbar-width:thin;background:var(--window)}
+.detail-inner{padding:30px clamp(24px,4.4vw,54px) 38px;max-width:820px;margin:auto;animation:detail-enter var(--state) var(--ease) both}
+@keyframes detail-enter{from{opacity:.2;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.detail-top{display:flex;align-items:center;justify-content:space-between;gap:16px;color:var(--secondary);font-size:12px}
+.actions-inline{display:flex;gap:6px;align-items:center}.textbtn{border:0;background:transparent;padding:7px 9px;border-radius:7px;font-size:12px;display:inline-flex;align-items:center;gap:7px;color:var(--secondary);white-space:nowrap}.textbtn svg{width:16px;height:16px}
+.word-heading{font-size:clamp(29px,3.7vw,45px);line-height:1.08;letter-spacing:-1.3px;font-weight:680;margin:27px 0 9px;overflow-wrap:anywhere}
+.word-meaning{font-size:clamp(22px,2.6vw,30px);line-height:1.27;letter-spacing:-.55px;font-weight:530;color:var(--accent);overflow-wrap:anywhere}
+.read-divider{height:1px;width:100%;background:var(--hairline);margin:28px 0 25px}
+.definition{font-size:16px;line-height:1.6;max-width:660px;white-space:pre-wrap;overflow-wrap:anywhere}
+.quote{font-size:15px;line-height:1.65;color:var(--ink);max-width:660px;margin-top:24px;padding-left:0;overflow-wrap:anywhere}
+.quote:before{content:'“';font-size:27px;line-height:0;color:var(--tertiary);margin-right:8px;vertical-align:-5px}
+.quote mark{background:transparent;color:var(--accent);font-weight:600}
+.context-note{margin-top:20px;font-size:12.5px;line-height:1.66;color:var(--secondary);max-width:640px;overflow-wrap:anywhere}
+.single .library{display:none}.single{grid-template-columns:1fr}.single .detail-inner{max-width:770px}
+.full-empty{flex:1;display:flex;align-items:center;justify-content:center;background:var(--window)}
+.empty-message{width:100%;max-width:450px;padding:24px;text-align:center}.empty-symbol{width:46px;height:46px;border-radius:13px;background:var(--control);display:grid;place-items:center;margin:auto auto 15px;color:var(--secondary)}.empty-symbol svg{width:22px;height:22px}.empty-message h2{font-size:22px;letter-spacing:-.5px;font-weight:630}.empty-message p{font-size:13px;line-height:1.65;color:var(--secondary);margin:9px 0 19px}
+.primary{border:0;background:var(--accent);color:#fff;padding:9px 14px;border-radius:9px;min-height:36px;font-size:12px;font-weight:570}.primary:hover{filter:brightness(.94)}
+.mobile-back{display:none}
+.settings-pane{flex:1;overflow:auto;padding:22px 30px 30px;animation:settings-enter var(--state) var(--ease)}
+@keyframes settings-enter{from{opacity:.2;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
+.settings-content{max-width:650px;margin:0 auto}.settings-content h1{font-size:24px;letter-spacing:-.5px;margin:4px 0 21px;font-weight:650}
+.setting-group{margin-bottom:24px}.setting-group h2{font-size:12px;margin:0 0 8px;font-weight:630;color:var(--secondary)}
+.setting-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:51px;border-bottom:1px solid var(--hairline);padding:9px 0}.setting-row strong{font-size:12px;font-weight:540}.setting-row small{display:block;color:var(--secondary);font-size:11px;margin-top:2px;line-height:1.4}.setting-row select,.setting-row input[type=text]{background:var(--control);color:var(--ink);border:0;border-radius:7px;padding:7px 9px;font-size:12px;min-width:145px;max-width:220px}.setting-row input[type=range]{max-width:180px;accent-color:var(--accent)}.setting-row input[type=checkbox]{width:17px;height:17px;accent-color:var(--accent)}
+.settings-error{font-size:11px;color:var(--danger);padding-top:6px;min-height:20px}
+.document-window{display:block;position:relative;background:var(--window)}
+.docbar{height:54px;padding:0 22px;display:flex;align-items:center;gap:13px;border-bottom:1px solid var(--hairline);color:var(--secondary);font-size:13px}
+.doc-actions{margin-left:auto;display:flex;gap:18px;align-items:center}.doc-actions svg{width:19px;height:19px}
+.paper{max-width:800px;margin:auto;padding:57px 28px 40px}
+.paper small{color:var(--secondary);font-size:13px}.paper h1{font-size:clamp(28px,4.2vw,42px);line-height:1.17;letter-spacing:-1.1px;font-weight:670;max-width:690px;margin:21px 0 30px}.paper p{font-size:16px;line-height:1.85;color:var(--ink);margin:0 0 22px}.paper mark{background:color-mix(in srgb,var(--accent) 18%,var(--window));color:var(--accent);padding:2px 4px;border-radius:5px;font-weight:650}
+.popover{position:absolute;left:41%;top:325px;transform:translateX(-50%);width:min(var(--popwidth,430px),calc(100% - 36px));background:var(--panel);border-radius:23px;box-shadow:var(--popover-shadow);overflow:visible;animation:popover-enter 230ms var(--ease) both;display:flex;flex-direction:column;max-height:335px;z-index:3}
+@keyframes popover-enter{from{opacity:0;transform:translateX(-50%) translateY(9px) scale(.986)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+.popover-arrow{position:absolute;left:26px;top:-8px;width:16px;height:16px;background:var(--glass);transform:rotate(45deg);border-radius:3px;z-index:-1}
+.pop-header{height:52px;flex-shrink:0;border-radius:23px 23px 0 0;padding:0 15px 0 17px;background:var(--glass);backdrop-filter:blur(10px);display:flex;align-items:center;gap:9px}
+.pop-appicon{background:linear-gradient(155deg,#75b8ff,#5573e4 65%,#6444cc);width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:white;font-weight:650;font-size:17px;box-shadow:0 1px 5px rgba(50,99,201,.16)}
+.pop-brand{font-weight:640;font-size:13px}.pop-divider{width:1px;height:18px;background:var(--hairline);margin:0 6px}
+.pop-language{font-size:12px;color:var(--secondary)}.pop-close{margin-left:auto;background:var(--control);width:27px;height:27px;border-radius:50%;border:0;display:grid;place-items:center;color:var(--secondary)}.pop-close:hover{background:var(--control-hover)}.pop-close svg{width:15px;height:15px}
+.pop-content{padding:10px 22px 17px;overflow:auto;min-height:92px;scrollbar-width:thin;white-space:normal}
+.translation{font-size:27px;line-height:1.31;font-weight:680;letter-spacing:-.8px;overflow-wrap:anywhere;white-space:pre-line}
+.translation.long{font-size:14px;line-height:1.7;letter-spacing:0;font-weight:460}
+.pop-note{font-size:12.5px;line-height:1.6;color:var(--secondary);margin-top:10px;overflow-wrap:anywhere}
+.pop-status-title{font-size:16px;font-weight:620;margin:0 0 7px}.pop-status-copy{font-size:12px;line-height:1.65;color:var(--secondary)}.pop-error-action{margin-top:12px}
+.loading-line{height:3px;background:var(--control);border-radius:2px;overflow:hidden;margin:17px 0 4px;position:relative}
+.loading-line:after{content:"";position:absolute;height:100%;width:35%;left:-35%;background:var(--accent);border-radius:2px;animation:loading 1.2s ease-in-out infinite}@keyframes loading{to{left:120%}}
+.pop-footer{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:3px;padding:7px 12px 10px 14px;border-radius:0 0 23px 23px;background:var(--panel)}
+.pop-action{display:flex;align-items:center;justify-content:center;gap:7px;flex:1;white-space:nowrap;border:0;background:transparent;padding:8px 4px;border-radius:9px;color:var(--ink);font-size:11.5px;font-weight:490;min-height:34px}
+.pop-action:hover{background:var(--control)}.pop-action svg{width:17px;height:17px;color:var(--secondary)}
+.pop-separator{height:20px;width:1px;background:var(--hairline)}
+.demo-footer{max-width:1080px;margin:11px auto 0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;color:var(--secondary);font-size:11px;line-height:1.55;flex-wrap:wrap}
+.demo-extras{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.demo-extras button{border:0;background:color-mix(in srgb,var(--window) 70%,transparent);padding:6px 9px;font-size:11px;border-radius:7px;color:var(--secondary);min-height:28px}.demo-extras button.active{color:var(--ink);background:var(--highlight)}
+.toast{position:absolute;bottom:15px;left:50%;transform:translateX(-50%) translateY(12px);opacity:0;pointer-events:none;background:var(--ink);color:var(--window);border-radius:9px;padding:10px 12px;display:flex;align-items:center;gap:13px;box-shadow:0 7px 25px rgba(0,0,0,.16);font-size:12px;transition:transform var(--state) var(--ease),opacity var(--state) var(--ease);z-index:8;white-space:nowrap}
+.toast.visible{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}.toast button{border:0;background:transparent;color:#7db9ff;font-size:12px;padding:2px 3px}
+.window.narrow .main{grid-template-columns:1fr}.window.narrow .library{border-right:0}.window.narrow .main:not(.mobile-detail) .detail{display:none}.window.narrow .main.mobile-detail .library{display:none}.window.narrow .main.mobile-detail .detail{display:block}.window.narrow .mobile-back{display:inline-flex}.window.narrow .detail-inner{padding:22px 24px}.window.narrow .word-heading{font-size:32px}.window.narrow .word-meaning{font-size:23px}
+@media(max-width:650px){.lab{padding:12px 10px 24px}.demo-brand small{display:none}.canvas{min-height:560px}.window,.document-window{height:540px;border-radius:14px}.main{grid-template-columns:1fr}.library{border-right:0}.main:not(.mobile-detail) .detail{display:none}.main.mobile-detail .library{display:none}.main.mobile-detail .detail{display:block}.mobile-back{display:inline-flex}.detail-inner{padding:21px 22px}.word-heading{font-size:32px}.word-meaning{font-size:23px}.windowbar{padding:0 13px}.traffic{gap:5px;margin-right:3px}.traffic span{width:9px;height:9px}.paper{padding:42px 24px}.paper p{font-size:13px}.popover{top:290px;left:50%;max-height:300px}.popover-arrow{left:28px}.pop-content{padding:12px 17px}.pop-footer{padding:7px}.pop-action{font-size:10px;gap:4px}.pop-action svg{width:15px}.settings-pane{padding:18px}.setting-row{align-items:flex-start}.setting-row select{min-width:100px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<main class="lab">
+  <header class="demo-bar"><div class="demo-brand"><strong>ClipLingo</strong><small>Design preview · simulated data</small></div><div class="demo-controls"><div class="segment" role="group" aria-label="Preview surface"><button id="show-library" class="active">Vocabulary</button><button id="show-popup">Popup</button></div><select id="density" aria-label="Demo collection size"><option value="36">36 saved words</option><option value="0">0 words</option><option value="1">1 word</option><option value="2400">2,400 words</option></select><div class="segment" role="group" aria-label="Preview width"><button id="wide" class="active">Wide</button><button id="narrow">Narrow</button></div><button class="demo-theme" id="theme" title="Toggle light / dark" aria-label="Toggle appearance"></button></div></header>
+  <div class="canvas" id="canvas">
+    <div class="window" id="app-window"><div class="windowbar" id="windowbar"></div><div id="app-body" style="display:flex;flex-direction:column;flex:1;min-height:0"></div></div>
+    <div class="document-window" id="popup-scene" hidden></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+  <div class="demo-footer"><span>Interactive prototype · Windows implementation not connected · macOS-inspired visual language</span><div class="demo-extras" id="popup-demo-controls" hidden><button data-sample="word" class="active">Word</button><button data-sample="sentence">Sentence</button><button data-sample="paragraph">Paragraph</button><span aria-hidden="true">·</span><button data-status="loading">Loading</button><button data-status="error">Error</button><button data-status="noselection">No selection</button><button data-status="consent">Consent</button><button id="retrigger">Translate again</button></div></div>
+</main>
+<script>
+(()=>{
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const icons={
+    search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+    trash:'<path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7"/>',settings:'<path d="M12 3a2 2 0 0 1 2 2v.4l1.7.7.3-.3a2 2 0 0 1 2.8 2.8l-.3.3.7 1.7h.4a2 2 0 1 1 0 4h-.4l-.7 1.7.3.3a2 2 0 0 1-2.8 2.8l-.3-.3-1.7.7v.4a2 2 0 1 1-4 0v-.4l-1.7-.7-.3.3a2 2 0 0 1-2.8-2.8l.3-.3-.7-1.7H4.4a2 2 0 1 1 0-4h.4l.7-1.7-.3-.3a2 2 0 0 1 2.8-2.8l.3.3 1.7-.7V5a2 2 0 0 1 2-2z"/><circle cx="12" cy="12" r="2.5"/>',
+    back:'<path d="m15 18-6-6 6-6"/>',bookmark:'<path d="M5 4h14v17l-7-5-7 5z"/>',bookmarkCheck:'<path d="M5 4h14v17l-7-5-7 5z"/><path d="m9 9 2 2 4-4"/>',book:'<path d="M12 20c-2.5-2-5.2-2-9-1V4c4-1 7 0 9 2 2-2 5-3 9-2v15c-4-1-6.5-1-9 1zM12 6v14"/>',x:'<path d="M18 6 6 18M6 6l12 12"/>',moon:'<path d="M20.8 14.2A8.8 8.8 0 0 1 9.8 3.2a8.9 8.9 0 1 0 11 11z"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',chevron:'<path d="m6 9 6 6 6-6"/>',arrow:'<path d="M7 17 17 7M9 7h8v8"/>',file:'<path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10zM13 3v7h7"/>',dots:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',undo:'<path d="M3 7v6h6M3 13c2-5 7-8 12-6a8 8 0 0 1 2 14"/>',check:'<path d="m4 12 5 5L20 6"/>',keyboard:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h1m3 0h1m3 0h1m3 0h1M6 13h12"/>'
+  };
+  const ico=(name,attrs='')=>`<svg viewBox="0 0 24 24" aria-hidden="true" ${attrs}>${icons[name]||''}</svg>`;
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const base=[
+    ['address','menangani','We need to address this risk before release.','Here “address” means to deal with a problem, rather than a postal location.','To deal with or direct attention toward a problem.'],
+    ['bank','tepi sungai','They sat on the bank and watched the water.','The word refers to the edge of a river, not a financial institution.','The land alongside a river or other body of water.'],
+    ['idempotency','idempotensi','We need to make this API idempotent before release.','An operation can be safely repeated without creating an additional effect.','A property that ensures an operation can be repeated multiple times without changing the result beyond the initial application.'],
+    ['timed out','kehabisan waktu','The service timed out while fetching the resource.','The operation exceeded its configured waiting period.','Exceeded an allowed waiting time.'],
+    ['throughput','laju pemrosesan','Higher throughput does not always mean lower latency.','Throughput is a rate of completed work, not the duration of one operation.','The amount of work processed in a given time.'],
+    ['reconcile','mencocokkan','We reconcile the ledger at the end of each day.','The systems are being brought into agreement.','To make two sets of records consistent.'],
+    ['deduplicate','menghapus duplikat','Deduplicate events before updating the counter.','Repeated events should be recognized as a single event.','Remove repeated entries or effects.'],
+    ['provision','menyediakan','The platform provisions a new database automatically.','Here it refers to creating or supplying infrastructure resources.','To prepare and make resources available.'],
+    ['orchestrate','mengorkestrasi','The scheduler orchestrates multiple tasks.','This refers to coordinating several operations.','To coordinate and arrange operations.'],
+    ['backpressure','tekanan balik','Backpressure prevents consumers from being overwhelmed.','The system regulates incoming work when consumers are slow.','A mechanism for controlling the flow of work under load.'],
+    ['eventual consistency','konsistensi eventual','Replicas converge under eventual consistency.','The replicas may temporarily disagree before converging.','A consistency model in which copies converge over time.'],
+    ['shard','membagi data','The database shards records by account ID.','Here it means partitioning a dataset across nodes.','To partition a larger dataset.'],
+    ['circuit breaker','pemutus sirkuit','The circuit breaker stopped repeated calls to a failing service.','A software circuit breaker helps contain dependency failures.','A pattern that temporarily blocks calls to unhealthy dependencies.'],
+    ['latency','latensi','The request latency increased during peak traffic.','Latency measures delay, not total work completed.','Time between initiating an operation and receiving its outcome.'],
+    ['availability','ketersediaan','Availability dropped when the region failed.','Availability concerns whether the service can perform the requested function.','The proportion of time a service is usable.'],
+    ['retry','coba ulang','Retry the failed request with exponential backoff.','A retry can be unsafe unless duplicate effects are controlled.','To attempt an operation again.'],
+    ['observability','observabilitas','Good observability helps explain production failures.','Telemetry helps reveal internal system behavior.','The ability to infer system behavior from outputs.'],
+    ['rollback','mengembalikan perubahan','We rolled back the deployment after errors increased.','The system returns to an earlier, known-good version.','To reverse a previously applied change.'],
+    ['race condition','kondisi balapan','A race condition caused conflicting updates.','The outcome depends on timing or ordering of concurrent operations.','An error caused by unintended timing dependence.'],
+    ['deadlock','kebuntuan','Two transactions waited indefinitely in a deadlock.','Neither transaction can continue because each waits on another.','A state in which participants block one another.'],
+    ['atomicity','atomisitas','The transaction guarantees atomicity.','The complete transaction succeeds or fails as one unit.','All-or-nothing execution of an operation.'],
+    ['durability','durabilitas','Durability ensures committed data survives a crash.','The change remains stored after a successful commit.','The preservation of completed changes.'],
+    ['graceful shutdown','penghentian bertahap','Graceful shutdown waits for in-flight requests.','The service stops accepting new work and finishes existing work.','An orderly shutdown procedure.'],
+    ['bounded queue','antrean terbatas','A bounded queue limits memory usage under load.','The queue refuses or defers excess work instead of growing forever.','A queue with a fixed capacity.'],
+    ['fault isolation','isolasi kegagalan','Fault isolation limits the impact of a failing component.','One failure should not propagate throughout the system.','Containing failures within a known boundary.'],
+    ['hot path','jalur kritis','Keep allocations out of the hot path.','The operation is called frequently and is performance sensitive.','A frequently executed performance-critical code path.'],
+    ['cache miss','cache tidak ditemukan','A cache miss triggered a database lookup.','The needed item was not found in the cache.','A request for data absent from the cache.'],
+    ['lease','hak sewa sementara','The worker acquired a lease before processing.','The lock-like ownership is valid only for a bounded duration.','Temporary permission to use a resource.'],
+    ['semaphore','semafor','A semaphore limits parallel access to the resource.','It controls the number of operations that may proceed.','A concurrency primitive for limiting access.'],
+    ['checkpoint','titik pemulihan','The worker resumed from the last checkpoint.','Stored progress allows work to restart from a known position.','A stored position used for recovery.'],
+    ['replay','memutar ulang','The consumer replayed events from the log.','Past events are processed again.','To process earlier recorded events again.'],
+    ['drift','penyimpangan','Configuration drift caused inconsistent environments.','Environments no longer match their intended configuration.','Unexpected divergence over time.'],
+    ['invariant','invarian','The invariant must hold after every transaction.','This is a condition preserved by all valid state changes.','A condition that must remain true.'],
+    ['quorum','kuorum','A quorum approved the write.','A minimum number of participants is required to agree.','A minimum agreement threshold.'],
+    ['cold start','mulai dingin','A cold start delayed the first request.','The execution environment needs initialization.','Initial startup from an inactive state.'],
+    ['rate limit','batas laju','The API applies a rate limit to each client.','Requests are restricted by frequency.','A cap on the frequency of operations.']
+  ];
+  const make=(a,i)=>({id:'base-'+i,term:a[0],meaning:a[1],example:a[2],note:a[3],definition:a[4],age:i===0?'just now':i<7?`${i*7} min`:`${i-4} hr`,added:1000000-i});
+  const extraA=['adaptive','bounded','distributed','durable','eventual','reliable','resilient','atomic','concurrent','incremental','asynchronous','deterministic','persistent','consistent','graceful','isolated','scalable','latency-aware','fault-tolerant','dynamic','parallel','selective','transactional','recoverable','stateless','encrypted','synchronous','optimistic','replicated','deferred','batched','scheduled','idempotent','validated','coordinated','localized','sequential','virtualized','streaming','prioritized'];
+  const extraB=['processing','execution','recovery','replication','scheduling','validation','indexing','buffering','coordination','caching','transactions','workloads','handoff','routing','storage','delivery','migration','logging','monitoring','reconciliation','checkpointing','translation','sampling','backpressure','timeouts','state updates','resource allocation','request handling','consistency','aggregation','isolation','retry policy','throughput','context','lifecycle','pagination','queuing','concurrency','serialization','cancellation','provisioning'];
+  const full=base.map(make);
+  for(let i=0;i<2400-base.length;i++){
+    const term=extraA[Math.floor(i/extraB.length)%extraA.length]+' '+extraB[i%extraB.length];
+    full.push({id:'gen-'+i,term,meaning:'istilah teknis · '+extraB[i%extraB.length],example:`The team improved ${term} in the service.`,note:'Illustrative terminology for testing a large local vocabulary collection.',definition:'A saved technical expression from a reading session.',age:`${Math.floor(i/8)+1} d`,added:900000-i});
+  }
+  const sample={
+    word:{term:'address',source:'We need to address this risk before release.',result:'menangani',note:'In this context, “address” means to handle or deal with a risk or problem.',saveMeaning:'menangani'},
+    sentence:{term:'timed out',source:'The service timed out while fetching the resource.',result:'Layanan kehabisan waktu saat mengambil sumber daya.',note:'“Timed out” describes an operation exceeding its waiting period.',saveMeaning:'kehabisan waktu'},
+    paragraph:{term:'idempotency',source:'Distributed systems can fail independently. Requests sometimes succeed even when clients never receive the response.',result:'Sistem terdistribusi dapat mengalami kegagalan secara independen. Permintaan terkadang berhasil meskipun klien tidak pernah menerima respons.\n\nJika klien mengulangi permintaan, server mungkin menjalankan operasi yang sama dua kali. Karena itu, idempotensi penting untuk menjaga perubahan tetap aman ketika terjadi retry.\n\nDengan batas waktu, pembatalan, dan penanganan kegagalan yang jelas, sistem dapat memulihkan proses tanpa menimbulkan efek samping yang tidak diinginkan.',note:'“Idempotency” relates to preventing duplicate effects when operations are retried.',saveMeaning:'idempotensi'}
+  };
+  const state={surface:'library',route:'vocabulary',narrow:false,dark:false,collectionSize:36,custom:[],removed:new Set(),query:'',sort:'recent',selected:'base-2',mobileDetail:false,popupSample:'word',popupStatus:'result',online:true,context:true,popwidth:430,pair:'EN → ID',shortcut:'Ctrl + Alt + L',shortcutError:'',pendingId:0,undo:null};
+  let messageTimeout;
+  function showToast(msg,canUndo=false){const t=$('toast');t.innerHTML=`<span>${esc(msg)}</span>${canUndo?'<button data-action="undo">Undo</button>':''}`;t.classList.add('visible');clearTimeout(messageTimeout);messageTimeout=setTimeout(()=>t.classList.remove('visible'),4800)}
+  function data(){const n=state.collectionSize;const list=(n===0?[]:n===1?[full[2]]:full.slice(0,n));return [...state.custom,...list].filter(item=>!state.removed.has(item.id))}
+  function filtered(){const query=state.query.trim().toLowerCase();let out=data().filter(item=>!query||[item.term,item.meaning,item.example,item.note].some(v=>v.toLowerCase().includes(query)));if(state.sort==='az')out.sort((a,b)=>a.term.localeCompare(b.term));else out.sort((a,b)=>b.added-a.added);return out}
+  function currentRow(arr=filtered()){return arr.find(x=>x.id===state.selected)||arr[0]||null}
+  function paintDemo(){ $('show-library').classList.toggle('active',state.surface==='library');$('show-popup').classList.toggle('active',state.surface==='popup');$('wide').classList.toggle('active',!state.narrow);$('narrow').classList.toggle('active',state.narrow);$('density').value=String(state.collectionSize);$('theme').innerHTML=ico(state.dark?'sun':'moon');document.body.classList.toggle('dark',state.dark);$('popup-demo-controls').hidden=state.surface!=='popup';$('app-window').hidden=state.surface!=='library';$('popup-scene').hidden=state.surface!=='popup';$('app-window').classList.toggle('narrow',state.narrow);document.querySelectorAll('[data-sample]').forEach(b=>b.classList.toggle('active',b.dataset.sample===state.popupSample));document.querySelectorAll('[data-status]').forEach(b=>b.classList.toggle('active',b.dataset.status===state.popupStatus))}
+  function windowBar(){ $('windowbar').innerHTML=`<div class="traffic" aria-hidden="true"><span></span><span></span><span></span></div>${state.route==='settings'?`<button class="textbtn" data-action="back-settings">${ico('back')} Vocabulary</button>`:`<div class="brand-mark">文</div><span class="product-name">ClipLingo</span><span class="bar-divider"></span><span class="bar-title">Vocabulary</span>`}<div class="toolbar-spacer"></div>${state.route==='vocabulary'?`<button class="iconbtn" data-action="settings" aria-label="Open settings" title="Settings">${ico('settings')}</button>`:''}`}
+  function definitionMarkup(t){return esc(t)}
+  function exampleMarkup(ex,term){const safe=esc(ex);const terms=term.split(/\s+/).filter(x=>x.length>3);const hit=terms.find(v=>ex.toLowerCase().includes(v.toLowerCase()));if(!hit)return safe;const i=ex.toLowerCase().indexOf(hit.toLowerCase());return esc(ex.slice(0,i))+'<mark>'+esc(ex.slice(i,i+hit.length))+'</mark>'+esc(ex.slice(i+hit.length))}
+  function detailHtml(row){if(!row)return `<div class="empty-message" style="margin:90px auto 0"><h2>Nothing matches</h2><p>Try another word or clear the search.</p><button class="linkbutton" data-action="clear-search">Clear search</button></div>`;
+    return `<article class="detail-inner" key="${esc(row.id)}"><div class="detail-top"><span>English → Indonesian</span><div class="actions-inline"><button class="textbtn" data-action="copy-detail">${ico('copy')} Copy</button><button class="textbtn" data-action="remove">${ico('trash')} Remove</button></div></div><button class="mobile-back textbtn" data-action="back-list" style="margin:12px 0 0 -8px">${ico('back')} Back to words</button><h1 class="word-heading">${esc(row.term)}</h1><div class="word-meaning">${esc(row.meaning)}</div><div class="read-divider"></div><p class="definition">${definitionMarkup(row.definition)}</p><p class="quote">${exampleMarkup(row.example,row.term)}</p>${row.note?`<p class="context-note">${esc(row.note)}</p>`:''}</article>`;
+  }
+  function renderApp(){windowBar();const node=$('app-body');if(state.route==='settings'){renderSettings();return}
+    const raw=data();if(!raw.length){node.innerHTML=`<div class="full-empty"><div class="empty-message"><div class="empty-symbol">${ico('book')}</div><h2>Your vocabulary starts here</h2><p>Select a word in any supported app, translate it with <strong>${esc(state.shortcut)}</strong>, then save the meaning you want to remember.</p><button class="primary" data-action="start-translation">Try a translation</button></div></div>`;return}
+    const arr=filtered(),selected=currentRow(arr);if(selected)state.selected=selected.id;
+    const single=raw.length===1 && !state.query.trim();
+    node.innerHTML=`<div class="main ${single?'single':''} ${state.mobileDetail?'mobile-detail':''}">${single?'':`<section class="library"><div class="lib-tools"><label class="search">${ico('search')}<input id="search-field" type="search" autocomplete="off" value="${esc(state.query)}" placeholder="Search vocabulary" aria-label="Search vocabulary"><button class="search-clear" title="Clear search" data-action="clear-search" ${!state.query?'hidden':''}>${ico('x')}</button></label><div class="lib-summary"><span id="result-count">${arr.length.toLocaleString()} ${arr.length===1?'word':'words'}</span><select id="sort" aria-label="Sort words"><option value="recent" ${state.sort==='recent'?'selected':''}>Recent</option><option value="az" ${state.sort==='az'?'selected':''}>A–Z</option></select></div></div><div class="rows-scroll" id="rows-scroll" tabindex="0" role="listbox" aria-label="Saved words"><div class="virtual-track" id="virtual-track"></div></div></section>`}<section class="detail" id="detail" aria-live="polite">${detailHtml(selected)}</section></div>`;
+    if(!single){const sr=$('rows-scroll');sr.addEventListener('scroll',paintRows,{passive:true});paintRows();}
+  }
+  function paintRows(){const sc=$('rows-scroll'),track=$('virtual-track');if(!sc||!track)return;const arr=filtered(),h=53,over=5;const start=Math.max(0,Math.floor(sc.scrollTop/h)-over),end=Math.min(arr.length,Math.ceil((sc.scrollTop+sc.clientHeight)/h)+over);track.style.height=(arr.length*h)+'px';let out='';for(let i=start;i<end;i++){const v=arr[i];out+=`<button role="option" aria-selected="${v.id===state.selected}" class="v-row ${v.id===state.selected?'active':''}" style="top:${i*h}px" data-row="${esc(v.id)}"><span class="v-text"><span class="v-term">${esc(v.term)}</span><span class="v-meaning">${esc(v.meaning)}</span></span><span class="v-age">${esc(v.age)}</span></button>`}track.innerHTML=out;if(!arr.length){track.style.height='auto';track.innerHTML=`<div class="empty-filter"><b>No matching words</b><p>Try another search term or <button class="linkbutton" data-action="clear-search">clear search</button>.</p></div>`;}}
+  function renderDetail(){const node=$('detail');if(!node)return;node.innerHTML=detailHtml(currentRow());paintRows()}
+  function updateSearch(){const q=$('search-field');if(!q)return;state.query=q.value;const arr=filtered();state.selected=arr[0]?.id||'';state.mobileDetail=false;const count=$('result-count');if(count)count.textContent=`${arr.length.toLocaleString()} ${arr.length===1?'word':'words'}`;const clear=document.querySelector('.search-clear');if(clear)clear.hidden=!state.query;const sc=$('rows-scroll');if(sc)sc.scrollTop=0;paintRows();renderDetail()}
+  function renderSettings(){const n=$('app-body');n.innerHTML=`<section class="settings-pane"><div class="settings-content"><h1>Settings</h1><div class="setting-group"><h2>Translation</h2><div class="setting-row"><div><strong>Translation direction</strong><small>Applied to the next selected text</small></div><select id="language"><option value="EN → ID" ${state.pair==='EN → ID'?'selected':''}>English → Indonesian</option><option value="ID → EN" ${state.pair==='ID → EN'?'selected':''}>Indonesian → English</option></select></div><div class="setting-row"><div><strong>Context explanation</strong><small>Only when relevant to the meaning</small></div><input id="context-switch" type="checkbox" ${state.context?'checked':''}></div></div><div class="setting-group"><h2>Shortcut & popup</h2><div class="setting-row"><div><strong>Global shortcut</strong><small>Cannot conflict with common system shortcuts</small></div><input id="shortcut" type="text" value="${esc(state.shortcut)}" aria-describedby="shortcut-error"></div><div id="shortcut-error" class="settings-error" role="status">${esc(state.shortcutError)}</div><div class="setting-row"><div><strong>Popup width</strong><small>Preview: <span id="width-value">${state.popwidth}</span> px</small></div><input id="popwidth" type="range" min="340" max="520" step="10" value="${state.popwidth}"></div></div><div class="setting-group"><h2>Privacy</h2><div class="setting-row"><div><strong>Online translation</strong><small>Send selected text only when consent is enabled</small></div><input id="online" type="checkbox" ${state.online?'checked':''}></div><div class="setting-row"><div><strong>Clipboard fallback</strong><small>Experimental and off by default</small></div><input type="checkbox" disabled></div></div></div></section>`}
+  function setSurface(s){state.surface=s;state.popupStatus='result';paintDemo();if(s==='library')renderApp();else renderPopupScene()}
+  function renderPopupScene(){const sc=$('popup-scene');if(!sc)return;const x=sample[state.popupSample];sc.innerHTML=`<div class="docbar"><div class="traffic" aria-hidden="true"><span></span><span></span><span></span></div>${ico('file')}<span>Documentation / reliability notes</span><div class="doc-actions">${ico('search')}${ico('dots')}</div></div><article class="paper"><small>Engineering notes</small><h1>Understanding failure in distributed systems</h1><p>We need to <mark>${state.popupSample==='sentence'?'time out':state.popupSample==='paragraph'?'understand retries':'address'}</mark> this risk before release. Reliable software begins with careful failure boundaries.</p><p>Context can change the meaning of technical language, especially when a word has more than one interpretation.</p></article>${state.popupStatus==='closed'?`<button class="primary" data-action="open-popup" style="position:absolute;top:355px;left:50%;transform:translateX(-50%)">Translate selection</button>`:renderPopover(x)}`;}
+  function renderPopover(x){let body='',footer='';const st=state.popupStatus;
+    if(st==='result'){body=`<div class="translation ${state.popupSample==='paragraph'?'long':''}">${esc(x.result)}</div>${state.context?`<div class="pop-note">${esc(x.note)}</div>`:''}`;const saved=data().some(v=>v.term===x.term);footer=`<footer class="pop-footer"><button class="pop-action" data-action="copy-popup">${ico('copy')} Copy</button><div class="pop-separator"></div><button class="pop-action" data-action="save-popup">${ico(saved?'bookmarkCheck':'bookmark')} ${saved?'Saved':'Save word'}</button><div class="pop-separator"></div><button class="pop-action" data-action="open-vocabulary">${ico('book')} Vocabulary ${ico('arrow')}</button></footer>`}
+    else if(st==='loading'){body=`<div class="pop-status-title">Translating selection</div><p class="pop-status-copy">Reading the selected text and its available context.</p><div class="loading-line"></div>`}
+    else if(st==='error'){body=`<div class="pop-status-title">Translation unavailable</div><p class="pop-status-copy">The provider could not respond. Your selection is preserved.</p><button class="primary pop-error-action" data-action="retry">Retry translation</button>`}
+    else if(st==='noselection'){body=`<div class="pop-status-title">No text selected</div><p class="pop-status-copy">Select readable text in the source application, or paste a phrase below.</p><form id="manual-form" style="margin-top:12px;display:flex;gap:7px"><input required id="manual-input" placeholder="Paste selected text" aria-label="Text to translate" style="min-width:0;flex:1;border:0;border-radius:8px;padding:8px 9px;background:var(--control);color:var(--ink)"><button class="primary" type="submit">Translate</button></form>`}
+    else if(st==='consent'){body=`<div class="pop-status-title">Allow online translation?</div><p class="pop-status-copy">Selected text will be sent to the translation provider. You can change this in Settings.</p><button class="primary pop-error-action" data-action="allow-online">Allow & translate</button>`}
+    else if(st==='protected'){body=`<div class="pop-status-title">This selection is unavailable</div><p class="pop-status-copy">The source application does not allow ClipLingo to read this text. You can paste it manually.</p><button class="primary pop-error-action" data-action="manual">Paste manually</button>`}
+    return `<div class="popover" role="dialog" aria-label="Translation preview" style="--popwidth:${state.popwidth}px"><span class="popover-arrow" aria-hidden="true"></span><header class="pop-header"><span class="pop-appicon">∿</span><span class="pop-brand">ClipLingo</span><span class="pop-divider"></span><span class="pop-language">${esc(state.pair)} ${ico('chevron')}</span><button class="pop-close" data-action="close-popup" aria-label="Close translation">${ico('x')}</button></header><div class="pop-content" aria-live="polite">${body}</div>${footer}</div>`
+  }
+  function showStatus(s){state.pendingId++;state.popupStatus=s;paintDemo();renderPopupScene()}
+  function translate(){const ticket=++state.pendingId;state.popupStatus=!state.online?'consent':'loading';paintDemo();renderPopupScene();if(!state.online)return;setTimeout(()=>{if(ticket!==state.pendingId||state.surface!=='popup')return;state.popupStatus='result';paintDemo();renderPopupScene()},780)}
+  function removeSelected(){const r=currentRow();if(!r)return;state.removed.add(r.id);state.undo={type:'remove',row:r};state.selected=filtered()[0]?.id||'';state.mobileDetail=false;renderApp();showToast('Removed from Vocabulary',true)}
+  function savePopup(){const s=sample[state.popupSample];const existing=data().find(x=>x.term===s.term);if(existing){state.selected=existing.id;showToast('Word already saved');return}const r={id:'saved-'+Date.now(),term:s.term,meaning:s.saveMeaning,example:s.source,note:s.note,definition:'Saved meaning from the selected text.',age:'just now',added:Date.now()+1000000};state.custom.unshift(r);state.selected=r.id;state.undo={type:'save',row:r};showToast('Saved to Vocabulary',true);renderPopupScene()}
+  async function copy(text){try{await navigator.clipboard.writeText(text);showToast('Copied to clipboard')}catch(e){showToast('Clipboard unavailable in this preview')}}
+  document.addEventListener('click',e=>{
+    const b=e.target.closest('[data-action],[data-row]');if(!b)return;
+    if(b.dataset.row){state.selected=b.dataset.row;const mobile=state.narrow||matchMedia('(max-width:650px)').matches;if(mobile){state.mobileDetail=true;renderApp()}else renderDetail();return}
+    const a=b.dataset.action;
+    if(a==='settings'){state.route='settings';renderApp()}
+    if(a==='back-settings'){state.route='vocabulary';state.shortcutError='';renderApp()}
+    if(a==='back-list'){state.mobileDetail=false;renderApp();$('search-field')?.focus()}
+    if(a==='clear-search'){state.query='';renderApp();$('search-field')?.focus()}
+    if(a==='start-translation'){setSurface('popup');translate()}
+    if(a==='remove')removeSelected();
+    if(a==='undo' && state.undo){const u=state.undo;if(u.type==='remove')state.removed.delete(u.row.id);else state.custom=state.custom.filter(x=>x.id!==u.row.id);state.selected=u.row.id;state.undo=null;$('toast').classList.remove('visible');renderApp()}
+    if(a==='copy-detail'){const r=currentRow();if(r)copy(r.meaning)}
+    if(a==='copy-popup')copy(sample[state.popupSample].result);
+    if(a==='save-popup')savePopup();
+    if(a==='open-vocabulary'){state.selected=data().find(x=>x.term===sample[state.popupSample].term)?.id||state.selected;state.route='vocabulary';state.mobileDetail=false;state.query='';setSurface('library')}
+    if(a==='retry'||a==='open-popup')translate();
+    if(a==='close-popup'){showStatus('closed')}
+    if(a==='allow-online'){state.online=true;translate()}
+    if(a==='manual'){showStatus('noselection')}
+  });
+  document.addEventListener('input',e=>{if(e.target.id==='search-field')updateSearch();if(e.target.id==='popwidth'){state.popwidth=+e.target.value;const v=$('width-value');if(v)v.textContent=state.popwidth}if(e.target.id==='shortcut'){state.shortcutError='';const n=$('shortcut-error');if(n)n.textContent=''}});
+  document.addEventListener('change',e=>{const t=e.target;if(t.id==='sort'){state.sort=t.value;renderApp()}if(t.id==='language')state.pair=t.value;if(t.id==='online')state.online=t.checked;if(t.id==='context-switch')state.context=t.checked;if(t.id==='shortcut'){const v=t.value.trim();if(!/^(Ctrl|Alt|Shift|Win)(\s*\+\s*(Ctrl|Alt|Shift|Win))*\s*\+\s*[A-Z0-9]$/i.test(v)||/^(Ctrl\s*\+\s*[CLV]|Alt\s*\+\s*F4)$/i.test(v)){state.shortcutError='Choose a shortcut with a modifier and one key, e.g. Ctrl + Alt + L';t.value=state.shortcut;$('shortcut-error').textContent=state.shortcutError}else{state.shortcut=v;state.shortcutError='';$('shortcut-error').textContent=''}}});
+  document.addEventListener('submit',e=>{if(e.target.id==='manual-form'){e.preventDefault();const text=$('manual-input')?.value.trim();if(!text)return;sample.word={term:text.toLowerCase(),source:text,result:'Terjemahan simulasi: '+text,note:'Demo text is not sent to a translation provider.',saveMeaning:'terjemahan simulasi'};state.popupSample='word';showStatus('result')}});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.surface==='popup'&&state.popupStatus!=='closed'){showStatus('closed')}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='f'&&state.surface==='library'&&state.route==='vocabulary'){e.preventDefault();$('search-field')?.focus()}if(e.target.id==='rows-scroll'&&(e.key==='ArrowDown'||e.key==='ArrowUp')){e.preventDefault();const arr=filtered(),i=arr.findIndex(x=>x.id===state.selected);const next=Math.max(0,Math.min(arr.length-1,i+(e.key==='ArrowDown'?1:-1)));if(arr[next]){state.selected=arr[next].id;renderDetail();const sc=$('rows-scroll');if(sc)sc.scrollTop=Math.max(0,next*53-sc.clientHeight/2)}}});
+  $('show-library').onclick=()=>setSurface('library');$('show-popup').onclick=()=>setSurface('popup');$('theme').onclick=()=>{state.dark=!state.dark;paintDemo()};
+  $('density').onchange=e=>{state.collectionSize=+e.target.value;state.query='';state.selected=state.collectionSize===1?'base-2':'base-2';state.mobileDetail=false;state.route='vocabulary';renderApp()};
+  $('wide').onclick=()=>{state.narrow=false;state.mobileDetail=false;paintDemo();renderApp()};$('narrow').onclick=()=>{state.narrow=true;state.mobileDetail=false;paintDemo();renderApp()};
+  document.querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>{state.popupSample=b.dataset.sample;showStatus('result')});
+  document.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>{if(b.dataset.status==='loading')translate();else showStatus(b.dataset.status)});
+  $('retrigger').onclick=translate;
+  paintDemo();renderApp();
+})();
+</script>
+</body>
+</html>

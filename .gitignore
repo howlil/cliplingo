@@ -1,0 +1,13 @@
+# CMake / Visual Studio
+/out/
+/build/
+/.vs/
+CMakeUserPresets.json
+*.user
+*.suo
+*.pdb
+*.obj
+
+# Local machine
+.DS_Store
+Thumbs.db
