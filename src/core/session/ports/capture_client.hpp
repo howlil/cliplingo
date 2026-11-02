@@ -16,7 +16,9 @@ class CaptureClient {
   virtual void Capture(const CaptureRequest& request, CaptureSink sink) = 0;
 
   // Best effort (DEC6): correctness comes from the generation check at publish,
-  // not from successful cancellation.
+  // not from successful cancellation. Cancelling a generation that never had a
+  // request must be a no-op; implementations must not cancel "whatever is
+  // current" instead.
   virtual void Cancel(std::uint64_t generation) = 0;
 };
 

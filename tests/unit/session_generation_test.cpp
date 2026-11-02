@@ -205,3 +205,143 @@ CL_TEST(retrigger_cancels_previous_generation_best_effort) {
   CL_CHECK_EQ(harness.capture.last_cancelled, first_generation);
   CL_CHECK(harness.session.generation() == first_generation + 1);
 }
+
+// RV2 (X1): a whitespace-only selection is "no text", not an internal fault.
+CL_TEST(capture_ok_with_whitespace_only_is_reported_as_empty) {
+  Harness harness;
+  harness.Trigger();
+  harness.CaptureOk(L"   \t\n  ");
+
+  const auto& last = harness.presenter.Last();
+  CL_CHECK(last.phase == PopupPhase::Failure);
+  CL_CHECK(last.capture_status.has_value() &&
+           last.capture_status.value() == CaptureStatus::Empty);
+  CL_CHECK(!last.error.has_value());
+  CL_CHECK_EQ(harness.gateway.calls, 0);
+}
+
+// RV6: dismiss then trigger must reopen the popup, not stay hidden.
+CL_TEST(retrigger_after_dismiss_restarts_the_popup) {
+  Harness harness;
+  harness.Trigger();
+  harness.CaptureOk();
+  harness.session.OnDismiss();
+  CL_CHECK(harness.presenter.Last().phase == PopupPhase::Hidden);
+  const std::uint64_t dismissed_generation = harness.presenter.Last().generation;
+
+  harness.Trigger();
+  CL_CHECK(harness.presenter.Last().phase == PopupPhase::Capturing);
+  CL_CHECK(harness.session.generation() == dismissed_generation + 1);
+
+  harness.CaptureOk(L"second selection");
+  TranslateResult answer;
+  answer.generation = harness.session.generation();
+  answer.translated = L"pilihan kedua";
+  harness.gateway.Deliver(answer);
+  CL_CHECK(harness.presenter.Last().phase == PopupPhase::Success);
+}
+
+// RV6: an adapter may resolve inside Capture()/Translate(); the state machine
+// must reach the same final state as the asynchronous path.
+CL_TEST(synchronous_sink_delivery_reaches_success) {
+  Harness harness;
+  CaptureResult captured;
+  captured.status = CaptureStatus::Ok;
+  captured.text = L"hello world";
+  harness.capture.synchronous_result = captured;
+  TranslateResult answer;
+  answer.translated = L"halo dunia";
+  harness.gateway.synchronous_result = answer;
+
+  harness.Trigger();
+
+  CL_CHECK_EQ(harness.capture.calls, 1);
+  CL_CHECK_EQ(harness.gateway.calls, 1);
+  CL_CHECK(harness.presenter.Last().phase == PopupPhase::Success);
+  CL_CHECK_EQ(harness.presenter.Last().generation, harness.session.generation());
+}
+
+// RV4 (flow 3 / K8->K3): consent given resumes the current request without a
+// new trigger, but only after the exclusion policy is re-checked.
+CL_TEST(granted_consent_resumes_the_blocked_request) {
+  Harness harness;
+  harness.prefs.consent = OnlineConsent::Unset;
+  harness.Trigger();
+  const std::uint64_t generation = harness.session.generation();
+  harness.CaptureOk(L"hello world");
+  CL_CHECK_EQ(harness.gateway.calls, 0);
+  CL_CHECK(harness.presenter.Last().phase == PopupPhase::ConsentRequired);
+
+  harness.session.OnConsentChanged(OnlineConsent::Granted);
+
+  CL_CHECK_EQ(harness.session.generation(), generation);  // resume, not re-trigger
+  CL_CHECK_EQ(harness.gateway.calls, 1);
+  CL_CHECK(harness.presenter.Last().phase == PopupPhase::Translating);
+
+  TranslateResult answer;
+  answer.generation = generation;
+  answer.translated = L"halo dunia";
+  harness.gateway.Deliver(answer);
+  CL_CHECK(harness.presenter.Last().phase == PopupPhase::Success);
+}
+
+CL_TEST(granted_consent_does_not_send_from_an_excluded_app) {
+  Harness harness;
+  harness.prefs.consent = OnlineConsent::Unset;
+  harness.prefs.excluded_apps = {L"notepad.exe"};
+  harness.Trigger(L"notepad.exe");
+
+  harness.session.OnConsentChanged(OnlineConsent::Granted);
+
+  CL_CHECK_EQ(harness.gateway.calls, 0);
+  CL_CHECK_EQ(harness.capture.calls, 0);
+}
+
+// RV1 (K8->K3): revocation invalidates in-flight work, but a rendered result
+// was never transmitted and must stay readable.
+CL_TEST(revocation_keeps_the_rendered_result_readable) {
+  Harness harness;
+  harness.Trigger();
+  harness.CaptureOk(L"hello world");
+  TranslateResult answer;
+  answer.generation = harness.session.generation();
+  answer.translated = L"halo dunia";
+  harness.gateway.Deliver(answer);
+  CL_CHECK(harness.presenter.Last().phase == PopupPhase::Success);
+
+  harness.session.OnConsentChanged(OnlineConsent::Denied);
+
+  CL_CHECK(harness.presenter.Last().phase == PopupPhase::Success);
+  CL_CHECK(harness.presenter.Last().result.has_value());
+  CL_CHECK(!harness.presenter.Saw(PopupPhase::ConsentRequired,
+                                  harness.presenter.Last().generation));
+}
+
+// RV7 (LF/D13): a sink that fires after destruction must be a no-op, not UB.
+CL_TEST(a_result_after_controller_destruction_is_ignored) {
+  cl_test::FakeCaptureClient capture;
+  cl_test::FakeTranslationGateway gateway;
+  cl_test::RecordingPresenter presenter;
+  TranslationService translation{gateway};
+
+  CaptureSink late;
+  {
+    SessionController session{capture, translation, presenter, RequestPolicy{}};
+    Preferences prefs;
+    prefs.consent = OnlineConsent::Granted;
+    SourceAnchor anchor;
+    anchor.source_hwnd = 1;
+    session.BeginTrigger(anchor, prefs, L"notepad.exe");
+    late = capture.pending;
+  }
+
+  const std::size_t published_before = presenter.states.size();
+  CaptureResult result;
+  result.generation = 1;
+  result.status = CaptureStatus::Ok;
+  result.text = L"hello world";
+  late(result);
+
+  CL_CHECK_EQ(presenter.states.size(), published_before);
+  CL_CHECK_EQ(gateway.calls, 0);
+}

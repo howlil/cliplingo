@@ -22,6 +22,14 @@ class FakeCaptureClient final : public cliplingo::CaptureClient {
   void Capture(const cliplingo::CaptureRequest& request, cliplingo::CaptureSink sink) override {
     ++calls;
     last_request = request;
+    if (synchronous_result) {
+      // A conforming adapter may resolve inside Capture(); the controller must
+      // stay consistent when that happens.
+      auto result = *synchronous_result;
+      result.generation = request.generation;
+      sink(result);
+      return;
+    }
     pending = std::move(sink);
   }
 
@@ -40,6 +48,7 @@ class FakeCaptureClient final : public cliplingo::CaptureClient {
   int cancels = 0;
   std::uint64_t last_cancelled = 0;
   std::optional<cliplingo::CaptureRequest> last_request;
+  std::optional<cliplingo::CaptureResult> synchronous_result;
   cliplingo::CaptureSink pending;
 };
 
@@ -49,6 +58,12 @@ class FakeTranslationGateway final : public cliplingo::TranslationGateway {
                  cliplingo::TranslationSink sink) override {
     ++calls;
     last_request = request;
+    if (synchronous_result) {
+      auto result = *synchronous_result;
+      result.generation = request.generation;
+      sink(result);
+      return;
+    }
     pending = std::move(sink);
   }
 
@@ -60,6 +75,7 @@ class FakeTranslationGateway final : public cliplingo::TranslationGateway {
 
   int calls = 0;
   std::optional<cliplingo::TranslateRequest> last_request;
+  std::optional<cliplingo::TranslateResult> synchronous_result;
   cliplingo::TranslationSink pending;
 };
 

@@ -3,27 +3,16 @@
 #include <utility>
 
 namespace cliplingo {
-namespace {
-
-TranslationError ErrorForVerdict(PolicyVerdict verdict) {
-  switch (verdict) {
-    case PolicyVerdict::DeniedExcluded:
-      return TranslationError::Excluded;
-    case PolicyVerdict::DeniedConsent:
-      return TranslationError::ConsentRequired;
-    case PolicyVerdict::DeniedEmptyText:
-      return TranslationError::Internal;
-    case PolicyVerdict::Allow:
-      break;
-  }
-  return TranslationError::Internal;
-}
-
-}  // namespace
 
 SessionController::SessionController(CaptureClient& capture, TranslationService& translation,
                                      PopupPresenter& presenter, RequestPolicy policy)
-    : capture_(capture), translation_(translation), presenter_(presenter), policy_(policy) {}
+    : capture_(capture),
+      translation_(translation),
+      presenter_(presenter),
+      policy_(policy),
+      alive_(std::make_shared<bool>(true)) {}
+
+SessionController::~SessionController() { *alive_ = false; }
 
 void SessionController::BeginTrigger(SourceAnchor anchor, const Preferences& prefs,
                                      std::wstring source_exe) {
@@ -36,6 +25,7 @@ void SessionController::BeginTrigger(SourceAnchor anchor, const Preferences& pre
   source_exe_ = std::move(source_exe);
   shape_ = TextShape::Sentence;
   source_text_.reset();
+  source_context_.reset();
   capture_status_.reset();
   error_.reset();
   result_.reset();
@@ -60,8 +50,12 @@ void SessionController::BeginTrigger(SourceAnchor anchor, const Preferences& pre
   request.anchor = anchor;
   request.source_exe = source_exe_;
   request.excluded_apps = prefs_.excluded_apps;
-  capture_.Capture(request, [this](CaptureResult capture_result) {
-    OnCaptureResult(capture_result);
+
+  const std::shared_ptr<bool> alive = alive_;
+  capture_.Capture(request, [this, alive](CaptureResult capture_result) {
+    if (*alive) {
+      OnCaptureResult(capture_result);
+    }
   });
 }
 
@@ -78,27 +72,11 @@ void SessionController::OnCaptureResult(const CaptureResult& result) {
     return;
   }
   source_text_ = result.text;
+  source_context_ = result.context.empty() ? std::nullopt
+                                           : std::optional<std::wstring>(result.context);
 
   // Egress stage: last local checkpoint before selected text may leave (G7).
-  const PolicyVerdict verdict = policy_.EvaluateOutbound(prefs_, source_exe_, *source_text_);
-  if (verdict != PolicyVerdict::Allow) {
-    FailTranslation(ErrorForVerdict(verdict));
-    return;
-  }
-
-  Publish(PopupPhase::Translating);
-
-  TranslateRequest request;
-  request.generation = generation_;
-  request.text = *source_text_;
-  request.source_lang = prefs_.pair.source;
-  request.target_lang = prefs_.pair.target;
-  if (!result.context.empty()) {
-    request.context = result.context;
-  }
-  translation_.Translate(request, [this](TranslateResult translate_result) {
-    OnTranslationResult(translate_result);
-  });
+  ApplyOutboundVerdict(policy_.EvaluateOutbound(prefs_, source_exe_, *source_text_));
 }
 
 void SessionController::OnTranslationResult(const TranslateResult& result) {
@@ -120,6 +98,7 @@ void SessionController::OnTranslationResult(const TranslateResult& result) {
 void SessionController::OnDismiss() {
   visible_ = false;
   source_text_.reset();
+  source_context_.reset();
   capture_status_.reset();
   error_.reset();
   result_.reset();
@@ -129,7 +108,8 @@ void SessionController::OnDismiss() {
 void SessionController::OnConsentChanged(OnlineConsent consent) {
   prefs_.consent = consent;
   if (consent == OnlineConsent::Granted) {
-    return;  // resuming the still-current request is handled by the caller
+    ResumeBlockedRequest();
+    return;
   }
 
   // Revocation invalidates in-flight work even when provider cancellation fails
@@ -140,10 +120,16 @@ void SessionController::OnConsentChanged(OnlineConsent consent) {
   if (!visible_) {
     return;
   }
-  FailTranslation(TranslationError::ConsentRequired);
+  // Only unrendered work is invalidated: a result already on screen was never
+  // transmitted and stays readable (K8 -> K3).
+  if (phase_ == PopupPhase::Capturing || phase_ == PopupPhase::Translating) {
+    FailTranslation(TranslationError::ConsentRequired);
+  }
 }
 
 void SessionController::Publish(PopupPhase phase) {
+  phase_ = phase;
+
   PopupViewState state;
   state.generation = generation_;
   state.phase = phase;
@@ -154,6 +140,50 @@ void SessionController::Publish(PopupPhase phase) {
   state.error = error_;
   state.result = result_;
   presenter_.Present(state);
+}
+
+void SessionController::StartTranslation() {
+  Publish(PopupPhase::Translating);
+
+  TranslateRequest request;
+  request.generation = generation_;
+  request.text = *source_text_;
+  request.source_lang = prefs_.pair.source;
+  request.target_lang = prefs_.pair.target;
+  request.context = source_context_;
+
+  const std::shared_ptr<bool> alive = alive_;
+  translation_.Translate(request, [this, alive](TranslateResult translate_result) {
+    if (*alive) {
+      OnTranslationResult(translate_result);
+    }
+  });
+}
+
+void SessionController::ResumeBlockedRequest() {
+  if (!visible_ || phase_ != PopupPhase::ConsentRequired || !source_text_.has_value()) {
+    return;
+  }
+  // Consent alone is not enough: exclusions are re-checked before sending.
+  ApplyOutboundVerdict(policy_.EvaluateOutbound(prefs_, source_exe_, *source_text_));
+}
+
+void SessionController::ApplyOutboundVerdict(PolicyVerdict verdict) {
+  switch (verdict) {
+    case PolicyVerdict::Allow:
+      StartTranslation();
+      return;
+    case PolicyVerdict::DeniedExcluded:
+      FailTranslation(TranslationError::Excluded);
+      return;
+    case PolicyVerdict::DeniedConsent:
+      FailTranslation(TranslationError::ConsentRequired);
+      return;
+    case PolicyVerdict::DeniedEmptyText:
+      // Whitespace-only selection is "no text", not an internal fault (X1).
+      FailCapture(CaptureStatus::Empty);
+      return;
+  }
 }
 
 void SessionController::FailCapture(CaptureStatus status) {

@@ -108,6 +108,8 @@ K5 Settings/Vocabulary views -> public K8/K6 entries (never direct storage)
 - D9: unit proof uses CTest plus a ~40-line assert harness instead of a fetched test framework; no configure-time download or lockfile yet. Revisit only when a second suite justifies a real framework.
 - D10: vocabulary sense identity is not implemented in v1; the dedupe key is (normalized text, source language, target language) with `sense = std::nullopt`, which still satisfies X7 for what the v1 UI can produce.
 - D11: cross-boundary async results use a sink callback (`std::function`) invoked on the UI thread instead of futures/coroutines; staleness is handled by the generation check at publish, not by cancellation.
+- D12: `CaptureResult.provenance` (UIA vs copy fallback) is added together with the capture adapter that can actually produce it (X2, Q6); until then `CaptureStatus` is the only provenance signal, and `PopupViewState` carries no `already_saved` placeholder before the vocabulary slice produces it.
+- D13: the composition root owns shutdown order (stop/cancel in-flight work, join worker threads, destroy adapters, then the session controller). The controller additionally guards its sinks with a shared liveness flag so a callback arriving after destruction is a no-op instead of undefined behaviour.
 
 ## Fitness rules (lightweight CI enforcement)
 - F1: core targets cannot depend on `platform` or `ui` targets and cannot include Win32/Slint/HTTP/SQLite headers | CMake target graph + include-boundary script | enforce on CI/build.

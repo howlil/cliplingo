@@ -32,7 +32,6 @@ struct PopupViewState {
   std::optional<CaptureStatus> capture_status;      // V5, V8
   std::optional<TranslationError> error;            // V6
   std::optional<TranslateResult> result;            // V2, V3, V4
-  bool already_saved = false;                       // V10
 };
 
 }  // namespace cliplingo
