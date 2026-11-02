@@ -19,8 +19,8 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam,
       SetBkMode(dc, TRANSPARENT);
       HGDIOBJ old_font = SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT));
       constexpr wchar_t text[] =
-          L"ClipLingo native shell\\n\\n"
-          L"Project initialized. Translation and capture are not implemented.\\n"
+          L"ClipLingo native shell\n\n"
+          L"Project initialized. Translation and capture are not implemented.\n"
           L"UI reference: design/reference/cliplingo-v6.html";
       DrawTextW(dc, text, -1, &area, DT_TOP | DT_LEFT | DT_WORDBREAK);
       SelectObject(dc, old_font);
